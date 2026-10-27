@@ -1,0 +1,144 @@
+erDiagram
+    COURSES {
+        uuid id PK
+        varchar external_id UK "Canonical business course code (e.g. CRS001)"
+        varchar title "Arabic course title"
+        text description "Detailed syllabus and learning objectives"
+        varchar thumbnail_url "Card preview image path"
+        varchar cover_type "image | color | default"
+        varchar cover_color "Hex color code if color cover"
+        uuid primary_lecturer_id FK "Primary lecturer in users (RESTRICT)"
+        varchar level "مبتدئ | متوسط | متقدم"
+        numeric estimated_hours "Syllabus duration in hours"
+        numeric rating_cache "Cached average star rating"
+        integer rating_count_cache "Cached ratings count"
+        integer enrollment_count_cache "Cached active enrollment count"
+        integer completion_count_cache "Cached completion count"
+        boolean requires_approval "Self-enrollment supervisor gate"
+        varchar status "published | live | draft | pending_admin | pending_owner | hidden"
+        boolean comments_enabled "Discussion thread toggle"
+        varchar course_zip_policy "disabled | immediate | after_course_completion"
+        boolean has_draft_changes "Unpublished working draft toggle"
+        boolean is_test_lab "Test lab sandbox designation"
+        timestamptz submitted_at "Review queue submission date"
+        timestamptz created_at "Creation timestamp"
+        timestamptz updated_at "Modification timestamp"
+    }
+
+    COURSE_INSTRUCTORS {
+        uuid id PK
+        uuid course_id FK "Parent course (CASCADE)"
+        uuid user_id FK "Assigned instructor in users (RESTRICT)"
+        varchar instructor_role "primary | co_instructor"
+        timestamptz assigned_at "Assignment timestamp"
+        uuid assigned_by FK "Administrator who assigned (RESTRICT)"
+    }
+
+    COURSE_PREREQUISITES {
+        uuid course_id PK,FK "Dependent course (CASCADE)"
+        uuid prerequisite_course_id PK,FK "Required prerequisite course (RESTRICT)"
+        boolean is_mandatory "Strict progression gate toggle"
+        integer order_index "Prerequisite display order"
+    }
+
+    COURSE_CHAPTERS {
+        uuid id PK
+        uuid course_id FK "Parent course (CASCADE)"
+        varchar title "Arabic chapter module title"
+        integer order_index "Sequential chapter ordering"
+        timestamptz created_at "Creation timestamp"
+        timestamptz updated_at "Modification timestamp"
+    }
+
+    COURSE_CHAPTER_ITEMS {
+        uuid id PK
+        uuid chapter_id FK "Parent chapter (CASCADE)"
+        uuid course_id FK "Parent course reference (CASCADE)"
+        varchar type "video | pdf | image | powerpoint | docx | zip | audio | other"
+        varchar title "Arabic lesson title"
+        integer order_index "Sequential item ordering"
+        varchar video_source_type "upload | youtube | drive"
+        text external_url "External URL link"
+        varchar youtube_video_id "YouTube video identifier"
+        varchar drive_file_id "Google Drive file identifier"
+        uuid media_storage_id FK "Storage object reference (SET NULL)"
+        integer duration_seconds "Playback duration in seconds"
+        boolean can_download "Download permission toggle"
+        varchar download_policy "never | immediate | after_item_completion | after_course_completion"
+        boolean requires_previous "Sequential lock requirement"
+        boolean require_minimum_viewing_time "Minimum viewing time gate"
+        integer embed_crop_top_pixels "Google Drive top crop pixels"
+        boolean embed_block_popups "Iframe sandbox block popups"
+        timestamptz created_at "Creation timestamp"
+        timestamptz updated_at "Modification timestamp"
+    }
+
+    COURSE_EXTERNAL_RESOURCES {
+        uuid id PK
+        uuid course_id FK "Parent course (CASCADE)"
+        uuid item_id FK "Optional parent lesson item (CASCADE)"
+        varchar title "Resource title"
+        text url "External web link"
+        text description "Resource description"
+        integer order_index "Display ordering"
+    }
+
+    COURSE_REVIEW_RECORDS {
+        uuid id PK
+        uuid course_id FK "Evaluated course (CASCADE)"
+        uuid reviewer_id FK "Reviewing administrator in users (RESTRICT)"
+        varchar outcome "approved | returned_with_admin_edits | rejected"
+        text summary_message "Executive review summary note"
+        boolean staged_edits_applied "Indicates if staged edits were committed"
+        timestamptz submitted_at "Submission timestamp"
+        timestamptz reviewed_at "Decision timestamp"
+    }
+
+    COURSE_REVIEW_FEEDBACK_ITEMS {
+        uuid id PK
+        uuid review_record_id FK "Parent review record (CASCADE)"
+        varchar target_type "course | chapter | item"
+        uuid target_id "Target entity ID"
+        text comment "Specific feedback directive"
+        varchar severity "required | suggestion | note"
+    }
+
+    COURSE_BASELINE_SNAPSHOTS {
+        uuid id PK
+        uuid course_id FK "Target course (CASCADE)"
+        timestamptz captured_at "Submission capture date"
+        jsonb snapshot_data "Complete immutable course content snapshot"
+    }
+
+    COURSE_ADMIN_STAGED_EDITS {
+        uuid course_id PK,FK "Target course 1-to-1 (CASCADE)"
+        uuid baseline_id FK "Reference snapshot ID (RESTRICT)"
+        integer client_revision "Optimistic locking integer token"
+        jsonb patched_content "Staged modifications pending approval"
+        uuid saved_by_admin_id FK "Administrator authoring edits (RESTRICT)"
+        boolean is_stale "Flagged if lecturer resubmitted"
+        timestamptz last_saved_at "Last save timestamp"
+    }
+
+    COURSE_REVIEWER_WORKING_NOTES {
+        uuid course_id PK,FK "Target course (CASCADE)"
+        uuid reviewer_id PK,FK "Reviewing administrator (CASCADE)"
+        text general_note "Private course-level reviewer notes"
+        jsonb chapter_notes "Private chapter-level annotations"
+        jsonb item_notes "Private item-level annotations"
+        timestamptz last_saved_at "Note save timestamp"
+    }
+
+    COURSES ||--o{ COURSE_INSTRUCTORS : "staffed by (CASCADE)"
+    COURSES ||--o{ COURSE_PREREQUISITES : "requires (CASCADE)"
+    COURSES ||--o{ COURSE_PREREQUISITES : "prerequisite for (RESTRICT)"
+    COURSES ||--o{ COURSE_CHAPTERS : "structured into (CASCADE)"
+    COURSE_CHAPTERS ||--o{ COURSE_CHAPTER_ITEMS : "contains (CASCADE)"
+    COURSES ||--o{ COURSE_EXTERNAL_RESOURCES : "provides (CASCADE)"
+    COURSE_CHAPTER_ITEMS ||--o{ COURSE_EXTERNAL_RESOURCES : "attaches (CASCADE)"
+
+    COURSES ||--o{ COURSE_REVIEW_RECORDS : "evaluated in (CASCADE)"
+    COURSE_REVIEW_RECORDS ||--o{ COURSE_REVIEW_FEEDBACK_ITEMS : "details (CASCADE)"
+    COURSES ||--o{ COURSE_BASELINE_SNAPSHOTS : "snapshots (CASCADE)"
+    COURSES ||--|| COURSE_ADMIN_STAGED_EDITS : "has staged (CASCADE)"
+    COURSES ||--o{ COURSE_REVIEWER_WORKING_NOTES : "annotated by (CASCADE)"

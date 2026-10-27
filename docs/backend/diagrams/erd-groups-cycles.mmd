@@ -1,0 +1,130 @@
+erDiagram
+    TRAINING_GROUPS {
+        uuid id PK
+        varchar external_id UK "Canonical business group ID (e.g. GRP101)"
+        varchar name "Arabic cohort group name"
+        text description "Cohort objectives and department focus"
+        varchar admin_status "draft | active | archived"
+        varchar enrollment_policy "open | approval_required | closed"
+        varchar enrollment_code UK "6-char QR enrollment token"
+        boolean is_enrollment_open "Accepting new members toggle"
+        timestamptz enrollment_expires_at "Token expiration deadline"
+        integer max_trainees "Trainee capacity ceiling"
+        timestamptz default_start_datetime "Cohort default start date"
+        timestamptz default_deadline_datetime "Cohort default deadline date"
+        varchar default_post_deadline_policy "keep_no_cert | hide"
+        boolean auto_renewal_enabled "Automated recurrence toggle"
+        integer renewal_interval_days "Custom cycle interval in days"
+        date next_scheduled_renewal_date "Projected next cycle date"
+        varchar recurrence_type "none | monthly | bimonthly | quarterly | custom"
+        uuid current_cycle_id "Active cycle reference ID"
+        timestamptz created_at "Group creation timestamp"
+        timestamptz updated_at "Group modification timestamp"
+    }
+
+    GROUP_SUPERVISORS {
+        uuid id PK
+        uuid group_id FK "Parent group (CASCADE)"
+        uuid user_id FK "Assigned supervisor in users (RESTRICT)"
+        varchar role "supervisor | assistant"
+        timestamptz assigned_at "Assignment timestamp"
+        uuid assigned_by FK "Authorizing administrator (RESTRICT)"
+    }
+
+    GROUP_RENEWAL_CYCLES {
+        uuid id PK
+        varchar external_id UK "Canonical cycle ID (e.g. CYC-GRP101-01)"
+        uuid group_id FK "Parent group (CASCADE)"
+        integer cycle_number "Sequential cycle iteration (1, 2, 3...)"
+        varchar title "Cycle Arabic designation"
+        varchar status "active | completed | archived"
+        timestamptz start_datetime "Cycle baseline start date"
+        timestamptz deadline_datetime "Cycle baseline deadline date"
+        varchar post_deadline_policy "keep_no_cert | hide"
+        timestamptz completed_at "Formal cycle closure timestamp"
+        timestamptz created_at "Cycle creation timestamp"
+        timestamptz updated_at "Cycle modification timestamp"
+    }
+
+    GROUP_CYCLE_COURSE_ASSIGNMENTS {
+        uuid id PK
+        uuid cycle_id FK "Parent cycle (CASCADE)"
+        uuid group_id FK "Parent group reference (CASCADE)"
+        uuid course_id FK "Assigned course in courses (RESTRICT)"
+        varchar course_role "core | reminder"
+        integer order_index "Sequential syllabus ordering"
+        timestamptz custom_start_datetime "Level-1 start override"
+        timestamptz custom_deadline_datetime "Level-1 deadline override"
+        varchar custom_post_deadline_policy "Level-1 policy override"
+    }
+
+    GROUP_MEMBERSHIPS {
+        uuid id PK
+        uuid group_id FK "Target group (CASCADE)"
+        uuid user_id FK "Trainee member in users (CASCADE)"
+        varchar join_source "admin_assigned | supervisor_assigned | qr_code"
+        boolean is_active "Active membership flag"
+        timestamptz joined_at "Registration timestamp"
+    }
+
+    GROUP_JOIN_REQUESTS {
+        uuid id PK
+        uuid group_id FK "Target group (CASCADE)"
+        uuid user_id FK "Submitting trainee in users (CASCADE)"
+        varchar status "pending | approved | rejected"
+        timestamptz requested_at "Submission timestamp"
+        timestamptz reviewed_at "Review decision timestamp"
+        uuid reviewed_by FK "Reviewing supervisor in users (SET NULL)"
+        text review_note "Supervisor decision notes"
+    }
+
+    GROUP_RESOURCES {
+        uuid id PK
+        uuid group_id FK "Target group (CASCADE)"
+        varchar title "Resource title (e.g. Teams Meeting)"
+        text url "External web link"
+        text description "Resource description"
+        varchar type "teams | zoom | meet | pdf | link"
+        integer order_index "Display sequence"
+        timestamptz created_at "Creation timestamp"
+    }
+
+    GROUP_MATERIAL_FOLDERS {
+        uuid id PK
+        uuid group_id FK "Parent group (CASCADE)"
+        uuid cycle_id FK "Optional cycle link (SET NULL)"
+        uuid parent_id FK "Recursive parent folder (CASCADE)"
+        varchar name "Arabic folder name"
+        integer order_index "Display sequence"
+        boolean is_visible_to_trainees "Trainee visibility toggle"
+        timestamptz created_at "Creation timestamp"
+        timestamptz updated_at "Modification timestamp"
+    }
+
+    GROUP_MATERIAL_FILES {
+        uuid id PK
+        uuid folder_id FK "Parent folder (CASCADE)"
+        uuid group_id FK "Parent group reference (CASCADE)"
+        uuid cycle_id FK "Optional cycle link (SET NULL)"
+        varchar title "Display title"
+        varchar original_file_name "Client upload filename"
+        bigint file_size_bytes "Exact size in bytes"
+        varchar mime_type "MIME classification"
+        varchar file_type "pdf | image | word | excel | powerpoint | archive | video | audio | other"
+        varchar storage_key "External object storage key"
+        integer order_index "Display sequence"
+        uuid uploaded_by FK "Uploader user ID in users (RESTRICT)"
+        boolean is_visible "Visibility toggle"
+        integer download_count "Accumulated download counter"
+        timestamptz uploaded_at "Upload timestamp"
+    }
+
+    TRAINING_GROUPS ||--o{ GROUP_SUPERVISORS : "supervised by (CASCADE)"
+    TRAINING_GROUPS ||--o{ GROUP_RENEWAL_CYCLES : "executes (CASCADE)"
+    GROUP_RENEWAL_CYCLES ||--o{ GROUP_CYCLE_COURSE_ASSIGNMENTS : "schedules (CASCADE)"
+    TRAINING_GROUPS ||--o{ GROUP_MEMBERSHIPS : "enrolls (CASCADE)"
+    TRAINING_GROUPS ||--o{ GROUP_JOIN_REQUESTS : "receives (CASCADE)"
+    TRAINING_GROUPS ||--o{ GROUP_RESOURCES : "shares (CASCADE)"
+    TRAINING_GROUPS ||--o{ GROUP_MATERIAL_FOLDERS : "organizes (CASCADE)"
+    GROUP_MATERIAL_FOLDERS ||--o{ GROUP_MATERIAL_FOLDERS : "subfolders (CASCADE)"
+    GROUP_MATERIAL_FOLDERS ||--o{ GROUP_MATERIAL_FILES : "contains (CASCADE)"

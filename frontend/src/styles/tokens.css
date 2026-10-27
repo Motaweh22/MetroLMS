@@ -1,0 +1,45 @@
+/* src/styles/tokens.css */
+@import "tailwindcss";
+
+@theme {
+  /* ── Core Brand Colors ── */
+  --color-primary: #5BBFDE;           /* Baseline Cairo Metro Cyan */
+  --color-primary-dark: #1A3F6F;      /* Enterprise Navy Blue */
+  --color-primary-light: #E8F6FB;     /* Soft Cyan Tint */
+  --color-primary-hover: #49B0D1;     /* Cyan Interactive Hover */
+
+  /* ── Backgrounds & Surfaces ── */
+  --color-bg: #FFFFFF;                /* Pure Page Background */
+  --color-bg-alt: #EEF2F7;            /* Alternative Table Header / Sidebar Background */
+  --color-surface: #F5F7FA;           /* Elevated Card Surface */
+
+  /* ── Typography & Borders ── */
+  --color-text: #1C1C1E;              /* High-Contrast Primary Text */
+  --color-text-muted: #6B7280;        /* Secondary Metadata Text */
+  --color-border: #E5E7EB;            /* Structural Borders and Dividers */
+
+  /* ── Semantic Status Colors & Light Tints ── */
+  --color-success: #2E7D32;           /* Success / Completion Green */
+  --color-success-light: #E8F5E9;
+  --color-warning: #F9A825;           /* Warning / Due Soon Amber */
+  --color-warning-dark: #B45309;      /* Dark Amber for Text on Light Background (4.51:1 AA) */
+  --color-warning-light: #FEF3C7;
+  --color-danger: #D32F2F;            /* Danger / Overdue / Rejected Red */
+  --color-danger-dark: #B91C1C;       /* Accessible Dark Red for Text on Light Background (5.30:1 AA) */
+  --color-danger-light: #FEE2E2;
+  --color-info: #0284C7;              /* Information / Mandatory Path Blue */
+  --color-info-dark: #0369A1;         /* Accessible Dark Blue for Text on Light Background (5.17:1 AA) */
+  --color-info-light: #E0F2FE;
+
+  /* ── Border Radii ── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* ── Elevation Shadows ── */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+}

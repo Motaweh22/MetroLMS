@@ -1,0 +1,161 @@
+erDiagram
+    DEPARTMENTS {
+        uuid id PK
+        varchar code UK "Department unique business code"
+        varchar name_ar UK "Official Arabic department name"
+        varchar name_en "Optional English name"
+        boolean is_active "Active department toggle"
+        timestamptz created_at "Creation timestamp"
+        timestamptz updated_at "Modification timestamp"
+    }
+
+    TRAINING_TRACKS {
+        uuid id PK
+        varchar code UK "Track technical code"
+        varchar name_ar UK "Arabic track designation"
+        varchar name_en "English track name"
+        text description_ar "Curriculum track syllabus"
+        boolean is_active "Active track toggle"
+        timestamptz created_at "Creation timestamp"
+    }
+
+    DEPARTMENT_TRACKS {
+        uuid department_id PK,FK "Assigned department (CASCADE)"
+        uuid track_id PK,FK "Configured track (RESTRICT)"
+        boolean is_enabled "Track authorization toggle"
+        timestamptz updated_at "Policy modification date"
+        uuid updated_by FK "Authorizing admin user ID"
+    }
+
+    USERS {
+        uuid id PK
+        varchar external_id UK "Canonical business ID (e.g. USR001)"
+        varchar name "Arabic display name (display label only)"
+        varchar username UK "Login username handle"
+        varchar email UK "Primary corporate email address"
+        varchar phone "E.164 normalized phone number"
+        varchar job_title "Professional job position"
+        uuid department_id FK "Assigned department (RESTRICT)"
+        varchar role "admin | assistant_admin | lecturer | user"
+        varchar status "active | suspended"
+        varchar avatar_url "Profile avatar image path"
+        timestamptz last_login_at "Last login timestamp"
+        timestamptz created_at "Account creation date"
+        timestamptz updated_at "Account modification date"
+    }
+
+    USER_CREDENTIALS {
+        uuid user_id PK,FK "1-to-1 link to users (CASCADE)"
+        varchar password_hash "Argon2id or bcrypt salted hash"
+        varchar algorithm "Hash algorithm identifier"
+        integer failed_attempts "Consecutive failed login counter"
+        timestamptz locked_until "Brute-force lockout expiration"
+        timestamptz password_changed_at "Last password rotation date"
+        timestamptz updated_at "Credential modification date"
+    }
+
+    USER_LEGACY_ALIASES {
+        uuid id PK
+        uuid user_id FK "Canonical user reference (CASCADE)"
+        varchar legacy_alias UK "Legacy/synthetic ID (e.g. usr_lect_002)"
+        timestamptz created_at "Registration timestamp"
+    }
+
+    SYSTEM_CAPABILITIES {
+        varchar code PK "Semantic capability key (e.g. courses.create)"
+        varchar category "Operational area"
+        varchar description_ar "Arabic capability description"
+        boolean is_governance_action "Requires approval if assistant_admin"
+    }
+
+    ROLE_CAPABILITY_DEFAULTS {
+        varchar role PK "Canonical role (admin | assistant_admin | lecturer | user)"
+        varchar capability_code PK,FK "System capability code (RESTRICT)"
+        boolean is_enabled "Default permission toggle for role"
+        timestamptz updated_at "Baseline modification date"
+        uuid updated_by FK "Administrator who updated baseline"
+    }
+
+    USER_PERMISSION_OVERRIDES {
+        uuid id PK
+        uuid user_id FK "Target user (CASCADE)"
+        varchar capability_code FK "System capability code (RESTRICT)"
+        varchar override_type "grant | revoke"
+        text reason "Mandatory administrative justification"
+        timestamptz updated_at "Override modification date"
+        uuid updated_by FK "Authorizing administrator (RESTRICT)"
+    }
+
+    ADMIN_OPERATIONAL_DELEGATIONS {
+        uuid id PK
+        uuid user_id FK "Assistant Admin holding delegation (CASCADE)"
+        boolean is_active "Active delegation status toggle"
+        timestamptz granted_at "Grant timestamp"
+        uuid granted_by FK "System Administrator who granted (RESTRICT)"
+        timestamptz revoked_at "Revocation timestamp"
+        uuid revoked_by FK "Administrator who revoked"
+        text justification "Operational rationale for delegation"
+    }
+
+    APPROVAL_REQUESTS {
+        uuid id PK
+        varchar action_type "Standard action code (e.g. USER_DELETE)"
+        varchar title_ar "Localized Arabic proposal title"
+        uuid requester_id FK "Assistant Administrator (RESTRICT)"
+        varchar target_resource_type "Entity classification"
+        uuid target_resource_id "Target entity ID"
+        varchar status "pending | approved | rejected | failed_execution"
+        text justification "Requester operational rationale"
+        jsonb payload "Structured arguments to execute on approval"
+        uuid decided_by FK "Deciding System Administrator (RESTRICT)"
+        timestamptz decided_at "Decision timestamp"
+        text decision_note "Administrator decision rationale"
+        text execution_error "Execution error trace if failed"
+        timestamptz created_at "Submission timestamp"
+        timestamptz updated_at "State transition timestamp"
+    }
+
+    SYSTEM_SECURITY_AUDIT_LOGS {
+        uuid id PK
+        timestamptz timestamp "Exact event occurrence timestamp"
+        uuid actor_id FK "User performing operation (RESTRICT)"
+        varchar actor_name "Actor display name at event time"
+        varchar actor_role "Actor role at event time"
+        varchar action "Semantic event code"
+        varchar action_label_ar "Arabic event summary"
+        varchar severity "info | warning | critical"
+        varchar resource_type "Target entity classification"
+        uuid target_resource_id "Target entity ID"
+        varchar target_resource_name "Target entity name at event time"
+        text details "Detailed narrative description of changes"
+        varchar outcome "success | denied | failed | pending_approval | rejected"
+        uuid request_id FK "Linked approval request ID (SET NULL)"
+        jsonb metadata "Contextual delta (old vs new values)"
+        varchar client_ip "Originating client IP"
+        varchar user_agent "Client user-agent string"
+    }
+
+    DEPARTMENTS ||--o{ USERS : "employs (RESTRICT)"
+    DEPARTMENTS ||--o{ DEPARTMENT_TRACKS : "configures (CASCADE)"
+    TRAINING_TRACKS ||--o{ DEPARTMENT_TRACKS : "assigned to (RESTRICT)"
+    USERS ||--o{ DEPARTMENT_TRACKS : "modified by (SET NULL)"
+
+    USERS ||--|| USER_CREDENTIALS : "has credential (CASCADE)"
+    USERS ||--o{ USER_LEGACY_ALIASES : "mapped from (CASCADE)"
+
+    SYSTEM_CAPABILITIES ||--o{ ROLE_CAPABILITY_DEFAULTS : "defines default (RESTRICT)"
+    USERS ||--o{ ROLE_CAPABILITY_DEFAULTS : "modified by (SET NULL)"
+
+    SYSTEM_CAPABILITIES ||--o{ USER_PERMISSION_OVERRIDES : "overrides (RESTRICT)"
+    USERS ||--o{ USER_PERMISSION_OVERRIDES : "receives override (CASCADE)"
+    USERS ||--o{ USER_PERMISSION_OVERRIDES : "authorized by (RESTRICT)"
+
+    USERS ||--o{ ADMIN_OPERATIONAL_DELEGATIONS : "held by (CASCADE)"
+    USERS ||--o{ ADMIN_OPERATIONAL_DELEGATIONS : "granted by (RESTRICT)"
+    USERS ||--o{ ADMIN_OPERATIONAL_DELEGATIONS : "revoked by (SET NULL)"
+
+    USERS ||--o{ APPROVAL_REQUESTS : "submitted by (RESTRICT)"
+    USERS ||--o{ APPROVAL_REQUESTS : "decided by (RESTRICT)"
+
+    USERS ||--o{ SYSTEM_SECURITY_AUDIT_LOGS : "performed by (RESTRICT)"
+    APPROVAL_REQUESTS ||--o{ SYSTEM_SECURITY_AUDIT_LOGS : "audits proposal (SET NULL)"

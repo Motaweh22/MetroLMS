@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Production build
+dist/
+
+# Build caches
+*.tsbuildinfo
+.vite/
+
+# Logs
+*.log
+
+# Local environment configs
+.env*.local
+
+# Obsidian workspace layout
+docs/.obsidian/workspace.json
+
+# Local legacy reference archive (excluded from MetroLMS repository)
+/legacy-reference/
+
+# Excluded local test media and documents
+frontend/src/test/e& Financial Proposal V2- Cairo Metro (1).pdf
+frontend/src/test/Inside Zoho Desk*
+
+# OS metadata
+Thumbs.db
+.DS_Store

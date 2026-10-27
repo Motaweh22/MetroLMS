@@ -1,0 +1,71 @@
+erDiagram
+    COURSE_COMMENTS {
+        uuid id PK
+        uuid course_id FK "Parent course in courses (CASCADE)"
+        uuid user_id FK "Comment author in users (RESTRICT)"
+        text text "Arabic discussion comment text"
+        boolean is_lecturer "Instructor badge toggle"
+        timestamptz created_at "Comment submission timestamp"
+        timestamptz deleted_at "Soft-deletion timestamp (SET NULL)"
+        uuid deleted_by FK "Moderator in users who soft-deleted"
+    }
+
+    COMMENT_REPORTS {
+        uuid id PK
+        uuid comment_id FK "Reported comment (CASCADE)"
+        uuid course_id FK "Parent course reference (CASCADE)"
+        uuid reporter_id FK "Reporting trainee in users (RESTRICT)"
+        varchar reason "inappropriate_content | misinformation | harassment | spam | other"
+        text notes "Optional reporting justification"
+        varchar status "pending | ignored | resolved_by_deletion"
+        timestamptz reported_at "Report submission timestamp"
+        timestamptz resolved_at "Triage resolution timestamp"
+        uuid resolved_by FK "Resolving administrator in users (SET NULL)"
+        text resolution_notes "Administrative triage notes"
+    }
+
+    COURSE_WHATSAPP_OVERRIDES {
+        uuid course_id PK,FK "Customized course 1-to-1 (CASCADE)"
+        varchar contact_name "Custom WhatsApp contact name"
+        varchar phone_number "E.164 normalized phone number"
+        varchar role_title "Optional contact role title"
+        timestamptz updated_at "Configuration timestamp"
+        uuid updated_by FK "Configuring administrator in users (RESTRICT)"
+    }
+
+    PLATFORM_SUPPORT_CONTACTS {
+        uuid id PK
+        varchar channel_type "login_support | general_support"
+        varchar contact_name "Support representative name"
+        varchar phone_number "E.164 normalized WhatsApp support phone"
+        boolean is_active "Active line toggle"
+        integer order_index "Display priority sequence"
+    }
+
+    MEDIA_STORAGE_OBJECTS {
+        uuid id PK
+        varchar storage_provider "s3_compatible | local_filesystem | azure_blob"
+        varchar storage_key UK "External cloud object storage path/key"
+        varchar original_filename "Filename as submitted by uploader"
+        bigint file_size_bytes "Exact byte length of file"
+        varchar mime_type "MIME content type"
+        varchar sha256_checksum "Cryptographic checksum for tamper checks"
+        uuid uploaded_by FK "Uploader user ID in users (RESTRICT)"
+        timestamptz created_at "Upload ingestion timestamp"
+    }
+
+    LEARNING_SESSION_EVENTS {
+        uuid id PK
+        uuid user_id FK "Active trainee in users (CASCADE)"
+        uuid course_id FK "Target course in courses (CASCADE)"
+        uuid item_id FK "Target lesson in course_chapter_items (CASCADE)"
+        uuid attempt_id FK "Parent attempt in course_attempts (CASCADE)"
+        timestamptz session_start_at "Playback session start timestamp"
+        timestamptz session_end_at "Playback session end/flush timestamp"
+        integer duration_seconds "Total elapsed session seconds"
+        integer active_viewing_seconds "Active foreground playback seconds"
+        varchar device_type "desktop | mobile | tablet"
+        timestamptz created_at "Telemetry ingestion timestamp"
+    }
+
+    COURSE_COMMENTS ||--o{ COMMENT_REPORTS : "moderated via (CASCADE)"

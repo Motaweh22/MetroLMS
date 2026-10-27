@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1700 1100" width="1700" height="1100">
+  <defs>
+    <style>
+      .entity-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #174EA6; text-anchor: middle; dominant-baseline: central; }
+      .rel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 700; fill: #B06000; text-anchor: middle; dominant-baseline: central; }
+      .attr-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .attr-key { font-weight: 700; text-decoration: underline; fill: #A50E0E; }
+      .attr-derived { font-style: italic; fill: #5F6368; }
+      .card-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .title-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #202124; text-anchor: start; }
+      .subtitle-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; fill: #5F6368; text-anchor: start; }
+    </style>
+  </defs>
+  <rect width="1700" height="1100" fill="#FAFAFA" />
+  <g id="header" transform="translate(40, 40)">
+    <text class="title-txt" x="0" y="0">Domain 1: Identity, Departments &amp; Permissions Governance (Chen Notation)</text>
+    <text class="subtitle-txt" x="0" y="22">Metro Courses LMS Database Schema &#8226; Classic Chen-Notation Entity-Relationship Diagram</text>
+  </g>
+  <line x1="82.5" y1="198.0" x2="150.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="192.5" y1="198.0" x2="150.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="72.5" y1="368.0" x2="150.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="182.5" y1="368.0" x2="150.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="82.5" y1="508.0" x2="155.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="192.5" y1="508.0" x2="155.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="102.5" y1="658.0" x2="155.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="492.5" y1="198.0" x2="590.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="602.5" y1="198.0" x2="590.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="712.5" y1="198.0" x2="590.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="482.5" y1="283.0" x2="590.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="482.5" y1="338.0" x2="590.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="722.5" y1="283.0" x2="590.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="742.5" y1="68.0" x2="590.0" y2="85.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="742.5" y1="113.0" x2="590.0" y2="85.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="132.5" y1="83.0" x2="325.0" y2="85.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1072.5" y1="198.0" x2="1107.5" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1182.5" y1="198.0" x2="1107.5" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1092.5" y1="358.0" x2="1107.5" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1017.5" y1="98.0" x2="855.0" y2="127.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1017.5" y1="143.0" x2="855.0" y2="127.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="452.5" y1="658.0" x2="590.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="572.5" y1="658.0" x2="590.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="842.5" y1="658.0" x2="955.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="952.5" y1="658.0" x2="955.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1062.5" y1="658.0" x2="955.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1282.5" y1="658.0" x2="1360.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1392.5" y1="658.0" x2="1360.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1502.5" y1="658.0" x2="1360.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="292.5" y1="433.0" x2="150.0" y2="432.5" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="150.0" y1="287.5" x2="150.0" y2="432.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="128.0" y="342.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="140.0" y="352.8">N</text>
+  <line x1="150.0" y1="432.5" x2="155.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="130.3" y="492.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="142.3" y="502.6">M</text>
+  <line x1="150.0" y1="287.5" x2="375.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="239.2" y="287.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="251.2" y="297.5">1</text>
+  <line x1="375.0" y1="287.5" x2="590.0" y2="287.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="459.8" y="287.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="471.8" y="297.5">N</text>
+  <line x1="590.0" y1="287.5" x2="600.0" y2="182.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="592.5" y="231.2" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="604.5" y="241.2">1</text>
+  <line x1="602.0" y1="182.3" x2="592.0" y2="84.8" stroke="#3C4043" stroke-width="1.6" />
+  <line x1="598.0" y1="182.7" x2="588.0" y2="85.2" stroke="#3C4043" stroke-width="1.6" />
+  <rect x="593.4" y="127.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="605.4" y="137.6">1</text>
+  <line x1="590.0" y1="287.5" x2="407.5" y2="182.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="500.9" y="221.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="512.9" y="231.6">1</text>
+  <line x1="409.0" y1="181.2" x2="326.5" y2="83.7" stroke="#3C4043" stroke-width="1.6" />
+  <line x1="406.0" y1="183.8" x2="323.5" y2="86.3" stroke="#3C4043" stroke-width="1.6" />
+  <rect x="366.0" y="122.2" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="378.0" y="132.2">N</text>
+  <line x1="590.0" y1="287.5" x2="762.5" y2="197.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="660.3" y="245.9" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="672.3" y="255.9">1</text>
+  <line x1="763.7" y1="199.1" x2="856.2" y2="129.1" stroke="#3C4043" stroke-width="1.6" />
+  <line x1="761.3" y1="195.9" x2="853.8" y2="125.9" stroke="#3C4043" stroke-width="1.6" />
+  <rect x="798.2" y="164.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="810.2" y="174.0">N</text>
+  <line x1="1107.5" y1="287.5" x2="997.5" y2="197.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1052.3" y="229.3" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1064.3" y="239.3">1</text>
+  <line x1="998.4" y1="195.7" x2="855.9" y2="125.7" stroke="#3C4043" stroke-width="1.6" />
+  <line x1="996.6" y1="199.3" x2="854.1" y2="129.3" stroke="#3C4043" stroke-width="1.6" />
+  <rect x="925.8" y="147.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="937.8" y="157.0">N</text>
+  <line x1="590.0" y1="287.5" x2="602.5" y2="432.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="573.7" y="343.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="585.7" y="353.6">1</text>
+  <line x1="602.5" y1="432.5" x2="590.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="574.9" y="491.4" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="586.9" y="501.4">N</text>
+  <line x1="590.0" y1="287.5" x2="790.0" y2="462.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="661.4" y="363.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="673.4" y="373.8">1</text>
+  <line x1="790.0" y1="462.5" x2="955.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="846.2" y="516.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="858.2" y="526.7">N</text>
+  <line x1="590.0" y1="287.5" x2="790.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="659.7" y="418.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="671.7" y="428.0">0..1</text>
+  <line x1="790.0" y1="587.5" x2="955.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="852.2" y="587.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="864.2" y="597.5">N</text>
+  <line x1="590.0" y1="287.5" x2="1050.0" y2="442.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="781.8" y="356.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="793.8" y="366.7">1</text>
+  <line x1="1049.2" y1="444.3" x2="1359.2" y2="589.3" stroke="#3C4043" stroke-width="1.6" />
+  <line x1="1050.8" y1="440.7" x2="1360.8" y2="585.7" stroke="#3C4043" stroke-width="1.6" />
+  <rect x="1173.3" y="506.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1185.3" y="516.8">N</text>
+  <line x1="955.0" y1="587.5" x2="1167.5" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1038.6" y="587.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1050.6" y="597.5">0..1</text>
+  <line x1="1167.5" y1="587.5" x2="1360.0" y2="587.5" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1242.1" y="587.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1254.1" y="597.5">N</text>
+  <ellipse cx="82.5" cy="198.0" rx="52.5" ry="18.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="82.5" y="198.0">id</text>
+  <ellipse cx="192.5" cy="198.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="192.5" y="198.0">code</text>
+  <ellipse cx="72.5" cy="368.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="72.5" y="368.0">name_ar</text>
+  <ellipse cx="182.5" cy="368.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="182.5" y="368.0">is_active</text>
+  <ellipse cx="82.5" cy="508.0" rx="52.5" ry="18.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="82.5" y="508.0">id</text>
+  <ellipse cx="192.5" cy="508.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="192.5" y="508.0">code</text>
+  <ellipse cx="102.5" cy="658.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="102.5" y="658.0">name_ar</text>
+  <ellipse cx="492.5" cy="198.0" rx="52.5" ry="18.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="492.5" y="198.0">id</text>
+  <ellipse cx="602.5" cy="198.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="602.5" y="198.0">external_id</text>
+  <ellipse cx="712.5" cy="198.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="712.5" y="198.0">name</text>
+  <ellipse cx="482.5" cy="283.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="482.5" y="283.0">role</text>
+  <ellipse cx="482.5" cy="338.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="482.5" y="338.0">email</text>
+  <ellipse cx="722.5" cy="283.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="722.5" y="283.0">status</text>
+  <ellipse cx="742.5" cy="68.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="742.5" y="68.0">password_hash</text>
+  <ellipse cx="742.5" cy="113.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="742.5" y="113.0">locked_until</text>
+  <ellipse cx="132.5" cy="83.0" rx="52.5" ry="18.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="132.5" y="83.0">legacy_alias</text>
+  <ellipse cx="1072.5" cy="198.0" rx="52.5" ry="18.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1072.5" y="198.0">code</text>
+  <ellipse cx="1182.5" cy="198.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1182.5" y="198.0">category</text>
+  <ellipse cx="1092.5" cy="358.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1092.5" y="358.0">is_governance</text>
+  <ellipse cx="1017.5" cy="98.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1017.5" y="98.0">override_type</text>
+  <ellipse cx="1017.5" cy="143.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1017.5" y="143.0">reason</text>
+  <ellipse cx="452.5" cy="658.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="452.5" y="658.0">is_active</text>
+  <ellipse cx="572.5" cy="658.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="572.5" y="658.0">justification</text>
+  <ellipse cx="842.5" cy="658.0" rx="52.5" ry="18.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="842.5" y="658.0">id</text>
+  <ellipse cx="952.5" cy="658.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="952.5" y="658.0">action_type</text>
+  <ellipse cx="1062.5" cy="658.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1062.5" y="658.0">status</text>
+  <ellipse cx="1282.5" cy="658.0" rx="52.5" ry="18.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1282.5" y="658.0">id</text>
+  <ellipse cx="1392.5" cy="658.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1392.5" y="658.0">severity</text>
+  <ellipse cx="1502.5" cy="658.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1502.5" y="658.0">action</text>
+  <ellipse cx="292.5" cy="433.0" rx="52.5" ry="18.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="292.5" y="433.0">is_enabled</text>
+  <polygon points="150.0,410.0 225.0,432.5 150.0,455.0 75.0,432.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="150.0" y="432.5">CONFIGURES_TRACK</text>
+  <polygon points="375.0,265.0 430.0,287.5 375.0,310.0 320.0,287.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="375.0" y="287.5">EMPLOYS</text>
+  <polygon points="600.0,160.0 675.0,182.5 600.0,205.0 525.0,182.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <polygon points="600.0,164.5 669.0,182.5 600.0,200.5 531.0,182.5" fill="none" stroke="#E37400" stroke-width="1.5" />
+  <text class="rel-txt" x="600.0" y="182.5">AUTHENTICATES_VIA</text>
+  <polygon points="407.5,160.0 465.0,182.5 407.5,205.0 350.0,182.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <polygon points="407.5,164.5 459.0,182.5 407.5,200.5 356.0,182.5" fill="none" stroke="#E37400" stroke-width="1.5" />
+  <text class="rel-txt" x="407.5" y="182.5">HAS_ALIAS</text>
+  <polygon points="762.5,175.0 835.0,197.5 762.5,220.0 690.0,197.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="762.5" y="197.5">RECEIVES_OVERRIDE</text>
+  <polygon points="997.5,175.0 1075.0,197.5 997.5,220.0 920.0,197.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="997.5" y="197.5">OVERRIDES_CAPABILITY</text>
+  <polygon points="602.5,410.0 665.0,432.5 602.5,455.0 540.0,432.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="602.5" y="432.5">DELEGATES_TO</text>
+  <polygon points="790.0,440.0 845.0,462.5 790.0,485.0 735.0,462.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="790.0" y="462.5">SUBMITS</text>
+  <polygon points="790.0,565.0 845.0,587.5 790.0,610.0 735.0,587.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="790.0" y="587.5">DECIDES</text>
+  <polygon points="1050.0,420.0 1120.0,442.5 1050.0,465.0 980.0,442.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="1050.0" y="442.5">PERFORMS_ACTION</text>
+  <polygon points="1167.5,565.0 1235.0,587.5 1167.5,610.0 1100.0,587.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="1167.5" y="587.5">AUDITS_REQUEST</text>
+  <rect x="80.0" y="260.0" width="140.0" height="55.0" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="150.0" y="287.5">DEPARTMENTS</text>
+  <rect x="80.0" y="560.0" width="150.0" height="55.0" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="155.0" y="587.5">TRAINING_TRACKS</text>
+  <rect x="520.0" y="260.0" width="140.0" height="55.0" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="590.0" y="287.5">USERS</text>
+  <rect x="510.0" y="60.0" width="160.0" height="50.0" rx="2" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.8" />
+  <rect x="514.0" y="64.0" width="152.0" height="42.0" rx="1" fill="none" stroke="#1967D2" stroke-width="1.4" />
+  <text class="entity-txt" x="590.0" y="85.0">USER_CREDENTIALS</text>
+  <rect x="240.0" y="60.0" width="170.0" height="50.0" rx="2" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.8" />
+  <rect x="244.0" y="64.0" width="162.0" height="42.0" rx="1" fill="none" stroke="#1967D2" stroke-width="1.4" />
+  <text class="entity-txt" x="325.0" y="85.0">USER_LEGACY_ALIASES</text>
+  <rect x="1020.0" y="260.0" width="175.0" height="55.0" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1107.5" y="287.5">SYSTEM_CAPABILITIES</text>
+  <rect x="760.0" y="100.0" width="190.0" height="55.0" rx="2" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.8" />
+  <rect x="764.0" y="104.0" width="182.0" height="47.0" rx="1" fill="none" stroke="#1967D2" stroke-width="1.4" />
+  <text class="entity-txt" x="855.0" y="127.5">USER_PERMISSION_OVERRIDES</text>
+  <rect x="480.0" y="560.0" width="220.0" height="55.0" rx="2" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.8" />
+  <rect x="484.0" y="564.0" width="212.0" height="47.0" rx="1" fill="none" stroke="#1967D2" stroke-width="1.4" />
+  <text class="entity-txt" x="590.0" y="587.5">ADMIN_OPERATIONAL_DELEGATIONS</text>
+  <rect x="870.0" y="560.0" width="170.0" height="55.0" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="955.0" y="587.5">APPROVAL_REQUESTS</text>
+  <rect x="1260.0" y="560.0" width="200.0" height="55.0" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1360.0" y="587.5">SYSTEM_SECURITY_AUDIT_LOGS</text>
+</svg>

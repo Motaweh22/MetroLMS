@@ -1,0 +1,684 @@
+/**
+ * Learning Player & Video Controls Styles
+ * Consistent with Cairo Metro LMS Design System Tokens
+ */
+
+.learning-player-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #070B14;
+  color: var(--color-text-light, #F8FAFC);
+}
+
+.learning-player-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+  flex: 1;
+}
+
+@media (max-width: 1024px) {
+  .learning-player-layout {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+    gap: 1rem;
+  }
+}
+
+/* -------------------------------------------------------------
+   Custom Video Player Stage & Fullscreen Container
+------------------------------------------------------------- */
+.custom-video-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #000000;
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+
+.custom-video-container:focus-visible {
+  box-shadow: 0 0 0 3px var(--color-primary-light, #38BDF8);
+}
+
+.custom-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background-color: #000000;
+}
+
+/* Fullscreen Mode Container Styling */
+.custom-video-container:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  max-width: 100vw;
+  max-height: 100vh;
+}
+
+.custom-video-container:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+/* Big Central Play Button Overlay */
+.video-big-play-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+}
+
+.video-big-play-btn:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+  background: var(--color-primary, #0284C7);
+  border-color: #FFFFFF;
+}
+
+/* Buffering Spinner Overlay */
+.video-buffering-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.video-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--color-primary, #0284C7);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Seeking Clamped Alert Pill */
+.seeking-clamped-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(239, 68, 68, 0.9);
+  color: #FFFFFF;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.82rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  animation: fadeInOut 2.5s ease-in-out forwards;
+  z-index: 20;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-8px); }
+  15% { opacity: 1; transform: translateY(0); }
+  85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
+/* -------------------------------------------------------------
+   Custom Video Controls Overlay Bar
+------------------------------------------------------------- */
+.custom-controls-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(10, 15, 30, 0.95) 0%, rgba(10, 15, 30, 0.7) 60%, transparent 100%);
+  padding: 1.5rem 1rem 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: opacity 0.3s ease;
+  z-index: 15;
+}
+
+.custom-controls-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Timeline Scrubber Container */
+.timeline-scrubber-wrap {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: height 0.15s ease;
+}
+
+.timeline-scrubber-wrap:hover {
+  height: 12px;
+}
+
+/* Permitted Furthest Watched Buffer Range */
+.timeline-furthest-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(56, 189, 248, 0.4);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Active Elapsed Playback Range (Consistent Cyan Accent) */
+.timeline-elapsed-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #0284C7 0%, #38BDF8 100%);
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+/* Scrubber Thumb (Cyan-accented with white border) */
+.timeline-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #38BDF8;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+  pointer-events: none;
+  transition: transform 0.1s ease;
+}
+
+.timeline-scrubber-wrap:hover .timeline-thumb {
+  transform: translate(-50%, -50%) scale(1.3);
+}
+
+/* Controls Buttons Row */
+.controls-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.controls-group-start,
+.controls-group-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Standard Control Button */
+.ctrl-btn {
+  background: transparent;
+  border: none;
+  color: #F8FAFC;
+  padding: 0.4rem;
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #FFFFFF;
+}
+
+.ctrl-btn:focus-visible {
+  outline: 2px solid var(--color-primary-light, #38BDF8);
+  outline-offset: 2px;
+}
+
+/* Volume Slider */
+.volume-slider {
+  width: 70px;
+  height: 5px;
+  accent-color: var(--color-primary, #0284C7);
+  cursor: pointer;
+}
+
+/* Time Display */
+.video-time-display {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #CBD5E1;
+  font-family: var(--font-family-mono, monospace);
+  padding: 0 0.4rem;
+  direction: ltr;
+}
+
+/* Playback Speed Selector */
+.speed-dropdown-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #F8FAFC;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.speed-dropdown-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.speed-menu {
+  position: absolute;
+  bottom: 100%;
+  background: #0F172A;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  margin-bottom: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 30;
+}
+
+.speed-option {
+  background: transparent;
+  border: none;
+  color: #E2E8F0;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  text-align: right;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.speed-option:hover,
+.speed-option.active {
+  background: var(--color-primary, #0284C7);
+  color: #FFFFFF;
+}
+
+/* Video Error Alert State */
+.video-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  gap: 1rem;
+  color: #F87171;
+}
+
+.video-error-state p {
+  color: #E2E8F0;
+  font-size: 0.95rem;
+  max-width: 400px;
+}
+
+/* -------------------------------------------------------------
+   PDF Document Viewer Container
+------------------------------------------------------------- */
+.document-viewer-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 700px;
+  background: #0B1120;
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.document-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  background: #0F172A;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.document-title-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #F8FAFC;
+}
+
+.document-page-badge {
+  background: rgba(255, 255, 255, 0.1);
+  color: #94A3B8;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.document-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Dark charcoal/slate surface surrounding PDF pages (original page colors preserved) */
+.document-frame {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #182234;
+}
+
+.document-timer-box {
+  padding: 0.75rem 1.25rem;
+  background: #0F172A;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 640px) {
+  .document-viewer-container {
+    height: 520px;
+  }
+}
+
+/* -------------------------------------------------------------
+   Curriculum Sidebar Styles
+------------------------------------------------------------- */
+.curriculum-sidebar-container {
+  background: #0B1120;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg, 12px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: calc(100vh - 120px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+}
+
+.curriculum-sidebar-header {
+  padding: 1rem 1.25rem;
+  background: #0F172A;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.curriculum-sidebar-header h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  color: #FFFFFF;
+}
+
+.curriculum-chapters-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.curriculum-chapter-item {
+  border-radius: var(--radius-md, 8px);
+  background: rgba(30, 41, 59, 0.5);
+  overflow: hidden;
+}
+
+.chapter-accordion-header {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  color: #F1F5F9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: right;
+  transition: background 0.15s ease;
+}
+
+.chapter-accordion-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chapter-ratio-badge {
+  font-size: 0.75rem;
+  color: #94A3B8;
+  font-weight: normal;
+  margin-right: 0.5rem;
+}
+
+.chapter-lessons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.lesson-list-item-btn {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: #CBD5E1;
+  cursor: pointer;
+  text-align: right;
+  font-size: 0.85rem;
+  transition: all 0.15s ease;
+}
+
+.lesson-list-item-btn:hover:not(.locked) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.lesson-list-item-btn.active {
+  background: rgba(2, 132, 199, 0.2);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38BDF8;
+  font-weight: 600;
+}
+
+.lesson-list-item-btn.locked {
+  color: #64748B;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.lesson-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------
+   Learning Header & Breadcrumbs
+------------------------------------------------------------- */
+.learning-header-container {
+  background: #0B1120;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  padding: 0.85rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.learning-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: #94A3B8;
+}
+
+.learning-breadcrumb-bar a {
+  color: #94A3B8;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.learning-breadcrumb-bar a:hover {
+  color: #38BDF8;
+  text-decoration: underline;
+}
+
+.learning-progress-summary {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.learning-progress-track {
+  width: 140px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.learning-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284C7 0%, #38BDF8 100%);
+  border-radius: 4px;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+  transition: width 0.3s ease;
+}
+
+/* Clear, Prominent Learning Exit Action */
+.learning-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.85rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md, 8px);
+  color: #F8FAFC;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.learning-exit-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38BDF8;
+}
+
+.learning-exit-btn:focus-visible {
+  outline: 2px solid #38BDF8;
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------
+   Player Bottom Toolbar
+------------------------------------------------------------- */
+.player-bottom-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0;
+  margin-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* -------------------------------------------------------------
+   YouTube & Standard Video IFrame Stage Styling
+   Ensures uncropped iframes fill 100% of the 16:9 container
+   and standard native playback controls remain fully visible and clickable.
+------------------------------------------------------------- */
+.custom-video-container:not([data-crop-pixels="55"]):not([data-crop-pixels="50"]) iframe:not(.gdrive-top-crop-wrapper iframe),
+[data-testid="youtube-player-container"] iframe,
+[data-testid="youtube-iframe-holder"] iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+  display: block !important;
+  pointer-events: auto !important;
+}
+
+/* -------------------------------------------------------------
+   Google Drive Top-Crop Video IFrame Stage Styling
+   Positions the iframe 55px above the viewport and ensures its height
+   is exactly calc(100% + 55px) so the top 55px toolbar is clipped
+   while the video content fills the 16:9 viewport completely.
+------------------------------------------------------------- */
+.custom-video-container .gdrive-top-crop-wrapper iframe,
+.gdrive-top-crop-wrapper iframe,
+[data-crop-pixels="55"] iframe,
+[data-crop-pixels="50"] iframe {
+  width: 100% !important;
+  height: calc(100% + 55px) !important;
+  margin-top: -55px !important;
+  top: 0 !important;
+  left: 0 !important;
+  position: absolute !important;
+  border: 0 !important;
+  display: block !important;
+  pointer-events: auto !important;
+}
+

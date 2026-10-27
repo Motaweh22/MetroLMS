@@ -1,0 +1,61 @@
+erDiagram
+    COURSE_ENROLLMENTS {
+        uuid id PK
+        uuid course_id FK "Registered course in courses (RESTRICT)"
+        uuid user_id FK "Enrolled trainee in users (RESTRICT)"
+        varchar status "active | completed | dropped | suspended"
+        varchar enrolled_via "self | admin | group_assignment"
+        uuid source_group_id FK "Originating group if via group (SET NULL)"
+        timestamptz enrolled_at "Enrollment timestamp"
+        timestamptz updated_at "Status modification date"
+    }
+
+    COURSE_ATTEMPTS {
+        uuid id PK
+        varchar external_id UK "Canonical attempt code (e.g. ATT-USR003-CRS001-CYC01)"
+        uuid user_id FK "Learning trainee in users (RESTRICT)"
+        uuid course_id FK "Target course in courses (RESTRICT)"
+        uuid cycle_id FK "Associated renewal cycle (SET NULL)"
+        uuid group_id FK "Provenance cohort group (SET NULL)"
+        integer attempt_number "Sequential attempt count (set on learning start)"
+        varchar course_role "core | reminder"
+        varchar status "not_started | in_progress | completed | expired_incomplete"
+        numeric progress_percent "Calculated progress (0.00 to 100.00)"
+        uuid last_watched_item_id FK "Resume lesson pointer (SET NULL)"
+        timestamptz started_at "Timestamp of first lesson interaction"
+        timestamptz completed_at "Timestamp when 100% progress achieved"
+        timestamptz last_activity_at "Timestamp of latest learning action"
+        timestamptz created_at "Record generation timestamp"
+        timestamptz updated_at "Progress modification timestamp"
+    }
+
+    LESSON_PROGRESS {
+        uuid id PK
+        uuid attempt_id FK "Parent attempt (CASCADE)"
+        uuid item_id FK "Lesson item in course_chapter_items (RESTRICT)"
+        uuid user_id FK "Learning trainee (CASCADE)"
+        uuid course_id FK "Target course (CASCADE)"
+        boolean completed "Lesson completion toggle"
+        timestamptz completed_at "Completion timestamp"
+        integer last_position_seconds "Playhead position in seconds"
+        integer furthest_watched_seconds "Furthest playback scrubbing point"
+        integer eligible_viewing_seconds "Accumulated foreground viewing time"
+        integer watch_count "Viewing frequency counter"
+        timestamptz updated_at "Last playback flush timestamp"
+    }
+
+    COURSE_CERTIFICATES {
+        uuid id PK
+        varchar certificate_number UK "Unique credential verification code"
+        uuid attempt_id UK,FK "Qualifying attempt 1-to-1 (RESTRICT)"
+        uuid user_id FK "Certified trainee in users (RESTRICT)"
+        uuid course_id FK "Completed course in courses (RESTRICT)"
+        varchar recipient_name_snapshot "Trainee display name at issuance"
+        varchar course_title_snapshot "Course title at issuance"
+        timestamptz issued_at "Certification issuance timestamp"
+        jsonb metadata "Verification signatures and grade details"
+    }
+
+    COURSE_ENROLLMENTS ||--o{ COURSE_ATTEMPTS : "manifests (RESTRICT)"
+    COURSE_ATTEMPTS ||--o{ LESSON_PROGRESS : "records (CASCADE)"
+    COURSE_ATTEMPTS ||--o| COURSE_CERTIFICATES : "qualifies for (RESTRICT)"
