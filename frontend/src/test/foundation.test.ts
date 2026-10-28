@@ -8,7 +8,7 @@ describe('Project Foundation & Setup Verification', () => {
     render(React.createElement(App));
     expect(screen.getAllByText(/مترو القاهرة/i).length).toBeGreaterThan(0);
     // Unauthenticated initial visit redirects to login screen
-    expect(screen.getByText(/تسجيل الدخول للمنظومة/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'تسجيل الدخول', level: 2 })).toBeInTheDocument();
   });
 
   it('validates TypeScript path alias @/ resolves properly', () => {

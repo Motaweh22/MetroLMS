@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useAuth } from '@/features/auth';
 import { inMemoryStore } from '@/mocks/store/inMemoryStore';
 import { resolveCanonicalUserId } from '@/mocks/fixtures/userDirectoryFixtures';
-import { CONFIGURED_ADMIN_SUPPORT_CONTACTS } from '../config/supportContacts';
 import {
   cleanPhoneNumber,
   buildContextMessage,
@@ -26,27 +25,43 @@ export function useWhatsAppContacts(config: WhatsAppContextConfig): UseWhatsAppC
     switch (config.context) {
       // ── 1. Login Screen Support Context ───────────────────────────────────
       case 'login': {
-        const validContacts = CONFIGURED_ADMIN_SUPPORT_CONTACTS.filter((c) =>
-          Boolean(cleanPhoneNumber(c.number))
-        );
+        const eligible = inMemoryStore.resolvePublicSupportContacts('technical_support');
+        const resolvedContacts: WhatsAppContact[] = eligible.map((c) => ({
+          id: c.userId,
+          name: c.name,
+          role: c.jobTitle || 'الدعم الفني والتدريب عبر واتساب',
+          number: c.number,
+          displayNumber: c.displayNumber,
+          avatarInitial: c.avatarInitial,
+          isAvailable: true,
+        }));
         return {
-          contacts: validContacts,
+          contacts: resolvedContacts,
           contextTitle: 'الدعم الفني والتدريب عبر واتساب',
           unavailableReasonAr: 'لا تتوفر أرقام دعم فني نشطة حالياً. يرجى مراجعة إدارة التدريب.',
         };
       }
 
       // ── 2. General Platform Support Context ───────────────────────────────
-      case 'general': {
-        const validContacts = CONFIGURED_ADMIN_SUPPORT_CONTACTS.filter((c) =>
-          Boolean(cleanPhoneNumber(c.number))
-        );
+      case 'general':
+      case 'technical_support': {
+        const eligible = inMemoryStore.resolvePublicSupportContacts('technical_support');
+        const resolvedContacts: WhatsAppContact[] = eligible.map((c) => ({
+          id: c.userId,
+          name: c.name,
+          role: c.jobTitle || 'الدعم الإداري والتقني',
+          number: c.number,
+          displayNumber: c.displayNumber,
+          avatarInitial: c.avatarInitial,
+          isAvailable: true,
+        }));
         return {
-          contacts: validContacts,
+          contacts: resolvedContacts,
           contextTitle: 'الدعم الإداري والتقني',
           unavailableReasonAr: 'لا تتوفر أرقام دعم فني نشطة حالياً.',
         };
       }
+
 
       // ── 3. Course Discussion & Content Inquiries ─────────────────────────
       case 'course': {

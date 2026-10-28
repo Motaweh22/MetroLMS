@@ -16,6 +16,13 @@ import {
   validatePermissionOverride,
 } from '@/core/permissions/policy';
 import { permissionsApi } from '../services/permissionsApi';
+import {
+  validateAndNormalizeEgyptianMobile,
+  formatEgyptianMobileDisplay,
+  whatsappApi,
+} from '@/features/whatsapp';
+import '../styles/user-permissions.css';
+
 
 export interface UserPermissionsModalProps {
   isOpen: boolean;
@@ -23,6 +30,34 @@ export interface UserPermissionsModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+interface WhatsAppScenarioItem {
+  key: 'account_registration' | 'password_recovery' | 'technical_support';
+  labelAr: string;
+  helperAr: string;
+  iconName: string;
+}
+
+const WHATSAPP_SCENARIOS: WhatsAppScenarioItem[] = [
+  {
+    key: 'account_registration',
+    labelAr: 'إنشاء حساب جديد',
+    helperAr: 'يظهر ضمن جهات التواصل في نافذة إنشاء حساب جديد.',
+    iconName: 'user',
+  },
+  {
+    key: 'password_recovery',
+    labelAr: 'استعادة كلمة المرور',
+    helperAr: 'يظهر ضمن جهات التواصل في نافذة استعادة كلمة المرور.',
+    iconName: 'lock',
+  },
+  {
+    key: 'technical_support',
+    labelAr: 'الدعم الفني العام',
+    helperAr: 'يظهر ضمن جهات التواصل عند استخدام أيقونة واتساب العائمة.',
+    iconName: 'helpCircle',
+  },
+];
 
 interface CapabilityItem {
   key: SystemCapability;
@@ -259,7 +294,35 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load existing override for selected user
+  // Local UI-only state for WhatsApp contact visibility responsibilities (Phase 1 manual design review)
+  const [whatsAppAssignments, setWhatsAppAssignments] = useState<Record<string, boolean>>({
+    account_registration: false,
+    password_recovery: false,
+    technical_support: false,
+  });
+
+  // Strict Egyptian mobile validation (single source of truth: user.phone)
+  const normalizedPhone = useMemo(() => {
+    return validateAndNormalizeEgyptianMobile(user?.phone);
+  }, [user?.phone]);
+
+  const isPhoneValid = Boolean(normalizedPhone);
+
+  const formattedDisplayPhone = useMemo(() => {
+    return formatEgyptianMobileDisplay(normalizedPhone);
+  }, [normalizedPhone]);
+
+  const isUserSuspended = user?.status === 'suspended';
+
+  const handleToggleWhatsApp = (scenarioKey: 'account_registration' | 'password_recovery' | 'technical_support') => {
+    if (!isPhoneValid) return;
+    setWhatsAppAssignments((prev) => ({
+      ...prev,
+      [scenarioKey]: !prev[scenarioKey],
+    }));
+  };
+
+  // Load existing overrides and WhatsApp visibility assignments for selected user
   useEffect(() => {
     if (!isOpen || !user) {
       setGrantedPerms(new Set());
@@ -267,6 +330,11 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
       setConfiguredRoleDefaults(new Set());
       setReason('');
       setError(null);
+      setWhatsAppAssignments({
+        account_registration: false,
+        password_recovery: false,
+        technical_support: false,
+      });
       return;
     }
 
@@ -274,9 +342,10 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
       setIsLoading(true);
       setError(null);
       try {
-        const [res, rolesRes] = await Promise.all([
+        const [res, rolesRes, waRes] = await Promise.all([
           permissionsApi.getUserPermissionOverride(user.id),
           permissionsApi.getRolePermissions().catch(() => []),
+          whatsappApi.getUserWhatsAppVisibility(user.id).catch(() => null),
         ]);
 
         if (res.override) {
@@ -289,6 +358,25 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
           setGrantedPerms(new Set());
           setRevokedPerms(new Set());
           setReason('');
+        }
+
+        // Populate WhatsApp responsibility switches from saved assignments
+        if (waRes && waRes.assignments) {
+          const map: Record<string, boolean> = {
+            account_registration: false,
+            password_recovery: false,
+            technical_support: false,
+          };
+          for (const item of waRes.assignments) {
+            map[item.scenario] = Boolean(item.isActive);
+          }
+          setWhatsAppAssignments(map);
+        } else {
+          setWhatsAppAssignments({
+            account_registration: false,
+            password_recovery: false,
+            technical_support: false,
+          });
         }
 
         const roleCfg = rolesRes.find((r) => r.role === user.role);
@@ -305,7 +393,7 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
           setConfiguredRoleDefaults(new Set(active));
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'فشل تحميل تخصيصات الصلاحيات';
+        const msg = err instanceof Error ? err.message : 'فشل تحميل تخصيصات الصلاحيات ومسؤوليات واتساب';
         setError(msg);
       } finally {
         setIsLoading(false);
@@ -314,6 +402,7 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
 
     loadUserOverrides();
   }, [isOpen, user]);
+
 
   // Derived baseline and ceiling sets for this user's role
   const roleDefaults = useMemo(() => {
@@ -400,10 +489,16 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
 
     setIsSaving(true);
     setError(null);
+
+    let rbacSuccess = false;
+    let rbacError: string | null = null;
+    let waSuccess = false;
+    let waError: string | null = null;
+
+    // 1. RBAC Permissions Save Operation
     try {
       if (!hasAnyOverride) {
         await permissionsApi.deleteUserPermissionOverride(user.id);
-        toast.success(`تم استعادة الصلاحيات القياسية للمستخدم "${user.name}".`);
       } else {
         await permissionsApi.setUserPermissionOverride(user.id, {
           userId: user.id,
@@ -413,17 +508,45 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
           revoked: Array.from(revokedPerms),
           reason: reason.trim(),
         });
-        toast.success(`تم حفظ تخصيص الصلاحيات الفردية للمستخدم "${user.name}" بنجاح.`);
       }
+      rbacSuccess = true;
+    } catch (err: unknown) {
+      rbacError = err instanceof Error ? err.message : 'فشل حفظ تخصيص الصلاحيات';
+    }
+
+    // 2. WhatsApp Scenario Assignments Operation (Kept strictly separate from RBAC capability payload)
+    try {
+      await whatsappApi.setUserWhatsAppVisibility(user.id, {
+        userId: user.id,
+        assignments: [
+          { scenario: 'account_registration', isActive: Boolean(whatsAppAssignments.account_registration) },
+          { scenario: 'password_recovery', isActive: Boolean(whatsAppAssignments.password_recovery) },
+          { scenario: 'technical_support', isActive: Boolean(whatsAppAssignments.technical_support) },
+        ],
+      });
+      waSuccess = true;
+    } catch (err: unknown) {
+      waError = err instanceof Error ? err.message : 'فشل حفظ مسؤوليات التواصل عبر واتساب';
+    }
+
+    setIsSaving(false);
+
+    // 3. Coordinated Honest Feedback
+    if (rbacSuccess && waSuccess) {
+      toast.success(`تم حفظ صلاحيات ومسؤوليات المستخدم "${user.name}" بنجاح.`);
       onSuccess();
       onClose();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'فشل حفظ تخصيص الصلاحيات';
-      setError(msg);
-    } finally {
-      setIsSaving(false);
+    } else if (rbacSuccess && !waSuccess) {
+      setError(`تم حفظ الصلاحيات بنجاح، ولكن تعذر حفظ إعدادات واتساب: ${waError}`);
+      toast.warning('تم حفظ الصلاحيات، مع تعذر تحديث مسؤوليات واتساب.');
+    } else if (!rbacSuccess && waSuccess) {
+      setError(`تم حفظ إعدادات واتساب بنجاح، ولكن تعذر حفظ الصلاحيات: ${rbacError}`);
+      toast.warning('تم حفظ مسؤوليات واتساب، مع تعذر تحديث الصلاحيات.');
+    } else {
+      setError(`فشل حفظ التعديلات: ${rbacError || waError || 'حدث خطأ غير متوقع'}`);
     }
   };
+
 
   const handleReset = async () => {
     setIsSaving(true);
@@ -506,10 +629,21 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
           <div className="space-y-6 max-h-[55vh] overflow-y-auto px-1 pr-2">
             {CAPABILITY_CATEGORIES.map((cat) => {
               return (
-                <div key={cat.id} className="border border-border rounded-xl p-4 bg-bg space-y-3">
-                  <div className="flex items-center gap-2 pb-2 border-b border-border text-sm font-bold text-text">
-                    <Icon name={cat.icon} size="md" className="text-primary" />
-                    <span>{cat.titleAr}</span>
+                <div key={cat.id} className="perm-category-card space-y-3.5">
+                  <div className="perm-category-header">
+                    <div className="flex items-center gap-2.5">
+                      <div className="perm-icon-badge" aria-hidden="true">
+                        <Icon name={cat.icon} size="md" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-text">
+                          {cat.titleAr}
+                        </h3>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-medium text-text-muted bg-bg px-2.5 py-1 rounded-md border border-border shadow-2xs">
+                      {cat.items.length} {cat.items.length === 1 ? 'صلاحية' : cat.items.length === 2 ? 'صلاحيتان' : cat.items.length <= 10 ? 'صلاحيات' : 'صلاحية'}
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 gap-2.5">
@@ -552,12 +686,8 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
                         <div
                           key={item.key}
                           data-testid={`perm-row-${item.key}`}
-                          className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors gap-3 ${
-                            isImmutable
-                              ? 'bg-bg-subtle/50 border-border/40 opacity-60'
-                              : isActive
-                              ? 'bg-primary/5 border-primary/20'
-                              : 'bg-bg border-border hover:border-border-strong'
+                          className={`perm-item-row ${
+                            isImmutable ? 'immutable' : isActive ? 'active' : ''
                           }`}
                         >
                           <div className="space-y-1">
@@ -617,20 +747,173 @@ export const UserPermissionsModal: React.FC<UserPermissionsModalProps> = ({
               );
             })}
 
-            {/* Justification / Audit Reason Input */}
-            <div className="border border-border rounded-xl p-4 bg-bg space-y-2">
-              <label htmlFor="permission-override-reason" className="block text-xs font-bold text-text">
-                مبرر التخصيص الفردي (لسجلات الرقابة والحوكمة):
-              </label>
-              <textarea
-                id="permission-override-reason"
-                data-testid="permission-override-reason-input"
-                rows={2}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="أدخل سبب منح أو سحب الصلاحيات الاستثنائية لهذا الحساب (مثال: تكليف بإدارة حقائب دورات الصيانة)..."
-                className="w-full text-xs p-2.5 rounded-xl border border-border bg-bg-alt/50 text-text outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none"
-              />
+            {/* WhatsApp Communication Responsibilities Card */}
+            <div
+              className="wa-responsibilities-card space-y-4"
+              data-testid="wa-responsibilities-section"
+            >
+              {/* Section Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
+                <div className="flex items-center gap-2.5">
+                  <div className="wa-icon-badge" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4">
+                      <path
+                        fillRule="evenodd"
+                        clipRule="evenodd"
+                        d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.174L2.054 21.52a.75.75 0 00.926.926l4.346-1.384A9.96 9.96 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm-4.708 6.07c.22-.494.46-.504.675-.513.176-.008.377-.008.577-.008.2 0 .526.075.802.377.276.3 1.053 1.028 1.053 2.51 0 1.482 1.078 2.91 1.229 3.111.15.2 2.08 3.324 5.127 4.512.723.282 1.288.45 1.728.59.726.23 1.386.198 1.908.12.58-.087 1.779-.727 2.03-1.428.25-.702.25-1.304.175-1.429-.075-.125-.276-.2-.577-.35-.3-.151-1.78-.878-2.055-.978-.276-.1-.476-.15-.677.15-.2.301-.776.978-.952 1.179-.175.2-.35.226-.651.075-.3-.15-1.267-.467-2.414-1.49-.893-.796-1.496-1.78-1.671-2.08-.176-.301-.019-.464.132-.614.135-.135.301-.351.451-.527.15-.175.2-.3.301-.501.1-.2.05-.376-.025-.526-.076-.151-.677-1.631-.928-2.233z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-text flex items-center gap-2">
+                      <span>مسؤوليات التواصل عبر واتساب</span>
+                    </h3>
+                    <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
+                      حدد الأماكن التي يظهر فيها رقم واتساب المسجل لهذا المستخدم. هذه الإعدادات مستقلة عن صلاحيات الوصول إلى النظام.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-medium px-2.5 py-1 rounded-md bg-bg text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 shadow-2xs">
+                  قنوات الدعم والتواصل
+                </span>
+              </div>
+
+              {/* Registered User Phone Metadata Strip (Single Source of Truth) */}
+              <div className="wa-metadata-strip flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-text-muted font-medium">رقم الهاتف المسجل:</span>
+                    <span className="font-mono font-bold text-text text-sm" dir="ltr">
+                      {isPhoneValid ? formattedDisplayPhone : (user.phone || 'غير مسجل')}
+                    </span>
+                    {isPhoneValid ? (
+                      <Badge variant="success" size="sm">
+                        محمول مصري صالح
+                      </Badge>
+                    ) : (
+                      <Badge variant="warning" size="sm">
+                        غير صالح للتواصل
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-text-muted leading-relaxed">
+                    مصدر الرقم: الملف التعريفي للمستخدم (users.phone) — للتعديل يرجى تحديث بيانات المستخدم من جدول الحسابات.
+                  </p>
+                </div>
+              </div>
+
+              {/* Missing or Invalid Egyptian Mobile Warning */}
+              {!isPhoneValid && (
+                <div
+                  className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-900 dark:text-amber-200 leading-relaxed flex items-start gap-2.5"
+                  data-testid="wa-invalid-phone-warning"
+                >
+                  <Icon name="alert" size="md" className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-bold">تنبيه رقم الهاتف: </span>
+                    لا يمكن تفعيل مسؤوليات التواصل قبل تسجيل رقم محمول مصري صالح في بيانات المستخدم.
+                    <div className="text-[11px] text-amber-800/80 dark:text-amber-300/80 mt-1">
+                      يجب أن يبدأ الرقم بـ 010 أو 011 أو 012 أو 015 ويتكون من 11 رقماً محلياً، أو بالصيغة الدولية (+20). لتحديث الرقم، يرجى تعديل بيانات المستخدم من جدول الحسابات.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Suspended User Exclusion Notice */}
+              {isUserSuspended && (
+                <div
+                  className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-900 dark:text-amber-200 leading-relaxed flex items-start gap-2.5"
+                  data-testid="wa-suspended-user-warning"
+                >
+                  <Icon name="alert" size="md" className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-bold">تنبيه الحساب الموقوف: </span>
+                    الحساب موقوف إدارياً حالياً — تُحجب جهات الاتصال الخاصة بالحسابات الموقوفة تلقائياً من الظهور العام في قنوات واتساب طالما استمر الإيقاف.
+                  </div>
+                </div>
+              )}
+
+              {/* Three Independent Responsibility Controls */}
+              <div className="grid grid-cols-1 gap-2.5" data-testid="wa-scenarios-list">
+                {WHATSAPP_SCENARIOS.map((scenario) => {
+                  const isChecked = Boolean(whatsAppAssignments[scenario.key]);
+                  const isDisabled = !isPhoneValid;
+
+                  return (
+                    <div
+                      key={scenario.key}
+                      data-testid={`wa-scenario-row-${scenario.key}`}
+                      className={`wa-scenario-row ${isChecked ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Icon name={scenario.iconName} size="md" className="text-emerald-600 dark:text-emerald-400" />
+                          <span className="font-bold text-xs text-text">{scenario.labelAr}</span>
+                          <span className="font-mono text-[10px] text-text-muted">({scenario.key})</span>
+                        </div>
+                        <p className="text-[11px] text-text-muted leading-relaxed">{scenario.helperAr}</p>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                        <Badge variant={isDisabled ? 'neutral' : isChecked ? 'success' : 'neutral'} size="sm">
+                          {isDisabled ? 'معطلة' : isChecked ? 'مفعلة' : 'غير مفعلة'}
+                        </Badge>
+
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isChecked}
+                          aria-label={scenario.labelAr}
+                          disabled={isDisabled}
+                          onClick={() => handleToggleWhatsApp(scenario.key)}
+                          data-testid={`toggle-wa-${scenario.key}`}
+                          className={`wa-switch-btn ${isChecked ? 'on' : 'off'} ${isDisabled ? 'disabled' : ''}`}
+                        >
+                          <span aria-hidden="true" className="wa-switch-knob" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Individual Permission Justification / Audit Reason Card (Final Section) */}
+            <div className="perm-justification-card space-y-3.5">
+              <div className="perm-justification-header">
+                <div className="flex items-center gap-2.5">
+                  <div className="perm-justification-badge" aria-hidden="true">
+                    <Icon name="shield" size="md" />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="permission-override-reason"
+                      className="block text-sm font-bold text-text cursor-pointer"
+                    >
+                      مبرر التخصيص الفردي (لسجلات الرقابة والحوكمة)
+                    </label>
+                    <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
+                      سجل سبب منح أو سحب الصلاحيات الاستثنائية لهذا الحساب لضمان مسار التدقيق الرقابي.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-medium text-text-muted bg-bg px-2.5 py-1 rounded-md border border-border shadow-2xs">
+                  تدقيق إداري
+                </span>
+              </div>
+
+              <div>
+                <textarea
+                  id="permission-override-reason"
+                  data-testid="permission-override-reason-input"
+                  rows={2}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="أدخل سبب منح أو سحب الصلاحيات الاستثنائية لهذا الحساب (مثال: تكليف بإدارة حقائب دورات الصيانة)..."
+                  className="w-full text-xs p-3 rounded-lg border border-border bg-bg text-text placeholder:text-text-muted/70 outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none shadow-2xs"
+                />
+              </div>
             </div>
           </div>
         )}

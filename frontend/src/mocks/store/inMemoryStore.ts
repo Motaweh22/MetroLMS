@@ -147,9 +147,18 @@ import type {
 } from '@/core/performance/types';
 import {
   cleanPhoneNumber,
+  validateAndNormalizeEgyptianMobile,
+  formatEgyptianMobileDisplay,
   buildWhatsAppUrl,
   buildLecturerReminderMessage,
 } from '@/features/whatsapp/utils/whatsappUtils';
+import type {
+  WhatsAppSupportScenario,
+  UserWhatsAppSupportAssignment,
+  UserWhatsAppAssignmentItemDTO,
+  UserWhatsAppVisibilityConfigDTO,
+  ResolvedSupportContactDTO,
+} from '@/features/whatsapp/types';
 
 export class MockStoreError extends Error {
   status: number;
@@ -219,6 +228,8 @@ class InMemoryStore {
   private departmentTracks: Record<string, DepartmentPermissionDTO> = {};
   // Increment 11 Phase 5A: Comments & Discussion Moderation
   private courseComments: CourseComment[] = [];
+  // Increment 11 Phase 2: WhatsApp Contact Routing Scenario Assignments
+  private userWhatsAppAssignments: UserWhatsAppSupportAssignment[] = [];
 
   constructor() {
     this.reset();
@@ -318,6 +329,40 @@ class InMemoryStore {
     this.groupJoinRequests = [];
     this.materialFolders = [];
     this.materialFiles = [];
+
+    // Increment 11 Phase 2: Seed initial WhatsApp scenario assignments (Single source of truth: users.phone)
+    this.userWhatsAppAssignments = [
+      {
+        id: 'wa_assign_admin_reg',
+        user_id: 'usr_admin_001',
+        scenario: 'account_registration',
+        is_active: true,
+        order_index: 0,
+        assigned_by: 'usr_admin_001',
+        created_at: '2026-03-01T00:00:00.000Z',
+        updated_at: '2026-03-01T00:00:00.000Z',
+      },
+      {
+        id: 'wa_assign_admin_pwd',
+        user_id: 'usr_admin_001',
+        scenario: 'password_recovery',
+        is_active: true,
+        order_index: 0,
+        assigned_by: 'usr_admin_001',
+        created_at: '2026-03-01T00:00:00.000Z',
+        updated_at: '2026-03-01T00:00:00.000Z',
+      },
+      {
+        id: 'wa_assign_admin_tech',
+        user_id: 'usr_admin_001',
+        scenario: 'technical_support',
+        is_active: true,
+        order_index: 0,
+        assigned_by: 'usr_admin_001',
+        created_at: '2026-03-01T00:00:00.000Z',
+        updated_at: '2026-03-01T00:00:00.000Z',
+      },
+    ];
 
     // Initialize baseline groups with Increment 10 contracts and Cycle 1
     for (const group of this.groups) {
@@ -7701,6 +7746,196 @@ class InMemoryStore {
 
     return inherited;
   }
+
+  // ── Increment 11 Phase 2: WhatsApp Contact Routing & Visibility Engine ────
+
+  /**
+   * Retrieves WhatsApp visibility and scenario assignments for a specific user.
+   * Derives clean and display phone numbers strictly from users.phone at query time.
+   */
+  public getUserWhatsAppVisibility(userId: string): UserWhatsAppVisibilityConfigDTO {
+    const user = this.getManagedUserById(userId);
+    if (!user) {
+      throw new MockStoreError('المستخدم المطلوب غير موجود', 404);
+    }
+
+    const clean = validateAndNormalizeEgyptianMobile(user.phone);
+    const display = clean ? formatEgyptianMobileDisplay(clean) : undefined;
+
+    const allowedScenarios: WhatsAppSupportScenario[] = [
+      'account_registration',
+      'password_recovery',
+      'technical_support',
+    ];
+
+    const assignments: UserWhatsAppAssignmentItemDTO[] = allowedScenarios.map((scenario) => {
+      const match = this.userWhatsAppAssignments.find(
+        (a) => a.user_id.toLowerCase() === user.id.toLowerCase() && a.scenario === scenario
+      );
+      return {
+        scenario,
+        isActive: match ? match.is_active : false,
+        orderIndex: match?.order_index ?? 0,
+        assignedAt: match?.created_at,
+        assignedBy: match?.assigned_by,
+        updatedAt: match?.updated_at,
+      };
+    });
+
+    return {
+      userId: user.id,
+      userName: user.name,
+      userPhone: user.phone,
+      cleanPhone: clean,
+      displayPhone: display,
+      isPhoneValid: Boolean(clean),
+      isAccountActive: user.status !== 'suspended',
+      assignments,
+    };
+  }
+
+  /**
+   * Sets WhatsApp scenario assignments for a user.
+   * Invariant: No duplicate user/scenario pairs. No duplicate phone numbers stored in assignment records.
+   * Records an audit log entry for administrative oversight.
+   */
+  public setUserWhatsAppVisibility(
+    userId: string,
+    assignments: Array<{ scenario: WhatsAppSupportScenario; isActive: boolean; orderIndex?: number }>,
+    actorId: string = 'admin'
+  ): UserWhatsAppVisibilityConfigDTO {
+    const user = this.getManagedUserById(userId);
+    if (!user) {
+      throw new MockStoreError('المستخدم المطلوب غير موجود', 404);
+    }
+
+    if (!Array.isArray(assignments)) {
+      throw new MockStoreError('بيانات تعيينات مسؤولي واتساب غير صالحة', 400);
+    }
+
+    const allowedScenarios: WhatsAppSupportScenario[] = [
+      'account_registration',
+      'password_recovery',
+      'technical_support',
+    ];
+
+    const now = new Date().toISOString();
+
+    for (const item of assignments) {
+      if (!allowedScenarios.includes(item.scenario)) {
+        throw new MockStoreError(`سيناريو غير صالح: ${item.scenario}`, 400);
+      }
+
+      const existingIndex = this.userWhatsAppAssignments.findIndex(
+        (a) => a.user_id.toLowerCase() === user.id.toLowerCase() && a.scenario === item.scenario
+      );
+
+      if (existingIndex >= 0) {
+        this.userWhatsAppAssignments[existingIndex] = {
+          ...this.userWhatsAppAssignments[existingIndex],
+          is_active: Boolean(item.isActive),
+          order_index: item.orderIndex ?? this.userWhatsAppAssignments[existingIndex].order_index,
+          assigned_by: actorId,
+          updated_at: now,
+        };
+      } else {
+        this.userWhatsAppAssignments.push({
+          id: `wa_assign_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          user_id: user.id,
+          scenario: item.scenario,
+          is_active: Boolean(item.isActive),
+          order_index: item.orderIndex ?? 0,
+          assigned_by: actorId,
+          created_at: now,
+          updated_at: now,
+        });
+      }
+    }
+
+    // Record audit log for governance
+    this.recordAuditLog({
+      actorId,
+      action: 'users.configure_whatsapp_visibility',
+      actionLabelAr: 'تعديل مسؤوليات التواصل عبر واتساب',
+      severity: 'info',
+      outcome: 'success',
+      resourceType: 'user',
+      targetResourceId: user.id,
+      targetResourceName: user.name,
+      details: `تم تحديث مسؤوليات التواصل عبر واتساب للمستخدم ${user.name} (${user.id})`,
+      metadata: {
+        userId: user.id,
+        assignments,
+      },
+    });
+
+    return this.getUserWhatsAppVisibility(user.id);
+  }
+
+  /**
+   * Resolves eligible public WhatsApp support contacts for a specific scenario.
+   *
+   * Four Mandatory Eligibility Gates:
+   * 1. The user has an active assignment for the requested scenario.
+   * 2. The user's account is not suspended (user.status !== 'suspended').
+   * 3. The user's current users.phone passes strict Egyptian mobile validation and normalization.
+   * 4. User exists in the directory.
+   *
+   * Zero-Hardcoding: Returns an empty array if no contacts are eligible. Never silently falls back to 201000000000.
+   */
+  public resolvePublicSupportContacts(scenario: WhatsAppSupportScenario): ResolvedSupportContactDTO[] {
+    const allowedScenarios: WhatsAppSupportScenario[] = [
+      'account_registration',
+      'password_recovery',
+      'technical_support',
+    ];
+
+    if (!allowedScenarios.includes(scenario)) {
+      return [];
+    }
+
+    // 1. Filter active assignments for this scenario, sorted by order_index ASC, then created_at ASC
+    const activeAssignments = this.userWhatsAppAssignments
+      .filter((a) => a.scenario === scenario && a.is_active === true)
+      .sort((a, b) => {
+        if (a.order_index !== b.order_index) {
+          return a.order_index - b.order_index;
+        }
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      });
+
+    const eligible: ResolvedSupportContactDTO[] = [];
+
+    for (const assignment of activeAssignments) {
+      // Gate 1: Check user existence and non-suspension
+      const user = this.getManagedUserById(assignment.user_id);
+      if (!user || user.status === 'suspended') {
+        continue;
+      }
+
+      // Gate 2: Strict Egyptian mobile validation (single source of truth: user.phone)
+      const cleanNumber = validateAndNormalizeEgyptianMobile(user.phone);
+      if (!cleanNumber) {
+        continue;
+      }
+
+      // Minimal fields returned for public display - no sensitive or internal data
+      eligible.push({
+        id: user.id,
+        userId: user.id,
+        name: user.name,
+        jobTitle: user.jobTitle || 'مسؤول الدعم المعتمد',
+        department: user.department || 'إدارة التدريب',
+        number: cleanNumber, // Exactly 12 digits-only for wa.me URL
+        displayNumber: formatEgyptianMobileDisplay(cleanNumber),
+        avatarInitial: user.name ? user.name.trim().charAt(0) : 'م',
+        scenario,
+      });
+    }
+
+    return eligible;
+  }
 }
+
 
 export const inMemoryStore = new InMemoryStore();

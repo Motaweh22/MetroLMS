@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { LoginForm } from '@/features/auth/components/LoginForm';
-import { brandConfig } from '@/shared/config/brand';
 import { WhatsAppFloatingFab } from '@/features/whatsapp';
 import '@/features/auth/styles/login.css';
 
@@ -28,29 +27,7 @@ export const LoginPage: React.FC = () => {
       </Link>
 
       <div className="login-container">
-        <div className="login-card">
-          {/* Logos: Training Administration and Cairo Metro side-by-side */}
-          <div className="login-logos">
-            <img
-              src={brandConfig.logos.training}
-              alt="إدارة التدريب"
-              id="training-logo"
-            />
-            <img
-              src={brandConfig.logos.primary}
-              alt="مترو القاهرة"
-              id="metro-logo"
-            />
-          </div>
-
-          {/* Title and Subtitle matching exact legacy typography hierarchy */}
-          <h1 className="login-title">منصة التدريب الإلكتروني</h1>
-          <p className="login-subtitle">الشركة المصرية لإدارة وتشغيل مترو القاهرة</p>
-          <h2 className="sr-only">تسجيل الدخول للمنظومة</h2>
-
-          {/* Form component with authentication logic and demo accounts */}
-          <LoginForm onSuccess={() => navigate(targetPath, { replace: true })} />
-        </div>
+        <LoginForm onSuccess={() => navigate(targetPath, { replace: true })} />
       </div>
 
       {/* Unauthenticated Login Support via WhatsApp Floating Widget */}

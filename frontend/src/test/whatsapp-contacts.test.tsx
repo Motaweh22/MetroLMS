@@ -11,7 +11,6 @@ import {
   buildWhatsAppUrl,
   buildContextMessage,
   buildLecturerReminderMessage,
-  CONFIGURED_ADMIN_SUPPORT_CONTACTS,
   WhatsAppFloatingFab,
 } from '@/features/whatsapp';
 import type { WhatsAppContextConfig } from '@/features/whatsapp';
@@ -587,7 +586,7 @@ describe('Increment 11 — Phase 5D: Context-Aware WhatsApp Contact System & Leg
   // ── 5. Administrative Support Contact Sources & Login-Screen (Req 3 Audit)
   describe('5. Administrative Support Contact Sources & Missing Config Handling', () => {
     it('operates completely without an active authenticated session on login screen', async () => {
-      expect(authStorage.getSession()).toBeNull();
+      authStorage.clearSession();
 
       const config: WhatsAppContextConfig = {
         context: 'login',
@@ -604,35 +603,73 @@ describe('Increment 11 — Phase 5D: Context-Aware WhatsApp Contact System & Leg
         expect(screen.getByTestId('wa-fab-menu')).toHaveClass('show');
       });
 
-      // Renders verified legacy administrative support contact (201000000000 from index.html:241)
-      expect(screen.getByTestId('wa-contact-item-legacy_metro_support')).toBeInTheDocument();
-      expect(screen.getByTestId('wa-contact-item-legacy_metro_support')).toHaveTextContent(
-        'الدعم الفني والتدريب عبر واتساب'
+      // Renders dynamic technical support contact (usr_admin_001 -> 201010000001)
+      expect(screen.getByTestId('wa-contact-item-usr_admin_001')).toBeInTheDocument();
+      expect(screen.getByTestId('wa-contact-item-usr_admin_001')).toHaveTextContent(
+        'م. محمود عبد السلام'
       );
 
       // Click sends unauthenticated message without fabricated identity
-      fireEvent.click(screen.getByTestId('wa-contact-item-legacy_metro_support'));
+      fireEvent.click(screen.getByTestId('wa-contact-item-usr_admin_001'));
       expect(mockWindowOpen).toHaveBeenCalledTimes(1);
       const url = mockWindowOpen.mock.calls[0][0];
-      expect(url).toContain('https://wa.me/201000000000');
+      expect(url).toContain('https://wa.me/201010000001');
       expect(url).toContain(
         encodeURIComponent('السلام عليكم، أواجه مشكلة في تسجيل الدخول إلى منصة تدريب مترو الأنفاق وأحتاج إلى مساعدة.')
       );
       expect(url).not.toContain('رقم الموظف');
     });
 
-    it('renders login screen WhatsApp support trigger button inside LoginForm footer', async () => {
+    it('provides contextual WhatsApp contact actions in login account-creation and password-recovery dialogs', async () => {
       renderWithProviders(<LoginPage />);
 
-      const supportBtn = screen.getByTestId('login-whatsapp-support-btn');
-      expect(supportBtn).toBeInTheDocument();
-      expect(supportBtn).toHaveTextContent('الدعم عبر واتساب 💬');
+      // The obsolete standalone login WhatsApp support button has been removed from the login form footer
+      expect(screen.queryByTestId('login-whatsapp-support-btn')).not.toBeInTheDocument();
 
-      fireEvent.click(supportBtn);
+      // 1. Account Creation Dialog WhatsApp Action
+      const signupLink = screen.getByRole('button', { name: /إنشاء حساب جديد/i });
+      expect(signupLink).toBeInTheDocument();
+      fireEvent.click(signupLink);
 
       await waitFor(() => {
-        expect(screen.getByTestId('wa-fab-menu')).toHaveClass('show');
+        expect(screen.getByRole('heading', { name: 'إنشاء حساب جديد' })).toBeInTheDocument();
       });
+
+      const signupWhatsAppBtn = await screen.findByRole('link', { name: /تواصل مع الدعم/i });
+      expect(signupWhatsAppBtn).toBeInTheDocument();
+      expect(signupWhatsAppBtn).toHaveAttribute('id', 'signup-whatsapp-btn');
+      expect(signupWhatsAppBtn).toHaveAttribute('target', '_blank');
+      expect(signupWhatsAppBtn).toHaveAttribute('rel', 'noopener noreferrer');
+
+      const expectedSignupUrl = buildWhatsAppUrl(
+        '201010000001',
+        'مرحبًا، أرغب في إنشاء حساب جديد على منصة التدريب الإلكتروني. يرجى إرشادي إلى خطوات التسجيل.'
+      );
+      expect(signupWhatsAppBtn).toHaveAttribute('href', expectedSignupUrl);
+
+      // Close the signup modal
+      fireEvent.click(screen.getByRole('button', { name: 'إغلاق' }));
+
+      // 2. Password Recovery Dialog WhatsApp Action
+      const forgotLink = screen.getByRole('button', { name: /نسيت كلمة المرور؟/i });
+      expect(forgotLink).toBeInTheDocument();
+      fireEvent.click(forgotLink);
+
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'استعادة كلمة المرور' })).toBeInTheDocument();
+      });
+
+      const forgotWhatsAppBtn = await screen.findByRole('link', { name: /تواصل مع الدعم/i });
+      expect(forgotWhatsAppBtn).toBeInTheDocument();
+      expect(forgotWhatsAppBtn).toHaveAttribute('id', 'forgot-password-whatsapp-btn');
+      expect(forgotWhatsAppBtn).toHaveAttribute('target', '_blank');
+      expect(forgotWhatsAppBtn).toHaveAttribute('rel', 'noopener noreferrer');
+
+      const expectedForgotUrl = buildWhatsAppUrl(
+        '201010000001',
+        'مرحبًا، أحتاج إلى المساعدة في استعادة كلمة المرور لحسابي على منصة التدريب الإلكتروني.'
+      );
+      expect(forgotWhatsAppBtn).toHaveAttribute('href', expectedForgotUrl);
     });
 
     it('renders safe unavailable notice when configured support contacts are missing or unavailable', async () => {
@@ -641,9 +678,8 @@ describe('Increment 11 — Phase 5D: Context-Aware WhatsApp Contact System & Leg
         context: 'login',
       };
 
-      // Temporarily empty the configured contacts array
-      const originalContacts = [...CONFIGURED_ADMIN_SUPPORT_CONTACTS];
-      CONFIGURED_ADMIN_SUPPORT_CONTACTS.length = 0;
+      // Deactivate technical_support assignment in inMemoryStore
+      inMemoryStore.setUserWhatsAppVisibility('usr_admin_001', [{ scenario: 'technical_support', isActive: false }]);
 
       try {
         renderWithProviders(<WhatsAppFloatingFab config={config} />);
@@ -654,10 +690,10 @@ describe('Increment 11 — Phase 5D: Context-Aware WhatsApp Contact System & Leg
         });
 
         expect(screen.getByTestId('wa-unavailable-message')).toHaveTextContent('لا تتوفر أرقام دعم فني نشطة حالياً');
-        expect(screen.queryByTestId('wa-contact-item-legacy_metro_support')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('wa-contact-item-usr_admin_001')).not.toBeInTheDocument();
       } finally {
         // Restore
-        CONFIGURED_ADMIN_SUPPORT_CONTACTS.push(...originalContacts);
+        inMemoryStore.setUserWhatsAppVisibility('usr_admin_001', [{ scenario: 'technical_support', isActive: true }]);
       }
     });
   });
@@ -687,13 +723,13 @@ describe('Increment 11 — Phase 5D: Context-Aware WhatsApp Contact System & Leg
       fireEvent.click(screen.getByTestId('wa-fab-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('wa-contact-item-legacy_metro_support')).toBeInTheDocument();
+        expect(screen.getByTestId('wa-contact-item-usr_admin_001')).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByTestId('wa-contact-item-legacy_metro_support'));
+      fireEvent.click(screen.getByTestId('wa-contact-item-usr_admin_001'));
       expect(mockWindowOpen).toHaveBeenCalledTimes(1);
       const url = mockWindowOpen.mock.calls[0][0];
-      expect(url).toContain('https://wa.me/201000000000');
+      expect(url).toContain('https://wa.me/201010000001');
       expect(url).toContain(encodeURIComponent('سارة عبد الله'));
       expect(url).toContain(encodeURIComponent('USR004'));
       expect(url).toContain(encodeURIComponent('أحتاج إلى مساعدة بالمنصة'));

@@ -1,0 +1,301 @@
+/* MetroLMS — Individual User Permissions & WhatsApp Responsibilities Styles */
+
+/* ── Permission Category Container Card ── */
+.perm-category-card {
+  border: 1px solid var(--color-border, #e5e7eb);
+  background-color: var(--color-surface, #f5f7fa);
+  border-radius: 0.75rem;
+  padding: 1.125rem;
+  transition: border-color 0.2s ease-in-out;
+}
+
+:is(.dark) .perm-category-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(30, 41, 59, 0.5);
+}
+
+.perm-category-card:hover {
+  border-color: rgba(91, 191, 222, 0.4);
+}
+
+/* ── Category Header & Icon Badge ── */
+.perm-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+:is(.dark) .perm-category-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.perm-icon-badge {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background-color: rgba(91, 191, 222, 0.12);
+  color: #1a3f6f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(91, 191, 222, 0.25);
+}
+
+:is(.dark) .perm-icon-badge {
+  background-color: rgba(91, 191, 222, 0.2);
+  color: #5bbfde;
+  border-color: rgba(91, 191, 222, 0.35);
+}
+
+/* ── Individual Permission Row (Nested inside Category Card) ── */
+.perm-item-row {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border, #e5e7eb);
+  background-color: var(--color-bg, #ffffff);
+  transition: all 0.2s ease-in-out;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .perm-item-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+}
+
+.perm-item-row.active {
+  background-color: rgba(91, 191, 222, 0.06);
+  border-color: rgba(91, 191, 222, 0.35);
+}
+
+:is(.dark) .perm-item-row.active {
+  background-color: rgba(91, 191, 222, 0.12);
+  border-color: rgba(91, 191, 222, 0.35);
+}
+
+.perm-item-row.immutable {
+  background-color: rgba(243, 244, 246, 0.6);
+  border-color: rgba(229, 231, 235, 0.7);
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+:is(.dark) .perm-item-row.immutable {
+  background-color: rgba(30, 41, 59, 0.25);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.perm-item-row:not(.immutable):not(.active):hover {
+  border-color: rgba(91, 191, 222, 0.4);
+}
+
+/* ── WhatsApp Responsibilities Container Card ── */
+.wa-responsibilities-card {
+  border: 1px solid rgba(16, 185, 129, 0.32);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%), var(--color-surface, #f5f7fa);
+  border-radius: 0.75rem;
+  padding: 1.125rem;
+  transition: all 0.2s ease-in-out;
+}
+
+:is(.dark) .wa-responsibilities-card {
+  border-color: rgba(16, 185, 129, 0.25);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.03) 100%), rgba(30, 41, 59, 0.5);
+}
+
+.wa-responsibilities-card:hover {
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+/* Icon Badge */
+.wa-icon-badge {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+:is(.dark) .wa-icon-badge {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Metadata Strip */
+.wa-metadata-strip {
+  background-color: var(--color-bg, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+:is(.dark) .wa-metadata-strip {
+  background-color: rgba(30, 41, 59, 0.6);
+  border-color: var(--color-border, #334155);
+}
+
+/* Scenario Row Item */
+.wa-scenario-row {
+  display: flex;
+  flex-direction: column;
+  padding: 0.875rem 1rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-border, #e5e7eb);
+  background-color: var(--color-bg, #ffffff);
+  transition: all 0.2s ease-in-out;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .wa-scenario-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+}
+
+.wa-scenario-row.active {
+  border-color: rgba(16, 185, 129, 0.35);
+  background-color: rgba(16, 185, 129, 0.04);
+}
+
+:is(.dark) .wa-scenario-row.active {
+  border-color: rgba(16, 185, 129, 0.3);
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.wa-scenario-row.disabled {
+  opacity: 0.6;
+  background-color: rgba(243, 244, 246, 0.5);
+  cursor: not-allowed;
+}
+
+:is(.dark) .wa-scenario-row.disabled {
+  background-color: rgba(30, 41, 59, 0.3);
+}
+
+/* Emerald Switch Toggle */
+.wa-switch-btn {
+  position: relative;
+  display: inline-flex;
+  height: 1.5rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  transition: background-color 0.2s ease-in-out;
+  outline: none;
+}
+
+.wa-switch-btn:focus-visible {
+  ring: 2px solid #10b981;
+  ring-offset: 2px;
+}
+
+.wa-switch-btn.on {
+  background-color: #059669;
+}
+
+.wa-switch-btn.off {
+  background-color: var(--color-border, #d1d5db);
+}
+
+:is(.dark) .wa-switch-btn.off {
+  background-color: #475569;
+}
+
+.wa-switch-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.wa-switch-knob {
+  pointer-events: none;
+  display: inline-block;
+  height: 1.25rem;
+  width: 1.25rem;
+  border-radius: 9999px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease-in-out;
+}
+
+/* In RTL: Translate -1.25rem (20px) to slide left */
+.wa-switch-btn.on .wa-switch-knob {
+  transform: translateX(-1.25rem);
+}
+
+.wa-switch-btn.off .wa-switch-knob {
+  transform: translateX(0);
+}
+
+/* ── Individual Permission Justification / Audit Reason Card ── */
+.perm-justification-card {
+  border: 1px solid var(--color-border, #e5e7eb);
+  background-color: var(--color-surface, #f5f7fa);
+  border-radius: 0.75rem;
+  padding: 1.125rem;
+  transition: border-color 0.2s ease-in-out;
+}
+
+:is(.dark) .perm-justification-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(30, 41, 59, 0.5);
+}
+
+.perm-justification-card:hover {
+  border-color: rgba(91, 191, 222, 0.4);
+}
+
+.perm-justification-card:focus-within {
+  border-color: rgba(91, 191, 222, 0.6);
+}
+
+.perm-justification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+:is(.dark) .perm-justification-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.perm-justification-badge {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background-color: rgba(26, 63, 111, 0.1);
+  color: #1a3f6f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(26, 63, 111, 0.2);
+}
+
+:is(.dark) .perm-justification-badge {
+  background-color: rgba(91, 191, 222, 0.2);
+  color: #5bbfde;
+  border-color: rgba(91, 191, 222, 0.35);
+}

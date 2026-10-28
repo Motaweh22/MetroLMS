@@ -12,11 +12,16 @@ import type {
   AuditEventSeverity,
   AuditFilterParams,
 } from '@/core/permissions/types';
+import type {
+  WhatsAppSupportScenario,
+  SaveUserWhatsAppVisibilityPayload,
+} from '@/features/whatsapp/types';
 
 /**
  * Centrally Managed MSW Handlers for Permissions Matrix & Governance (Increment 11 Phase 4)
  */
 export const permissionsHandlers = [
+
   // GET /api/admin/permissions/roles - All role baseline permissions
   http.get('/api/admin/permissions/roles', async ({ request }) => {
     const user = resolveAuthenticatedUser(request);
@@ -160,6 +165,122 @@ export const permissionsHandlers = [
     const userId = params.userId as string;
     inMemoryStore.deleteUserPermissionOverride(userId);
     return HttpResponse.json({ success: true, message: 'تم حذف التخصيص بنجاح' }, { status: 200 });
+  }),
+
+  // ── Increment 11 Phase 2: WhatsApp Contact Routing & Visibility Endpoints ──
+
+  // GET /api/admin/users/:userId/whatsapp-visibility - Read user WhatsApp scenario assignments
+  http.get('/api/admin/users/:userId/whatsapp-visibility', async ({ request, params }) => {
+    const user = resolveAuthenticatedUser(request);
+    if (!user) {
+      return HttpResponse.json(
+        { message: 'غير مصرح: يرجى تسجيل الدخول أولاً' },
+        { status: 401 }
+      );
+    }
+
+    const hasAccess =
+      user.role === 'admin' ||
+      inMemoryStore.hasUserPermission(user.id, 'permissions.view') ||
+      inMemoryStore.hasUserPermission(user.id, 'permissions.configure_users');
+
+    if (!hasAccess) {
+      return HttpResponse.json(
+        { message: 'غير مصرح: هذه العملية تتطلب صلاحية استعراض إعدادات المستخدمين' },
+        { status: 403 }
+      );
+    }
+
+    const userId = params.userId as string;
+    try {
+      const config = inMemoryStore.getUserWhatsAppVisibility(userId);
+      return HttpResponse.json(config, { status: 200 });
+    } catch (err: unknown) {
+      if (err instanceof MockStoreError) {
+        return HttpResponse.json({ message: err.message }, { status: err.status });
+      }
+      return HttpResponse.json(
+        { message: 'تعذر استرجاع إعدادات مسؤوليات واتساب للمستخدم' },
+        { status: 400 }
+      );
+    }
+  }),
+
+  // PUT /api/admin/users/:userId/whatsapp-visibility - Update user WhatsApp scenario assignments
+  http.put('/api/admin/users/:userId/whatsapp-visibility', async ({ request, params }) => {
+    const user = resolveAuthenticatedUser(request);
+    if (!user) {
+      return HttpResponse.json(
+        { message: 'غير مصرح: يرجى تسجيل الدخول أولاً' },
+        { status: 401 }
+      );
+    }
+
+    const hasAccess =
+      user.role === 'admin' ||
+      inMemoryStore.hasUserPermission(user.id, 'permissions.manage') ||
+      inMemoryStore.hasUserPermission(user.id, 'permissions.configure_users');
+
+    if (!hasAccess) {
+      return HttpResponse.json(
+        { message: 'غير مصرح: هذه العملية تتطلب صلاحية إدارة مسؤوليات المستخدمين' },
+        { status: 403 }
+      );
+    }
+
+    const userId = params.userId as string;
+    try {
+      const body = (await request.json()) as SaveUserWhatsAppVisibilityPayload;
+      const updated = inMemoryStore.setUserWhatsAppVisibility(userId, body.assignments, user.id);
+      return HttpResponse.json(updated, { status: 200 });
+    } catch (err: unknown) {
+      if (err instanceof MockStoreError) {
+        return HttpResponse.json({ message: err.message }, { status: err.status });
+      }
+      return HttpResponse.json(
+        { message: 'فشلت معالجة طلب تحديث مسؤوليات واتساب للمستخدم' },
+        { status: 400 }
+      );
+    }
+  }),
+
+  // GET /api/public/support-contacts - Public Contact Resolver
+  http.get('/api/public/support-contacts', async ({ request }) => {
+    const url = new URL(request.url);
+    const scenario = url.searchParams.get('scenario') as WhatsAppSupportScenario;
+
+    const allowedScenarios: WhatsAppSupportScenario[] = [
+      'account_registration',
+      'password_recovery',
+      'technical_support',
+    ];
+
+    if (!scenario || !allowedScenarios.includes(scenario)) {
+      return HttpResponse.json(
+        { message: 'سيناريو الدعم المطلوب غير صالح' },
+        { status: 400 }
+      );
+    }
+
+    try {
+      const contacts = inMemoryStore.resolvePublicSupportContacts(scenario);
+      return HttpResponse.json(
+        {
+          scenario,
+          count: contacts.length,
+          contacts,
+        },
+        { status: 200 }
+      );
+    } catch (err: unknown) {
+      if (err instanceof MockStoreError) {
+        return HttpResponse.json({ message: err.message }, { status: err.status });
+      }
+      return HttpResponse.json(
+        { message: 'تعذر استرجاع جهات الدعم الفني للمنصة' },
+        { status: 500 }
+      );
+    }
   }),
 
   // GET /api/admin/permissions/effective/:userId - Get computed effective permissions for a user
