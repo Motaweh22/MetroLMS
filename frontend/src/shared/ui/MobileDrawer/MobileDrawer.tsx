@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 import { SidebarItem } from '@/shared/ui/Sidebar/SidebarItem';
 import { NAVIGATION_SECTIONS, type NavItem, isNavItemVisibleForRole } from '@/shared/config/navigation';
@@ -75,7 +74,7 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
       >
         {/* Drawer Header */}
         <div className="h-16 flex items-center justify-between border-b border-border px-4 bg-surface">
-          <BrandLogo variant="horizontal" size="sm" showSubtitle={false} />
+          <span className="text-sm font-bold text-text-heading">قائمة التنقل</span>
           <Button
             variant="ghost"
             size="sm"
