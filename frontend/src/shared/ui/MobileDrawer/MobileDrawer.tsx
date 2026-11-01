@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/shared/ui/Button';
 import { SidebarItem } from '@/shared/ui/Sidebar/SidebarItem';
-import { NAVIGATION_SECTIONS, type NavItem } from '@/shared/config/navigation';
+import { NAVIGATION_SECTIONS, type NavItem, isNavItemVisibleForRole } from '@/shared/config/navigation';
 import { useLockBodyScroll } from '@/shared/hooks/useLockBodyScroll';
 
 import type { NavbarUser } from '@/shared/ui/Navbar';
@@ -52,6 +52,8 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
 
   if (!isOpen) return null;
 
+  const isItemVisible = (item: NavItem) => isNavItemVisibleForRole(item, user?.role);
+
   return (
     <div
       role="dialog"
@@ -86,23 +88,28 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
 
         {/* Navigation Sections */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-          {NAVIGATION_SECTIONS.map((section) => (
-            <div key={section.id} className="space-y-1">
-              <h3 className="px-3 text-xs font-bold text-text-muted/80 uppercase tracking-wider mb-2">
-                {section.titleAr}
-              </h3>
-              <div className="space-y-1">
-                {section.items.map((item) => (
-                  <SidebarItem
-                    key={item.id}
-                    item={item}
-                    isCollapsed={false}
-                    onItemClick={handleItemClick}
-                  />
-                ))}
+          {NAVIGATION_SECTIONS.map((section) => {
+            const visibleItems = section.items.filter(isItemVisible);
+            if (visibleItems.length === 0) return null;
+
+            return (
+              <div key={section.id} className="space-y-1">
+                <h3 className="px-3 text-xs font-bold text-text-muted/80 uppercase tracking-wider mb-2">
+                  {section.titleAr}
+                </h3>
+                <div className="space-y-1">
+                  {visibleItems.map((item) => (
+                    <SidebarItem
+                      key={item.id}
+                      item={item}
+                      isCollapsed={false}
+                      onItemClick={handleItemClick}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* Drawer Footer with Persona & System Info */}

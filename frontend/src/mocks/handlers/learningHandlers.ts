@@ -1,44 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { inMemoryStore, MockStoreError } from '../store/inMemoryStore';
-import { SYNTHETIC_DEMO_ACCOUNTS } from '../fixtures/mockUsers';
-import type { User } from '@/core/auth/types';
+import { resolveAuthenticatedUser } from './resolveUser';
 import type { RecordActivityPayload } from '@/features/learning-player/types';
-
-/**
- * Helper to authenticate request from Authorization Bearer token header
- */
-function resolveAuthenticatedUser(request: Request): User | null {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.replace('Bearer ', '').trim();
-  if (!token) return null;
-
-  // Match token to synthetic accounts
-  const matched = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find((acc) =>
-    token.includes(acc.user.id)
-  );
-
-  if (matched) {
-    return matched.user;
-  }
-
-  // Fallback for mock tokens generated during login
-  if (token.startsWith('mock_jwt_')) {
-    if (token.includes('usr_admin')) return SYNTHETIC_DEMO_ACCOUNTS.admin.user;
-    if (token.includes('usr_lect')) return SYNTHETIC_DEMO_ACCOUNTS.lecturer.user;
-    return SYNTHETIC_DEMO_ACCOUNTS.trainee.user;
-  }
-
-  // Fallback for valid test session tokens
-  if (token === 'valid-test-token') {
-    return SYNTHETIC_DEMO_ACCOUNTS.trainee.user;
-  }
-
-  return null;
-}
 
 export const learningHandlers = [
   // GET /api/courses/:courseId/progress

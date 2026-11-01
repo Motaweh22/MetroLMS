@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { TrainingGroup, GroupMember, GroupJoinRequest } from '@/core/groups/types';
+import type { TrainingGroup, GroupMember, GroupJoinRequest, GroupEnrollmentPolicy } from '@/core/groups/types';
 import { groupsApi } from '../services/groupsApi';
 import { GroupQRModal } from './GroupQRModal';
 import { DirectAssignModal } from './DirectAssignModal';
@@ -15,11 +15,29 @@ import { formatArabicDateTime } from '../utils/dateUtils';
 export interface GroupMembersTabProps {
   group: TrainingGroup;
   onGroupUpdated: (group: TrainingGroup) => void;
+  enrollmentPolicy?: GroupEnrollmentPolicy;
+  onEnrollmentPolicyChange?: (policy: GroupEnrollmentPolicy) => void;
+  maxTrainees?: string;
+  onMaxTraineesChange?: (capacity: string) => void;
+  enrollmentExpiresAt?: string;
+  onEnrollmentExpiresAtChange?: (expiry: string) => void;
+  isEnrollmentOpen?: boolean;
+  onIsEnrollmentOpenChange?: (open: boolean) => void;
+  policyErrors?: Record<string, string>;
 }
 
 export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
   group,
   onGroupUpdated,
+  enrollmentPolicy,
+  onEnrollmentPolicyChange,
+  maxTrainees,
+  onMaxTraineesChange,
+  enrollmentExpiresAt,
+  onEnrollmentExpiresAtChange,
+  isEnrollmentOpen,
+  onIsEnrollmentOpenChange,
+  policyErrors,
 }) => {
   const toast = useToast();
 
@@ -200,17 +218,17 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
               <h3 className="text-base font-bold text-text">إدارة متدربي المجموعة ورمز الانضمام</h3>
               <Badge
                 variant={
-                  group.enrollmentPolicy === 'open'
+                  (group.enrollmentPolicy || enrollmentPolicy) === 'open'
                     ? 'success'
-                    : group.enrollmentPolicy === 'approval_required'
+                    : (group.enrollmentPolicy || enrollmentPolicy) === 'approval_required'
                     ? 'warning'
                     : 'neutral'
                 }
                 size="sm"
               >
-                {group.enrollmentPolicy === 'open'
+                {(group.enrollmentPolicy || enrollmentPolicy) === 'open'
                   ? 'انضمام تلقائي'
-                  : group.enrollmentPolicy === 'approval_required'
+                  : (group.enrollmentPolicy || enrollmentPolicy) === 'approval_required'
                   ? 'موافقة مطلوبة'
                   : 'الانضمام مغلق'}
               </Badge>
@@ -231,7 +249,7 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
               data-testid="open-qr-modal-btn"
             >
               <Icon name="qrCode" size="sm" className="text-primary" />
-              <span>إدارة رمز QR والرابط</span>
+              <span>إدارة رمز QR والروابط</span>
             </Button>
 
             {/* Direct Member Addition Button */}
@@ -710,6 +728,15 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
           onGroupUpdated={(updated) => {
             onGroupUpdated(updated);
           }}
+          enrollmentPolicy={enrollmentPolicy}
+          onEnrollmentPolicyChange={onEnrollmentPolicyChange}
+          maxTrainees={maxTrainees}
+          onMaxTraineesChange={onMaxTraineesChange}
+          enrollmentExpiresAt={enrollmentExpiresAt}
+          onEnrollmentExpiresAtChange={onEnrollmentExpiresAtChange}
+          isEnrollmentOpen={isEnrollmentOpen}
+          onIsEnrollmentOpenChange={onIsEnrollmentOpenChange}
+          policyErrors={policyErrors}
         />
       )}
 
@@ -722,10 +749,16 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
           currentMemberIds={currentMemberIds}
           onMembersAdded={async () => {
             await fetchMembers();
-            onGroupUpdated({
-              ...group,
-              traineeIds: (group.traineeIds || []).concat([]),
-            });
+            try {
+              const freshGroup = await groupsApi.getAdminGroupById(group.id);
+              onGroupUpdated(freshGroup);
+            } catch {
+              const updatedMembers = await groupsApi.getGroupMembers(group.id).catch(() => members);
+              onGroupUpdated({
+                ...group,
+                traineeIds: updatedMembers.map((m) => m.userId),
+              });
+            }
           }}
         />
       )}

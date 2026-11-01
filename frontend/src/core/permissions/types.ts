@@ -127,6 +127,14 @@ export interface EvaluationContext {
   isGroupSupervisor?: boolean;
   /** Whether the actor is designated as assistant lecturer for the target group */
   isGroupAssistant?: boolean;
+  /** Whether the capability context is delegation management */
+  isDelegation?: boolean;
+  /** Whether the capability context is transcript view */
+  isTranscript?: boolean;
+  /** Subsystem identifier for disambiguating management operations */
+  subsystem?: 'permissions' | 'delegation';
+  /** Scope identifier for disambiguating read operations */
+  scope?: 'directory' | 'transcript';
 }
 
 /**
@@ -162,6 +170,24 @@ export interface EffectiveUserPermissions {
   role: UserRole;
   hasDelegatedAuthority: boolean;
   override: UserPermissionOverride | null;
+}
+
+/**
+ * Exact Operational Delegation Grant (MFR-38, INV-R4, Legend A)
+ */
+export interface DelegationGrant {
+  id?: string;
+  userId: string;
+  capabilities: SystemCapability[];
+  active: boolean;
+  expiresAt?: string | number | null;
+  resourceScope?: {
+    groupId?: string;
+    department?: string;
+    resourceType?: string;
+  };
+  grantedBy?: string;
+  grantedAt?: string;
 }
 
 /**
@@ -351,6 +377,8 @@ export interface UpdateDepartmentTracksResponseDTO {
  * Full Canonical Arabic Display Labels for Roles
  */
 export const ROLE_CANONICAL_LABELS_AR: Record<UserRole, string> = {
+  developer: 'المطور',
+  super_admin: 'المسؤول الأعلى',
   admin: 'مدير النظام',
   assistant_admin: 'مدير النظام المساعد',
   lecturer: 'المحاضر',
@@ -463,6 +491,8 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
+  developer: PERMISSION_DEFINITIONS.map((p) => p.key),
+  super_admin: PERMISSION_DEFINITIONS.map((p) => p.key),
   admin: PERMISSION_DEFINITIONS.map((p) => p.key),
   assistant_admin: [
     'users.view_directory',

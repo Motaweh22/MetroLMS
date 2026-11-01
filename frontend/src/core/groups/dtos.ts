@@ -7,6 +7,7 @@ import type {
   GroupRenewalSchedule,
   TrainingGroup,
   GroupResource,
+  GroupInstructorDTO,
 } from './types';
 
 export interface CreateGroupRequestDTO {
@@ -25,6 +26,8 @@ export interface CreateGroupRequestDTO {
     customDeadlineDateTime?: string | null;
     customPostDeadlinePolicy?: PostDeadlinePolicy | null;
   }[];
+  primaryInstructorId?: string | null;
+  assistantLecturerIds?: string[];
   supervisorIds?: string[];
   initialTraineeIds?: string[];
   maxTrainees?: number | null;
@@ -42,6 +45,8 @@ export interface UpdateGroupRequestDTO {
   startDateTime?: string;
   deadlineDateTime?: string;
   postDeadlinePolicy?: PostDeadlinePolicy;
+  primaryInstructorId?: string | null;
+  assistantLecturerIds?: string[];
   supervisorIds?: string[];
   isEnrollmentOpen?: boolean;
   enrollmentExpiresAt?: string | null;
@@ -61,6 +66,7 @@ export interface AssignCoursesRequestDTO {
 }
 
 export interface AssignCycleCoursesDTO {
+  postDeadlinePolicy?: PostDeadlinePolicy;
   courses: {
     courseId: string;
     courseRole: CourseRole;
@@ -131,6 +137,9 @@ export interface GroupSummaryDTO {
   currentCycleNumber?: number;
   currentCycleTitle?: string;
   pendingJoinRequestsCount?: number;
+  primaryInstructorId?: string | null;
+  assistantLecturerIds?: string[];
+  instructors?: GroupInstructorDTO[];
   createdAt: string;
 }
 
@@ -205,4 +214,20 @@ export interface CandidateTraineeDTO {
   department?: string;
   jobTitle?: string;
 }
+
+export interface CandidateLecturerDTO {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  jobTitle: string;
+  department: string;
+  phone?: string;
+  status: 'active' | 'pending' | 'suspended';
+}
+
+export interface UpdateGroupAssistantsRequestDTO {
+  assistantLecturerIds: string[];
+}
+
 

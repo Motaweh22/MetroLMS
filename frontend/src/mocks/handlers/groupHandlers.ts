@@ -16,22 +16,45 @@ import type {
   ReplaceMaterialFileRequestDTO,
   ToggleGroupEnrollmentDTO,
   AddGroupMembersRequestDTO,
+  UpdateGroupAssistantsRequestDTO,
 } from '@/core/groups/dtos';
 
 /**
  * Authorization Helper Functions
+ *
+ * Strict Separation of Administrative Read Visibility (Rule A / MFR-06)
+ * and Operational Group Mutation Authorization.
  */
 
+function canReadAdministrativeGroups(user: User): boolean {
+  return (
+    user.role === 'developer' ||
+    user.role === 'super_admin' ||
+    user.role === 'admin' ||
+    user.role === 'assistant_admin'
+  );
+}
+
+function canReadGroupData(user: User, group: TrainingGroup): boolean {
+  if (canReadAdministrativeGroups(user)) return true;
+  if (user.role === 'lecturer') {
+    return inMemoryStore.isUserAssignedGroupSupervisor(group, user.id);
+  }
+  return false;
+}
+
+function isOperationalGroupAdmin(user: User): boolean {
+  return user.role === 'developer' || user.role === 'super_admin' || user.role === 'admin';
+}
+
 function isGroupAdmin(user: User): boolean {
-  return user.role === 'admin';
+  return isOperationalGroupAdmin(user);
 }
 
 function isAssignedSupervisor(user: User, group: TrainingGroup): boolean {
-  if (user.role === 'admin') return true;
+  if (isOperationalGroupAdmin(user)) return true;
   if (user.role === 'lecturer') {
-    return (group.supervisorIds || []).some(
-      (sid) => sid.toLowerCase() === user.id.toLowerCase()
-    );
+    return inMemoryStore.isUserAssignedGroupSupervisor(group, user.id);
   }
   return false;
 }
@@ -43,7 +66,7 @@ function isGroupMember(user: User, group: TrainingGroup): boolean {
 }
 
 function isSupervisorForTrainee(user: User, traineeId: string): boolean {
-  if (user.role === 'admin') return true;
+  if (canReadAdministrativeGroups(user)) return true;
   if (user.role === 'lecturer') {
     const groups = inMemoryStore.getGroups();
     return groups.some(
@@ -193,6 +216,50 @@ export const groupHandlers = [
   // ── 2. Admin & Supervisor Training Groups Management ─────────────────
 
   // List all training groups with aggregate metrics (Admin: all, Supervisor: assigned only)
+  http.get('/api/admin/lecturers', ({ request }) => {
+    const user = resolveAuthenticatedUser(request);
+    if (!user) {
+      return HttpResponse.json(
+        { message: 'يجب تسجيل الدخول لعرض قائمة المحاضرين' },
+        { status: 401 }
+      );
+    }
+    if (user.role === 'user') {
+      return HttpResponse.json(
+        { message: 'غير مصرح لك باستعراض قائمة المحاضرين' },
+        { status: 403 }
+      );
+    }
+    return HttpResponse.json(inMemoryStore.getCandidateLecturers(), { status: 200 });
+  }),
+
+  http.put('/api/admin/groups/:groupId/assistants', async ({ request, params }) => {
+    const user = resolveAuthenticatedUser(request);
+    if (!user) {
+      return HttpResponse.json(
+        { message: 'يجب تسجيل الدخول لإدارة المحاضرين المساعدين' },
+        { status: 401 }
+      );
+    }
+    const groupId = params.groupId as string;
+    try {
+      const body = (await request.json()) as UpdateGroupAssistantsRequestDTO;
+      if (!Array.isArray(body.assistantLecturerIds)) {
+        return HttpResponse.json(
+          { message: 'قائمة المحاضرين المساعدين غير صالحة' },
+          { status: 400 }
+        );
+      }
+      const updated = inMemoryStore.updateGroupAssistants(
+        groupId,
+        body.assistantLecturerIds,
+        user
+      );
+      return HttpResponse.json(updated, { status: 200 });
+    } catch (err) {
+      return handleStoreError(err);
+    }
+  }),
   http.get('/api/admin/groups', ({ request }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
@@ -211,14 +278,12 @@ export const groupHandlers = [
 
     const allGroups = inMemoryStore.getGroups();
     const accessibleGroups =
-      user.role === 'admin'
+      canReadAdministrativeGroups(user)
         ? allGroups
-        : allGroups.filter((g) =>
-            (g.supervisorIds || []).some((sid) => sid.toLowerCase() === user.id.toLowerCase())
-          );
+        : allGroups.filter((g) => inMemoryStore.isUserAssignedGroupSupervisor(g, user.id));
 
     const summaries = accessibleGroups
-      .map((g) => inMemoryStore.getGroupSummary(g.id))
+      .map((g) => inMemoryStore.getGroupSummary(g.id, user.role))
       .filter((s): s is NonNullable<typeof s> => s !== null);
 
     return HttpResponse.json(summaries, { status: 200 });
@@ -319,6 +384,24 @@ export const groupHandlers = [
     }
   }),
 
+  // Check and process auto renewal for all due groups (Batch operation)
+  http.post('/api/admin/groups/check-all-due-renewals', async ({ request }) => {
+    const user = resolveAuthenticatedUser(request);
+    if (!user) {
+      return HttpResponse.json(
+        { message: 'يجب تسجيل الدخول لفحص وتحديث دورات التجديد الآلي' },
+        { status: 401 }
+      );
+    }
+
+    try {
+      const summary = inMemoryStore.checkAndProcessAllDueRenewals();
+      return HttpResponse.json(summary, { status: 200 });
+    } catch (err) {
+      return handleStoreError(err);
+    }
+  }),
+
   // Check and process auto renewal for a group (Admin or Authorized Supervisor)
   http.post('/api/admin/groups/:groupId/check-auto-renewal', async ({ request, params }) => {
     const user = resolveAuthenticatedUser(request);
@@ -358,7 +441,7 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group) && !isGroupMember(user, group)) {
+    if (!canReadGroupData(user, group) && !isGroupMember(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك بالاطلاع على دورات تجديد هذه المجموعة' },
         { status: 403 }
@@ -393,7 +476,7 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group) && !isGroupMember(user, group)) {
+    if (!canReadGroupData(user, group) && !isGroupMember(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك بالاطلاع على دورة التجديد هذه' },
         { status: 403 }
@@ -480,7 +563,7 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group)) {
+    if (!canReadGroupData(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك باستعراض أعضاء هذه المجموعة التدريبية' },
         { status: 403 }
@@ -568,7 +651,7 @@ export const groupHandlers = [
       );
     }
 
-    if (user.role !== 'admin' && user.role !== 'lecturer') {
+    if (!canReadAdministrativeGroups(user) && user.role !== 'lecturer') {
       return HttpResponse.json(
         { message: 'غير مصرح لك باستعراض قائمة المتدربين المرشحين' },
         { status: 403 }
@@ -696,7 +779,7 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group)) {
+    if (!canReadGroupData(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك باستعراض طلبات الانضمام لهذه المجموعة' },
         { status: 403 }
@@ -705,7 +788,7 @@ export const groupHandlers = [
 
     const url = new URL(request.url);
     const status = url.searchParams.get('status') as 'pending' | 'approved' | 'rejected' | null;
-    const requests = inMemoryStore.getGroupJoinRequests(groupId, status || undefined);
+    const requests = inMemoryStore.getGroupJoinRequests(groupId, status || undefined, user.role);
     return HttpResponse.json(requests, { status: 200 });
   }),
 
@@ -780,7 +863,7 @@ export const groupHandlers = [
     }
 
     // Strict scoped access check
-    if (!isAssignedSupervisor(user, group) && !isGroupMember(user, group)) {
+    if (!canReadGroupData(user, group) && !isGroupMember(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك بالوصول إلى مواد هذه المجموعة التدريبية' },
         { status: 403 }
@@ -1123,9 +1206,18 @@ export const groupHandlers = [
     const targetUserId = params.userId as string;
     const courseId = params.courseId as string;
 
+    // Invariant INV-R8 & Surface 2: Check target user existence under caller authority
+    const targetUser = inMemoryStore.getManagedUserById(targetUserId, user.role);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { message: 'المستخدم المطلوب غير موجود' },
+        { status: 404 }
+      );
+    }
+
     // Authorization: Admin, Self, or Assigned Supervisor of the trainee's group
     const isSelf = user.id.toLowerCase() === targetUserId.toLowerCase();
-    const isAdmin = isGroupAdmin(user);
+    const isAdmin = canReadAdministrativeGroups(user);
     const isSupervisor = isSupervisorForTrainee(user, targetUserId);
 
     if (!isSelf && !isAdmin && !isSupervisor) {
@@ -1165,7 +1257,7 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group)) {
+    if (!canReadGroupData(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك بمتابعة هذه المجموعة التدريبية' },
         { status: 403 }
@@ -1176,7 +1268,7 @@ export const groupHandlers = [
     const cycleId = url.searchParams.get('cycleId');
 
     try {
-      const metrics = inMemoryStore.getGroupMetrics(groupId, cycleId || undefined);
+      const metrics = inMemoryStore.getGroupMetrics(groupId, cycleId || undefined, user.role);
       if (!metrics) {
         return HttpResponse.json(
           { message: 'تعذر حساب مؤشرات المجموعة' },
@@ -1208,7 +1300,7 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group)) {
+    if (!canReadGroupData(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك بالوصول إلى بيانات هذه المجموعة التدريبية' },
         { status: 403 }
@@ -1216,9 +1308,9 @@ export const groupHandlers = [
     }
 
     try {
-      const metrics = inMemoryStore.getGroupMetrics(group.id);
+      const metrics = inMemoryStore.getGroupMetrics(group.id, undefined, user.role);
       const currentCycle = inMemoryStore.getCurrentGroupCycle(group.id);
-      const summary = inMemoryStore.getGroupSummary(group.id);
+      const summary = inMemoryStore.getGroupSummary(group.id, user.role);
 
       return HttpResponse.json(
         {

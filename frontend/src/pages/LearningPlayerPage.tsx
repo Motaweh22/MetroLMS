@@ -144,7 +144,7 @@ export const LearningPlayerPage: React.FC = () => {
   }
 
   // 3. Trainee Enrollment Guard (Non-enrolled trainees cannot access player)
-  if (!authLoading && isAuthenticated && user?.role === 'user' && !isEnrolled) {
+  if (!authLoading && !enrollmentLoading && isAuthenticated && user?.role === 'user' && !isEnrolled) {
     return (
       <Navigate
         to={`/courses/${courseId || ''}`}

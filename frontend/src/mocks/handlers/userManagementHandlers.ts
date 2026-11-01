@@ -29,7 +29,11 @@ export const userManagementHandlers = [
       );
     }
 
-    const hasAccess = user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'users.view');
+    const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'users.view_directory').granted;
     if (!hasAccess) {
       return HttpResponse.json(
         { message: 'غير مصرح: هذه العملية مخصصة لمديري النظام فقط أو من يمتلك صلاحية عرض المستخدمين' },
@@ -43,12 +47,15 @@ export const userManagementHandlers = [
     const status = (url.searchParams.get('status') as UserStatus) || undefined;
     const department = url.searchParams.get('department') || undefined;
 
-    const users = inMemoryStore.getManagedUsers({
-      query,
-      role,
-      status,
-      department,
-    });
+    const users = inMemoryStore.getManagedUsers(
+      {
+        query,
+        role,
+        status,
+        department,
+      },
+      user.role
+    );
 
     return HttpResponse.json(users, { status: 200 });
   }),
@@ -74,6 +81,14 @@ export const userManagementHandlers = [
     try {
       const body = (await request.json()) as CreateUserRequestDTO;
 
+      // Invariant INV-R1: In-app creation of developer account is strictly prohibited
+      if (body.role === 'developer') {
+        return HttpResponse.json(
+          { message: 'غير مصرح: لا يمكن إنشاء أو ترقية أو تعديل حسابات المطورين برمجياً عبر إدارة المستخدمين' },
+          { status: 403 }
+        );
+      }
+
       // Re-evaluate permission with explicit target role context
       const roleCheck = inMemoryStore.hasPermission(user, 'users.create', {
         targetRole: body.role,
@@ -86,46 +101,26 @@ export const userManagementHandlers = [
         );
       }
 
-      // Uniqueness validation
+      // Uniqueness validation across all users (including hidden developer)
       const trimmedUsername = (body.username || '').trim().toLowerCase();
       const trimmedEmail = (body.email || '').trim().toLowerCase();
-      const existingUsers = inMemoryStore.getManagedUsers();
-      if (existingUsers.some((u) => u.username.toLowerCase() === trimmedUsername || u.id.toLowerCase() === trimmedUsername)) {
+      const allUsers = inMemoryStore.getUsersRaw();
+      if (allUsers.some((u) => u.username.toLowerCase() === trimmedUsername || u.id.toLowerCase() === trimmedUsername)) {
         return HttpResponse.json({ message: 'اسم المستخدم مسجل مسبقاً لمستخدم آخر' }, { status: 409 });
       }
-      if (existingUsers.some((u) => u.email.toLowerCase() === trimmedEmail)) {
-        return HttpResponse.json({ message: 'البريد الإلكتروني مسجل مسبقاً لمستخدم آخر' }, { status: 409 });
+      const conflictingEmailUser = allUsers.find((u) => u.email.toLowerCase() === trimmedEmail);
+      if (conflictingEmailUser) {
+        // Surface 9 & Decision D-09: Generic message for all collisions preventing role/account discovery
+        return HttpResponse.json({ message: 'البريد الإلكتروني مستخدم بالفعل أو غير متاح' }, { status: 409 });
       }
 
       if (roleCheck.executionMode === 'requires_approval') {
-        const approvalReq = inMemoryStore.createApprovalRequest({
-          actionType: 'users.create',
-          titleAr: `طلب إنشاء حساب جديد للمستخدم: "${body.name}"`,
-          requestedBy: user.id,
-          requesterId: user.id,
-          requesterName: user.name,
-          requesterRole: user.role,
-          justification: 'طلب إنشاء حساب مستخدم جديد عبر إدارة المستخدمين',
-          payload: body,
-        });
-
         return HttpResponse.json(
           {
-            id: 'REQ_PENDING',
-            name: body.name,
-            username: body.username,
-            email: body.email,
-            role: body.role,
-            status: body.status || 'active',
-            department: body.department,
-            jobTitle: body.jobTitle,
-            createdAt: new Date().toISOString(),
-            approvalRequired: true,
-            requestId: approvalReq.id,
-            message: 'تم إرسال طلب إنشاء الحساب للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
-            request: approvalReq,
+            message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتنفيذ هذه العملية مباشرة',
+            code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
           },
-          { status: 202 }
+          { status: 403 }
         );
       }
 
@@ -153,7 +148,7 @@ export const userManagementHandlers = [
     }
 
     const userId = params.id as string;
-    const targetUser = inMemoryStore.getManagedUserById(userId);
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
     if (!targetUser) {
       return HttpResponse.json(
         { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
@@ -163,6 +158,12 @@ export const userManagementHandlers = [
 
     try {
       const body = (await request.json()) as UpdateUserRoleDTO;
+      if (body.role === 'developer') {
+        return HttpResponse.json(
+          { message: 'غير مصرح: لا يمكن إنشاء أو ترقية أو تعديل حسابات المطورين برمجياً عبر إدارة المستخدمين' },
+          { status: 403 }
+        );
+      }
       const check = inMemoryStore.hasPermission(user, 'users.change_role', {
         targetUser,
         targetRole: body.role,
@@ -176,34 +177,12 @@ export const userManagementHandlers = [
       }
 
       if (check.executionMode === 'requires_approval') {
-        const approvalReq = inMemoryStore.createApprovalRequest({
-          actionType: 'users.change_role',
-          titleAr: `طلب تعديل رتبة المستخدم "${targetUser.name}" إلى ${body.role}`,
-          targetId: targetUser.id,
-          targetResourceId: targetUser.id,
-          targetResourceName: targetUser.name,
-          requestedBy: user.id,
-          requesterId: user.id,
-          requesterName: user.name,
-          requesterRole: user.role,
-          justification: 'طلب تعديل الدور الوظيفي للمستخدم عبر إدارة المستخدمين',
-          payload: {
-            userId: targetUser.id,
-            role: body.role,
-            previousRole: targetUser.role,
-          },
-        });
-
         return HttpResponse.json(
           {
-            ...targetUser,
-            role: targetUser.role, // Unchanged!
-            approvalRequired: true,
-            requestId: approvalReq.id,
-            message: 'تم إرسال طلب تعديل الدور للاعتماد بنجاح؛ العملية بانتظار موافقة مدير النظام.',
-            request: approvalReq,
+            message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل الدور الوظيفي مباشرة',
+            code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
           },
-          { status: 202 }
+          { status: 403 }
         );
       }
 
@@ -234,7 +213,7 @@ export const userManagementHandlers = [
     }
 
     const userId = params.id as string;
-    const targetUser = inMemoryStore.getManagedUserById(userId);
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
     if (!targetUser) {
       return HttpResponse.json(
         { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
@@ -257,37 +236,12 @@ export const userManagementHandlers = [
       }
 
       if (check.executionMode === 'requires_approval') {
-        const isSuspending = body.status === 'suspended';
-        const actionText = isSuspending ? 'إيقاف' : 'إعادة تنشيط';
-        const approvalReq = inMemoryStore.createApprovalRequest({
-          actionType: 'users.change_status',
-          titleAr: `طلب ${actionText} حساب المستخدم "${targetUser.name}"`,
-          targetId: targetUser.id,
-          targetResourceId: targetUser.id,
-          targetResourceName: targetUser.name,
-          requestedBy: user.id,
-          requesterId: user.id,
-          requesterName: user.name,
-          requesterRole: user.role,
-          justification: body.reason || `طلب ${actionText} الحساب عبر إدارة المستخدمين`,
-          payload: {
-            userId: targetUser.id,
-            status: body.status,
-            previousStatus: targetUser.status,
-            reason: body.reason,
-          },
-        });
-
         return HttpResponse.json(
           {
-            ...targetUser,
-            status: targetUser.status, // Unchanged!
-            approvalRequired: true,
-            requestId: approvalReq.id,
-            message: `تم إرسال طلب ${actionText} الحساب للاعتماد بنجاح؛ العملية بانتظار موافقة مدير النظام.`,
-            request: approvalReq,
+            message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل حالة الحساب مباشرة',
+            code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
           },
-          { status: 202 }
+          { status: 403 }
         );
       }
 
@@ -318,7 +272,7 @@ export const userManagementHandlers = [
     }
 
     const userId = params.id as string;
-    const targetUser = inMemoryStore.getManagedUserById(userId);
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
     if (!targetUser) {
       return HttpResponse.json(
         { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
@@ -338,31 +292,12 @@ export const userManagementHandlers = [
     }
 
     if (check.executionMode === 'requires_approval') {
-      const approvalReq = inMemoryStore.createApprovalRequest({
-        actionType: 'users.delete',
-        titleAr: `طلب حذف حساب المستخدم "${targetUser.name}" (${targetUser.id})`,
-        targetId: targetUser.id,
-        targetResourceId: targetUser.id,
-        targetResourceName: targetUser.name,
-        requestedBy: user.id,
-        requesterId: user.id,
-        requesterName: user.name,
-        requesterRole: user.role,
-        justification: 'طلب حذف حساب مستخدم عبر إدارة المستخدمين',
-        payload: {
-          userId: targetUser.id,
-        },
-      });
-
       return HttpResponse.json(
         {
-          success: false,
-          approvalRequired: true,
-          requestId: approvalReq.id,
-          message: 'تم إرسال طلب حذف الحساب للاعتماد بنجاح؛ العملية بانتظار موافقة مدير النظام.',
-          request: approvalReq,
+          message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لحذف الحسابات مباشرة',
+          code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
         },
-        { status: 202 }
+        { status: 403 }
       );
     }
 
@@ -387,7 +322,11 @@ export const userManagementHandlers = [
       );
     }
 
-    const hasAccess = user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'transcripts.view');
+    const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'users.view_transcript').granted;
     if (!hasAccess) {
       return HttpResponse.json(
         { message: 'غير مصرح: هذه العملية تتطلب صلاحية عرض السجل التدريبي' },
@@ -397,7 +336,7 @@ export const userManagementHandlers = [
 
     const userId = params.userId as string;
     try {
-      const transcript = inMemoryStore.getUserTranscript(userId);
+      const transcript = inMemoryStore.getUserTranscript(userId, user.role);
       if (!transcript) {
         return HttpResponse.json(
           { message: 'المستخدم المطلوب غير موجود في دليل النظام' },

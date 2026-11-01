@@ -6,3 +6,4 @@ export * from './context';
 export * from './AuthContext';
 export * from './useAuthContext';
 export * from './ProtectedRoute';
+export * from './canonicalIdentity';

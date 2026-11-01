@@ -128,7 +128,7 @@ export const commentsHandlers = [
 
     const courseId = params.courseId as string;
     try {
-      const comments = inMemoryStore.getCourseComments(courseId);
+      const comments = inMemoryStore.getCourseComments(courseId, user?.role);
       return HttpResponse.json(comments, { status: 200 });
     } catch (err: unknown) {
       if (err instanceof MockStoreError) {

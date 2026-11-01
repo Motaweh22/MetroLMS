@@ -289,7 +289,9 @@ describe('Increment 5: Course Enrollment (First Mock API Mutation) Verification'
       });
 
       // Pre-enrolled course CRS002 displays enrolled badge in the catalog grid
-      expect(screen.getByTestId('enrolled-badge-CRS002')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('enrolled-badge-CRS002')).toBeInTheDocument();
+      });
       expect(screen.queryByTestId('enrolled-badge-CRS001')).not.toBeInTheDocument();
 
       // Navigate to unenrolled course CRS001

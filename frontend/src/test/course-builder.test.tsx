@@ -92,8 +92,10 @@ describe('Increment 8: Course Builder & Authoring Suite (/lecturer/builder/:cour
     it('strictly denies trainee from accessing course builder', async () => {
       renderBuilderWithUser(traineeUser, 'CRS001');
 
-      expect(screen.getByTestId('builder-access-denied')).toBeInTheDocument();
-      expect(screen.getByText('غير مصرح بالدخول إلى منشئ المحتوى')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('builder-access-denied')).toBeInTheDocument();
+        expect(screen.getByText('غير مصرح بالدخول إلى منشئ المحتوى')).toBeInTheDocument();
+      });
     });
 
     it('allows administrator full access to edit any course', async () => {

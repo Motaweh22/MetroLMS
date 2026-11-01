@@ -376,6 +376,9 @@ describe('Increment 11 — Phase 4E: Department Course-Track Configuration', () 
       });
 
       // Click on DEPT-SIGNALS
+      await waitFor(() => {
+        expect(screen.getByTestId('dept-item-DEPT-SIGNALS')).toBeInTheDocument();
+      });
       const signalsBtn = screen.getByTestId('dept-item-DEPT-SIGNALS');
       fireEvent.click(signalsBtn);
 
@@ -395,6 +398,9 @@ describe('Increment 11 — Phase 4E: Department Course-Track Configuration', () 
       });
 
       // Click on track checkbox
+      await waitFor(() => {
+        expect(screen.getByTestId('track-row-TRK-003')).toBeInTheDocument();
+      });
       const trackRow = screen.getByTestId('track-row-TRK-003');
       fireEvent.click(trackRow);
 

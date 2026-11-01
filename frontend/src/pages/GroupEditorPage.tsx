@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { groupsApi } from '@/features/groups/services/groupsApi';
+import { groupsApi, type AdminEnrichedTrainingGroup } from '@/features/groups/services/groupsApi';
 import {
   GroupCoursesTab,
   GroupMembersTab,
@@ -16,6 +16,7 @@ import type {
   PostDeadlinePolicy,
   TrainingGroup,
 } from '@/core/groups/types';
+import type { CandidateLecturerDTO } from '@/core/groups/dtos';
 import {
   calculateNextRenewalDateSafe,
   validateRenewalIntervalDays,
@@ -53,10 +54,10 @@ type RecurrenceOption = 'none' | 'monthly' | 'bimonthly' | 'quarterly' | 'custom
 
 export type GroupTab =
   | 'general'
-  | 'courses'
+  | 'schedule'
   | 'members'
+  | 'courses'
   | 'materials'
-  | 'attachments'
   | 'meetings';
 
 export const GroupEditorPage: React.FC = () => {
@@ -70,29 +71,29 @@ export const GroupEditorPage: React.FC = () => {
 
   const tabParam = searchParams.get('tab');
   const [activeTab, setActiveTabState] = useState<GroupTab>(
-    tabParam === 'courses'
-      ? 'courses'
+    tabParam === 'schedule' || tabParam === 'timing'
+      ? 'schedule'
       : tabParam === 'members'
       ? 'members'
+      : tabParam === 'courses'
+      ? 'courses'
       : tabParam === 'materials'
       ? 'materials'
-      : tabParam === 'attachments'
-      ? 'attachments'
-      : tabParam === 'meetings'
+      : tabParam === 'meetings' || tabParam === 'attachments'
       ? 'meetings'
       : 'general'
   );
 
   useEffect(() => {
-    if (tabParam === 'courses') {
-      setActiveTabState('courses');
+    if (tabParam === 'schedule' || tabParam === 'timing') {
+      setActiveTabState('schedule');
     } else if (tabParam === 'members') {
       setActiveTabState('members');
+    } else if (tabParam === 'courses') {
+      setActiveTabState('courses');
     } else if (tabParam === 'materials') {
       setActiveTabState('materials');
-    } else if (tabParam === 'attachments') {
-      setActiveTabState('attachments');
-    } else if (tabParam === 'meetings') {
+    } else if (tabParam === 'meetings' || tabParam === 'attachments') {
       setActiveTabState('meetings');
     } else if (tabParam === 'general' || !tabParam) {
       setActiveTabState('general');
@@ -110,10 +111,13 @@ export const GroupEditorPage: React.FC = () => {
     setSearchParams(newParams, { replace: true });
   };
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin =
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'developer';
 
   // Loaded group in Edit mode
-  const [loadedGroup, setLoadedGroup] = useState<TrainingGroup | null>(null);
+  const [loadedGroup, setLoadedGroup] = useState<AdminEnrichedTrainingGroup | null>(null);
   const [loading, setLoading] = useState<boolean>(!isCreateMode);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -131,14 +135,33 @@ export const GroupEditorPage: React.FC = () => {
   const [, setRecurrenceType] = useState<RecurrenceOption>('none');
   const [autoRenewalEnabled, setAutoRenewalEnabled] = useState<boolean>(false);
   const [renewalIntervalDays, setRenewalIntervalDays] = useState<string>('');
+  const [candidateLecturers, setCandidateLecturers] = useState<CandidateLecturerDTO[]>([]);
+  const [primaryInstructorId, setPrimaryInstructorId] = useState<string>('');
+  const [assistantLecturerIds, setAssistantLecturerIds] = useState<string[]>([]);
+  const [selectedAssistantToAdd, setSelectedAssistantToAdd] = useState<string>('');
+  const [lecturerSearchQuery, setLecturerSearchQuery] = useState<string>('');
 
-  // Live calculated preview of next renewal date based on anchor (startDateTime) + N calendar days
+  // Authoritative deadline anchor for renewal:
+  // 1. For existing group with an active cycle: the active cycle's deadline date
+  // 2. For new group without cycle: the deadline entered in the form
+  const authoritativeRenewalDeadline = useMemo(() => {
+    if (
+      !isCreateMode &&
+      loadedGroup?.currentCycle?.deadlineDateTime &&
+      deadlineDateTime === toDatetimeLocal(loadedGroup.deadlineDateTime)
+    ) {
+      return loadedGroup.currentCycle.deadlineDateTime;
+    }
+    return deadlineDateTime ? toIsoString(deadlineDateTime) : (startDateTime ? toIsoString(startDateTime) : null);
+  }, [isCreateMode, loadedGroup, deadlineDateTime, startDateTime]);
+
+  // Live calculated preview of next renewal date based on authoritative anchor (active cycle deadline || group deadline) + N calendar days
   const calculatedNextRenewalPreview = useMemo(() => {
-    if (!autoRenewalEnabled || !renewalIntervalDays || !startDateTime) return null;
-    const nextDateIso = calculateNextRenewalDateSafe(startDateTime, renewalIntervalDays);
+    if (!autoRenewalEnabled || !renewalIntervalDays || !authoritativeRenewalDeadline) return null;
+    const nextDateIso = calculateNextRenewalDateSafe(authoritativeRenewalDeadline, renewalIntervalDays);
     if (!nextDateIso) return null;
     return formatArabicDate(nextDateIso);
-  }, [autoRenewalEnabled, renewalIntervalDays, startDateTime]);
+  }, [autoRenewalEnabled, renewalIntervalDays, authoritativeRenewalDeadline]);
 
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -166,6 +189,25 @@ export const GroupEditorPage: React.FC = () => {
     }
   }, [isCreateMode]);
 
+  // Load eligible lecturer accounts for instructor assignment
+  useEffect(() => {
+    if (!isAuthenticated || authLoading || !isAdmin) return;
+    let isMounted = true;
+    groupsApi
+      .getCandidateLecturers()
+      .then((list) => {
+        if (isMounted) {
+          setCandidateLecturers(list || []);
+        }
+      })
+      .catch(() => {
+        // Fallback handled gracefully
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, authLoading, isAdmin]);
+
   // Load existing group details in Edit mode
   const fetchGroup = useCallback(async () => {
     if (isCreateMode || !groupId) return;
@@ -190,6 +232,18 @@ export const GroupEditorPage: React.FC = () => {
       setAutoRenewalEnabled(normSchedule.autoRenewalEnabled);
       setRenewalIntervalDays(normSchedule.intervalDays ? String(normSchedule.intervalDays) : '');
       setRecurrenceType((normSchedule.recurrenceType as RecurrenceOption) || 'none');
+      const loadedPrimary =
+        data.primaryInstructorId !== undefined
+          ? data.primaryInstructorId || ''
+          : data.instructors?.find((i) => i.instructorRole === 'primary')?.userId || '';
+      const loadedAssistants =
+        data.assistantLecturerIds !== undefined
+          ? [...data.assistantLecturerIds]
+          : data.instructors
+              ?.filter((i) => i.instructorRole === 'assistant')
+              .map((i) => i.userId) || [];
+      setPrimaryInstructorId(loadedPrimary);
+      setAssistantLecturerIds(loadedAssistants);
       setIsDirty(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'تعذر تحميل بيانات المجموعة التدريبية';
@@ -212,8 +266,113 @@ export const GroupEditorPage: React.FC = () => {
     setSubmitError(null);
   };
 
+  const handleGroupUpdated = (updated: TrainingGroup) => {
+    setLoadedGroup((prev) => ({
+      ...updated,
+      metrics: prev?.metrics || null,
+      currentCycle: prev?.currentCycle || null,
+      summary: prev?.summary || null,
+    }));
+    if (updated.postDeadlinePolicy) setPostDeadlinePolicy(updated.postDeadlinePolicy);
+    if (updated.enrollmentPolicy) setEnrollmentPolicy(updated.enrollmentPolicy);
+    if (updated.maxTrainees !== undefined) {
+      setMaxTrainees(updated.maxTrainees !== null ? String(updated.maxTrainees) : '');
+    }
+    if (updated.isEnrollmentOpen !== undefined) setIsEnrollmentOpen(updated.isEnrollmentOpen);
+    if (updated.enrollmentExpiresAt !== undefined) {
+      setEnrollmentExpiresAt(toDatetimeLocal(updated.enrollmentExpiresAt));
+    }
+  };
+
+  // Staff assignment helpers
+  const handlePrimaryInstructorChange = (newPrimaryId: string) => {
+    setPrimaryInstructorId(newPrimaryId);
+    if (newPrimaryId) {
+      setAssistantLecturerIds((prev) =>
+        prev.filter((aid) => aid.toLowerCase() !== newPrimaryId.toLowerCase())
+      );
+      if (selectedAssistantToAdd.toLowerCase() === newPrimaryId.toLowerCase()) {
+        setSelectedAssistantToAdd('');
+      }
+    }
+    setIsDirty(true);
+    setSubmitError(null);
+  };
+
+  const handleAddAssistantLecturer = (lecturerIdToAdd?: string) => {
+    const targetId = (lecturerIdToAdd ?? selectedAssistantToAdd).trim();
+    if (!targetId) return;
+    if (primaryInstructorId && targetId.toLowerCase() === primaryInstructorId.toLowerCase()) {
+      return;
+    }
+    if (assistantLecturerIds.some((id) => id.toLowerCase() === targetId.toLowerCase())) {
+      return;
+    }
+    setAssistantLecturerIds((prev) => [...prev, targetId]);
+    setSelectedAssistantToAdd('');
+    setIsDirty(true);
+    setSubmitError(null);
+  };
+
+  const handleRemoveAssistantLecturer = (lecturerIdToRemove: string) => {
+    setAssistantLecturerIds((prev) =>
+      prev.filter((id) => id.toLowerCase() !== lecturerIdToRemove.toLowerCase())
+    );
+    setIsDirty(true);
+    setSubmitError(null);
+  };
+
+  const selectedPrimaryLecturer = useMemo(
+    () =>
+      candidateLecturers.find(
+        (l) => primaryInstructorId && l.id.toLowerCase() === primaryInstructorId.toLowerCase()
+      ) || null,
+    [candidateLecturers, primaryInstructorId]
+  );
+
+  const assignedAssistantLecturers = useMemo(
+    () =>
+      assistantLecturerIds.map((aid) => {
+        const found = candidateLecturers.find((l) => l.id.toLowerCase() === aid.toLowerCase());
+        if (found) return found;
+        const fromGroup = loadedGroup?.instructors?.find(
+          (i) => i.userId.toLowerCase() === aid.toLowerCase()
+        );
+        return {
+          id: aid,
+          name: fromGroup?.name || aid,
+          username: aid,
+          email: fromGroup?.email || '',
+          jobTitle: fromGroup?.jobTitle || 'محاضر معتمد',
+          department: fromGroup?.department || '',
+          phone: fromGroup?.phone || undefined,
+          status: 'active' as const,
+        };
+      }),
+    [assistantLecturerIds, candidateLecturers, loadedGroup]
+  );
+
+  const availableAssistantLecturers = useMemo(() => {
+    const q = lecturerSearchQuery.trim().toLowerCase();
+    return candidateLecturers.filter((l) => {
+      if (primaryInstructorId && l.id.toLowerCase() === primaryInstructorId.toLowerCase()) {
+        return false;
+      }
+      if (assistantLecturerIds.some((aid) => aid.toLowerCase() === l.id.toLowerCase())) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        l.name.toLowerCase().includes(q) ||
+        l.department.toLowerCase().includes(q) ||
+        l.jobTitle.toLowerCase().includes(q) ||
+        l.email.toLowerCase().includes(q)
+      );
+    });
+  }, [candidateLecturers, primaryInstructorId, assistantLecturerIds, lecturerSearchQuery]);
+
   // Validation
-  const validateForm = (): boolean => {
+  const validateForm = (): { isValid: boolean; errs: Record<string, string> } => {
     const errs: Record<string, string> = {};
 
     if (!name.trim()) {
@@ -256,13 +415,24 @@ export const GroupEditorPage: React.FC = () => {
     }
 
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    return { isValid: Object.keys(errs).length === 0, errs };
   };
 
   // Form Submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    const { isValid, errs } = validateForm();
+    if (!isValid) {
+      // Direct user to the tab containing the primary error if not currently active
+      if (errs.name || errs.description) {
+        if (activeTab !== 'general') handleTabSwitch('general');
+      } else if (errs.startDateTime || errs.deadlineDateTime || errs.renewalIntervalDays) {
+        if (activeTab !== 'schedule') handleTabSwitch('schedule');
+      } else if (errs.maxTrainees) {
+        if (activeTab !== 'members') handleTabSwitch('members');
+      }
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -283,6 +453,11 @@ export const GroupEditorPage: React.FC = () => {
         ? 'quarterly'
         : 'custom';
 
+    const computedNextRenewalIso =
+      autoRenewalEnabled && intervalNumber && authoritativeRenewalDeadline
+        ? calculateNextRenewalDateSafe(authoritativeRenewalDeadline, intervalNumber)
+        : null;
+
     const payload = {
       name: name.trim(),
       description: description.trim(),
@@ -291,6 +466,12 @@ export const GroupEditorPage: React.FC = () => {
       postDeadlinePolicy,
       adminStatus,
       enrollmentPolicy,
+      primaryInstructorId: primaryInstructorId ? primaryInstructorId : null,
+      assistantLecturerIds,
+      supervisorIds: [
+        ...(primaryInstructorId ? [primaryInstructorId] : []),
+        ...assistantLecturerIds,
+      ],
       maxTrainees: maxTrainees ? Number(maxTrainees) : null,
       isEnrollmentOpen,
       enrollmentExpiresAt: enrollmentExpiresAt ? toIsoString(enrollmentExpiresAt) : null,
@@ -298,6 +479,7 @@ export const GroupEditorPage: React.FC = () => {
         autoRenewalEnabled,
         intervalDays: intervalNumber,
         renewalIntervalDays: intervalNumber,
+        nextScheduledRenewalDate: computedNextRenewalIso,
         recurrenceType: derivedRecurrence,
       },
     };
@@ -308,7 +490,7 @@ export const GroupEditorPage: React.FC = () => {
         toast.success(`تم إنشاء المجموعة التدريبية بنجاح: ${created.name}`);
         flushSync(() => {
           setIsDirty(false);
-          setLoadedGroup(created);
+          setLoadedGroup(created as AdminEnrichedTrainingGroup);
         });
         navigate(
           `/admin/groups/${encodeURIComponent(created.id)}/edit${activeTab !== 'general' ? `?tab=${activeTab}` : ''}`,
@@ -317,7 +499,12 @@ export const GroupEditorPage: React.FC = () => {
       } else if (loadedGroup || groupId) {
         const targetId = loadedGroup?.id || groupId!;
         const updated = await groupsApi.updateGroup(targetId, payload);
-        setLoadedGroup(updated);
+        setLoadedGroup((prev) => ({
+          ...updated,
+          metrics: prev?.metrics || null,
+          currentCycle: prev?.currentCycle || null,
+          summary: prev?.summary || null,
+        }));
         toast.success('تم حفظ إعدادات المجموعة التدريبية بنجاح');
         setIsDirty(false);
       }
@@ -455,7 +642,7 @@ export const GroupEditorPage: React.FC = () => {
               data-testid="go-to-monitoring-btn"
               className="font-bold text-xs"
             >
-              لوحة المتابعة
+              متابعة المجموعة
             </Button>
           )}
           <Button
@@ -468,24 +655,22 @@ export const GroupEditorPage: React.FC = () => {
           >
             إلغاء والعودة
           </Button>
-          {activeTab === 'general' && (
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              isLoading={isSubmitting}
-              disabled={isSubmitting}
-              onClick={handleSubmit}
-              data-testid="header-save-group-btn"
-              className="font-bold text-xs"
-            >
-              {isCreateMode ? 'إنشاء وتفعيل المجموعة' : 'حفظ التعديلات'}
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            isLoading={isSubmitting}
+            disabled={isSubmitting}
+            onClick={handleSubmit}
+            data-testid="header-save-group-btn"
+            className="font-bold text-xs"
+          >
+            {isCreateMode ? 'إنشاء وتفعيل المجموعة' : 'حفظ التعديلات'}
+          </Button>
         </div>
       </div>
 
-      {/* Workspace Tabs (Unified 6-Tab Strip Architecture) */}
+      {/* Workspace Tabs (Unified 7-Tab Strip Architecture) */}
       <div className="border-b border-border">
         <nav
           className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px"
@@ -511,20 +696,20 @@ export const GroupEditorPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => handleTabSwitch('courses')}
+            onClick={() => handleTabSwitch('schedule')}
             className={`px-4 sm:px-5 py-3 text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border-b-2 rounded-t-lg select-none ${
-              activeTab === 'courses'
+              activeTab === 'schedule'
                 ? 'text-primary border-primary bg-primary/5 shadow-xs'
                 : 'text-text-muted hover:text-text hover:bg-neutral-light/60 border-transparent'
             }`}
-            data-testid="tab-courses"
+            data-testid="tab-schedule"
           >
             <Icon
-              name="courses"
+              name="clock"
               size="sm"
-              className={activeTab === 'courses' ? 'text-primary' : 'text-text-muted'}
+              className={activeTab === 'schedule' ? 'text-primary' : 'text-text-muted'}
             />
-            <span>المقررات التدريبية</span>
+            <span>مواقيت المجموعة</span>
           </button>
 
           <button
@@ -547,6 +732,24 @@ export const GroupEditorPage: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => handleTabSwitch('courses')}
+            className={`px-4 sm:px-5 py-3 text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border-b-2 rounded-t-lg select-none ${
+              activeTab === 'courses'
+                ? 'text-primary border-primary bg-primary/5 shadow-xs'
+                : 'text-text-muted hover:text-text hover:bg-neutral-light/60 border-transparent'
+            }`}
+            data-testid="tab-courses"
+          >
+            <Icon
+              name="courses"
+              size="sm"
+              className={activeTab === 'courses' ? 'text-primary' : 'text-text-muted'}
+            />
+            <span>المقررات التدريبية</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => handleTabSwitch('materials')}
             className={`px-4 sm:px-5 py-3 text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border-b-2 rounded-t-lg select-none ${
               activeTab === 'materials'
@@ -565,24 +768,6 @@ export const GroupEditorPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => handleTabSwitch('attachments')}
-            className={`px-4 sm:px-5 py-3 text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border-b-2 rounded-t-lg select-none ${
-              activeTab === 'attachments'
-                ? 'text-primary border-primary bg-primary/5 shadow-xs'
-                : 'text-text-muted hover:text-text hover:bg-neutral-light/60 border-transparent'
-            }`}
-            data-testid="tab-attachments"
-          >
-            <Icon
-              name="attachment"
-              size="sm"
-              className={activeTab === 'attachments' ? 'text-primary' : 'text-text-muted'}
-            />
-            <span>المواد المرفقة</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => handleTabSwitch('meetings')}
             className={`px-4 sm:px-5 py-3 text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border-b-2 rounded-t-lg select-none ${
               activeTab === 'meetings'
@@ -596,13 +781,37 @@ export const GroupEditorPage: React.FC = () => {
               size="sm"
               className={activeTab === 'meetings' ? 'text-primary' : 'text-text-muted'}
             />
-            <span>اللقاءات التفاعلية</span>
+            <span>اللقاءات التفاعلية والمواد المرفقة</span>
           </button>
+
+          {!isCreateMode && loadedGroup && (
+            <button
+              type="button"
+              onClick={() =>
+                safeNavigate(`/admin/groups/${encodeURIComponent(loadedGroup.id)}/monitoring`)
+              }
+              className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border-b-2 rounded-t-lg select-none text-text-muted hover:text-primary hover:bg-primary/5 border-transparent"
+              data-testid="tab-monitoring-link"
+            >
+              <Icon name="activity" size="sm" className="text-primary" />
+              <span>متابعة المجموعة</span>
+            </button>
+          )}
         </nav>
       </div>
 
+      {/* Submit Error Banner for Non-Form Tabs */}
+      {submitError &&
+        activeTab !== 'general' &&
+        activeTab !== 'schedule' &&
+        activeTab !== 'members' && (
+          <Alert variant="danger" title="تعذر حفظ إعدادات المجموعة">
+            <p className="text-sm">{submitError}</p>
+          </Alert>
+        )}
+
       {/* Tab Content */}
-      {activeTab !== 'general' && !loadedGroup ? (
+      {activeTab !== 'general' && activeTab !== 'schedule' && activeTab !== 'members' && !loadedGroup ? (
         <Card
           variant="default"
           className="p-8 sm:p-12 text-center border-dashed border-2 bg-surface space-y-4"
@@ -618,13 +827,9 @@ export const GroupEditorPage: React.FC = () => {
             <p className="text-xs text-text-muted leading-relaxed">
               {activeTab === 'courses'
                 ? 'لإسناد المقررات التدريبية وضبط المواعيد، يرجى ملء البيانات الأساسية وحفظ المجموعة أولاً.'
-                : activeTab === 'members'
-                ? 'لإدارة قائمة المتدربين وتوليد رمز الانضمام السريع QR، يرجى حفظ البيانات الأساسية للمجموعة أولاً.'
                 : activeTab === 'materials'
                 ? 'للوصول إلى مستكشف حقيبة المواد والمستندات، يرجى حفظ البيانات الأساسية للمجموعة أولاً.'
-                : activeTab === 'attachments'
-                ? 'لإرفاق الأدلة والملفات العامة بالمجموعة، يرجى حفظ البيانات الأساسية للمجموعة أولاً.'
-                : 'لجدولة اللقاءات التفاعلية وجلسات Microsoft Teams، يرجى حفظ البيانات الأساسية للمجموعة أولاً.'}
+                : 'لجدولة اللقاءات التفاعلية وإرفاق الأدلة والملفات العامة بالمجموعة، يرجى حفظ البيانات الأساسية للمجموعة أولاً.'}
             </p>
           </div>
           <div className="flex items-center justify-center gap-3 pt-2">
@@ -651,17 +856,36 @@ export const GroupEditorPage: React.FC = () => {
           </div>
         </Card>
       ) : activeTab === 'courses' && loadedGroup ? (
-        <GroupCoursesTab group={loadedGroup} onGroupUpdated={setLoadedGroup} />
-      ) : activeTab === 'members' && loadedGroup ? (
-        <GroupMembersTab group={loadedGroup} onGroupUpdated={setLoadedGroup} />
+        <GroupCoursesTab
+          group={loadedGroup}
+          onGroupUpdated={handleGroupUpdated}
+          postDeadlinePolicy={postDeadlinePolicy}
+          onPostDeadlinePolicyChange={(val) => setPostDeadlinePolicy(val)}
+        />
       ) : activeTab === 'materials' && loadedGroup ? (
         <GroupMaterialsTab groupId={loadedGroup.id} group={loadedGroup} />
-      ) : activeTab === 'attachments' && loadedGroup ? (
-        <GroupAttachmentsTab groupId={loadedGroup.id} group={loadedGroup} onUpdateGroup={setLoadedGroup} />
       ) : activeTab === 'meetings' && loadedGroup ? (
-        <GroupMeetingsTab groupId={loadedGroup.id} group={loadedGroup} onUpdateGroup={setLoadedGroup} />
-      ) : (
-        <>
+        <div className="space-y-8" data-testid="group-meetings-and-attachments-tab">
+          <section aria-label="اللقاءات التفاعلية" data-testid="unified-meetings-section">
+            <GroupMeetingsTab
+              groupId={loadedGroup.id}
+              group={loadedGroup}
+              onUpdateGroup={handleGroupUpdated}
+            />
+          </section>
+
+          <div className="border-t border-border" role="separator" />
+
+          <section aria-label="المواد المرفقة" data-testid="unified-attachments-section">
+            <GroupAttachmentsTab
+              groupId={loadedGroup.id}
+              group={loadedGroup}
+              onUpdateGroup={handleGroupUpdated}
+            />
+          </section>
+        </div>
+      ) : activeTab === 'members' ? (
+        <div className="space-y-6 sm:space-y-8">
           {/* Submit Error Banner */}
           {submitError && (
             <Alert variant="danger" title="تعذر حفظ إعدادات المجموعة">
@@ -669,7 +893,311 @@ export const GroupEditorPage: React.FC = () => {
             </Alert>
           )}
 
-          {/* Main Form */}
+          {/* Member Management or Dependency Notice */}
+          {loadedGroup ? (
+            <GroupMembersTab
+              group={loadedGroup}
+              onGroupUpdated={handleGroupUpdated}
+              enrollmentPolicy={enrollmentPolicy}
+              onEnrollmentPolicyChange={setEnrollmentPolicy}
+              maxTrainees={maxTrainees}
+              onMaxTraineesChange={setMaxTrainees}
+              enrollmentExpiresAt={enrollmentExpiresAt}
+              onEnrollmentExpiresAtChange={setEnrollmentExpiresAt}
+              isEnrollmentOpen={isEnrollmentOpen}
+              onIsEnrollmentOpenChange={setIsEnrollmentOpen}
+              policyErrors={errors}
+            />
+          ) : (
+            <Card
+              variant="default"
+              className="p-8 sm:p-12 text-center border-dashed border-2 bg-surface space-y-4"
+              data-testid="tab-dependency-notice"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                <Icon name="info" size="xl" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="text-lg font-bold text-text-heading">
+                  تتطلب هذه الخاصية حفظ المجموعة أولاً
+                </h3>
+                <p className="text-xs text-text-muted leading-relaxed">
+                  لإدارة قائمة المتدربين وتوليد رمز الانضمام السريع QR، يرجى حفظ البيانات الأساسية للمجموعة أولاً.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleTabSwitch('general')}
+                  data-testid="return-to-general-tab-btn"
+                >
+                  العودة للبيانات الأساسية
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSubmit}
+                  isLoading={isSubmitting}
+                  disabled={isSubmitting}
+                  data-testid="save-and-continue-btn"
+                >
+                  حفظ المجموعة والمتابعة
+                </Button>
+              </div>
+            </Card>
+          )}
+        </div>
+      ) : activeTab === 'schedule' ? (
+        <div className="space-y-6 sm:space-y-8">
+          {/* Submit Error Banner */}
+          {submitError && (
+            <Alert variant="danger" title="تعذر حفظ إعدادات المجموعة">
+              <p className="text-sm">{submitError}</p>
+            </Alert>
+          )}
+
+          {/* Schedule and Timings Form */}
+          <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8" noValidate>
+            {/* Section 1: Schedule & Deadline Dates */}
+            <Card className="p-6 sm:p-7 bg-surface border border-border rounded-2xl shadow-xs space-y-6">
+              <div className="flex items-center gap-3 pb-4 border-b border-border/70">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Icon name="clock" size="md" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-text-heading">الجدول الزمني العام ومواعيد الاستحقاق</h2>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    تحديد تواريخ الانطلاق والانتهاء للمجموعة التدريبية
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Start Date */}
+                  <div className="space-y-2">
+                    <label htmlFor="group-start-input" className="block text-xs font-bold text-text">
+                      تاريخ ووقت البداية العام <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      id="group-start-input"
+                      type="datetime-local"
+                      value={startDateTime}
+                      onChange={(e) => handleFieldChange(setStartDateTime)(e.target.value)}
+                      className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all ${
+                        errors.startDateTime ? 'border-danger' : 'border-border'
+                      }`}
+                      data-testid="group-start-input"
+                    />
+                    {errors.startDateTime && (
+                      <span className="text-xs text-danger flex items-center gap-1 font-medium">
+                        <Icon name="alert" size="sm" />
+                        {errors.startDateTime}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Deadline Date */}
+                  <div className="space-y-2">
+                    <label htmlFor="group-deadline-input" className="block text-xs font-bold text-text">
+                      الموعد النهائي العام للاستحقاق <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      id="group-deadline-input"
+                      type="datetime-local"
+                      value={deadlineDateTime}
+                      onChange={(e) => handleFieldChange(setDeadlineDateTime)(e.target.value)}
+                      className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all ${
+                        errors.deadlineDateTime ? 'border-danger' : 'border-border'
+                      }`}
+                      data-testid="group-deadline-input"
+                    />
+                    {errors.deadlineDateTime && (
+                      <span className="text-xs text-danger flex items-center gap-1 font-medium">
+                        <Icon name="alert" size="sm" />
+                        {errors.deadlineDateTime}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Section 2: Renewal Schedule */}
+            <Card className="p-6 sm:p-7 bg-surface border border-border rounded-2xl shadow-xs space-y-6">
+              <div className="flex items-center gap-3 pb-4 border-b border-border/70">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Icon name="refresh" size="md" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-text-heading">جدول التجديد الدوري الآلي للمجموعة</h2>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    إنشاء مجموعة تدريبية جديدة تلقائياً بعد انقضاء الفترة المحددة بالأيام من تاريخ انتهاء المجموعة الحالية
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-5 max-w-2xl">
+                {/* Automatic Renewal Toggle */}
+                <div className="flex items-center gap-3 bg-bg/60 p-4 rounded-xl border border-border">
+                  <input
+                    type="checkbox"
+                    id="auto-renewal-toggle"
+                    checked={autoRenewalEnabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      handleFieldChange(setAutoRenewalEnabled)(enabled);
+                      if (enabled && !renewalIntervalDays) {
+                        handleFieldChange(setRenewalIntervalDays)('30');
+                      }
+                    }}
+                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer accent-primary"
+                    data-testid="auto-renewal-toggle"
+                  />
+                  <div>
+                    <label
+                      htmlFor="auto-renewal-toggle"
+                      className="text-xs font-bold text-text cursor-pointer select-none block"
+                    >
+                      تفعيل التجديد الدوري الآلي للمجموعة التدريبية
+                    </label>
+                    <span className="text-[11px] text-text-muted block mt-0.5">
+                      إنشاء مجموعة تدريبية جديدة تلقائياً بنفس المتدربين والمقررات عند حلول موعد الاستحقاق المجدول
+                    </span>
+                  </div>
+                </div>
+
+                {autoRenewalEnabled ? (
+                  <div className="space-y-4 pr-1">
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      حدد عدد الأيام الفاصلة بعد انتهاء المجموعة الحالية. يتم احتساب تاريخ بدء المجموعة الجديدة تلقائياً بإضافة عدد الأيام المحدد إلى تاريخ نهاية (الموعد النهائي) للمجموعة الحالية.
+                    </p>
+
+                    {/* Presets and Custom Input */}
+                    <div className="space-y-2.5">
+                      <label htmlFor="renewal-interval-days-input" className="block text-xs font-bold text-text">
+                        فترة التجديد الدوري (بالأيام)
+                      </label>
+
+                      {/* Preset shortcuts */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-semibold text-text-muted">خيارات سريعة:</span>
+                        {[30, 60, 90].map((preset) => {
+                          const isSelected = renewalIntervalDays === String(preset);
+                          return (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => handleFieldChange(setRenewalIntervalDays)(String(preset))}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                isSelected
+                                  ? 'bg-primary text-white border-primary shadow-xs'
+                                  : 'bg-bg text-text hover:bg-neutral-light border-border'
+                              }`}
+                              data-testid={`preset-interval-${preset}`}
+                            >
+                              {preset} يوماً
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Manual numeric input */}
+                      <div className="max-w-xs mt-2">
+                        <input
+                          id="renewal-interval-days-input"
+                          type="number"
+                          min="1"
+                          max="730"
+                          step="1"
+                          value={renewalIntervalDays}
+                          onChange={(e) => handleFieldChange(setRenewalIntervalDays)(e.target.value)}
+                          placeholder="مثال: 17، 30، 45، 60، 90، 120"
+                          className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
+                            errors.renewalIntervalDays ? 'border-danger focus:ring-danger' : 'border-border'
+                          }`}
+                          data-testid="renewal-interval-days-input"
+                        />
+                        {errors.renewalIntervalDays && (
+                          <p className="text-[11px] text-danger mt-1 font-medium" data-testid="renewal-interval-error">
+                            {errors.renewalIntervalDays}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Calculated Next Renewal Date Live Preview */}
+                    {calculatedNextRenewalPreview && (
+                      <div
+                        className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex items-center gap-3 text-xs"
+                        data-testid="calculated-next-renewal-date-preview"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Icon name="calendar" size="sm" />
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-text">
+                            تاريخ التجديد الآلي القادم المحتسب:
+                            <span className="text-primary font-bold mr-1.5 underline decoration-primary/40 underline-offset-4">
+                              {calculatedNextRenewalPreview}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-text-muted">
+                            محسوب من تاريخ نهاية المجموعة التدريبية بإضافة {renewalIntervalDays} يوماً تقويمياً.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-text-muted leading-relaxed bg-neutral-light/40 p-3 rounded-xl border border-border/50">
+                    التجديد الدوري الآلي معطل حالياً. عند تفعيله، يقوم النظام تلقائياً بإنشاء مجموعة جديدة بعد انقضاء الفترة المحددة من الموعد النهائي مع أرشفة المجموعة السابقة والحفاظ على سجلاتها التاريخية.
+                  </p>
+                )}
+              </div>
+            </Card>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-end gap-3 pt-6 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => safeNavigate('/admin/groups')}
+                disabled={isSubmitting}
+                className="font-bold text-xs"
+              >
+                إلغاء والعودة
+              </Button>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                isLoading={isSubmitting}
+                disabled={isSubmitting}
+                data-testid="save-group-btn"
+                className="font-bold text-xs"
+              >
+                {isCreateMode ? 'إنشاء وتفعيل المجموعة' : 'حفظ التعديلات'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : (
+        /* activeTab === 'general' */
+        <div className="space-y-6 sm:space-y-8">
+          {/* Submit Error Banner */}
+          {submitError && (
+            <Alert variant="danger" title="تعذر حفظ إعدادات المجموعة">
+              <p className="text-sm">{submitError}</p>
+            </Alert>
+          )}
+
+          {/* Basic Information Form */}
           <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-8" noValidate>
             {/* Section 1: Basic Information */}
             <Card className="p-6 sm:p-7 bg-surface border border-border rounded-2xl shadow-xs space-y-6">
@@ -767,355 +1295,209 @@ export const GroupEditorPage: React.FC = () => {
               </div>
             </Card>
 
-            {/* Section 2: Schedule & Deadline Policies */}
-            <Card className="p-6 sm:p-7 bg-surface border border-border rounded-2xl shadow-xs space-y-6">
-              <div className="flex items-center gap-3 pb-4 border-b border-border/70">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <Icon name="clock" size="md" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-text-heading">الجدول الزمني العام ومواعيد الاستحقاق</h2>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    تحديد تواريخ الانطلاق والانتهاء وسياسة الوصول للمحتوى بعد الموعد النهائي
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Start Date */}
-                  <div className="space-y-2">
-                    <label htmlFor="group-start-input" className="block text-xs font-bold text-text">
-                      تاريخ ووقت البداية العام <span className="text-danger">*</span>
-                    </label>
-                    <input
-                      id="group-start-input"
-                      type="datetime-local"
-                      value={startDateTime}
-                      onChange={(e) => handleFieldChange(setStartDateTime)(e.target.value)}
-                      className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all ${
-                        errors.startDateTime ? 'border-danger' : 'border-border'
-                      }`}
-                      data-testid="group-start-input"
-                    />
-                    {errors.startDateTime && (
-                      <span className="text-xs text-danger flex items-center gap-1 font-medium">
-                        <Icon name="alert" size="sm" />
-                        {errors.startDateTime}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Deadline Date */}
-                  <div className="space-y-2">
-                    <label htmlFor="group-deadline-input" className="block text-xs font-bold text-text">
-                      الموعد النهائي العام للاستحقاق <span className="text-danger">*</span>
-                    </label>
-                    <input
-                      id="group-deadline-input"
-                      type="datetime-local"
-                      value={deadlineDateTime}
-                      onChange={(e) => handleFieldChange(setDeadlineDateTime)(e.target.value)}
-                      className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all ${
-                        errors.deadlineDateTime ? 'border-danger' : 'border-border'
-                      }`}
-                      data-testid="group-deadline-input"
-                    />
-                    {errors.deadlineDateTime && (
-                      <span className="text-xs text-danger flex items-center gap-1 font-medium">
-                        <Icon name="alert" size="sm" />
-                        {errors.deadlineDateTime}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Post-deadline Policy */}
-                <div className="space-y-3 pt-3 border-t border-border/60">
-                  <div>
-                    <label className="block text-xs font-bold text-text">
-                      سياسة التعامل مع المحتوى بعد انتهاء الموعد النهائي
-                    </label>
-                    <p className="text-[11px] text-text-muted mt-0.5">
-                      تحدد ما إذا كان للمتدرب الحق في مراجعة الدروس بعد انتهاء الفترة التدريبية
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {[
-                      {
-                        id: 'keep_no_cert',
-                        title: 'إتاحة المحتوى بدون شهادة (الموصى به)',
-                        desc: 'يبقى المحتوى متاحاً للمطالعة والمراجعة ولا تُمنح شهادة اجتياز جديدة',
-                      },
-                      {
-                        id: 'hide',
-                        title: 'إخفاء المحتوى تماماً',
-                        desc: 'يُحجب المحتوى التدريبي ويختفي من قائمة الدورات لدى المتدرب فور انتهاء الموعد',
-                      },
-                    ].map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleFieldChange(setPostDeadlinePolicy)(p.id as PostDeadlinePolicy)}
-                        className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer ${
-                          postDeadlinePolicy === p.id
-                            ? 'border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary/30'
-                            : 'border-border bg-bg text-text-muted hover:bg-neutral-light hover:text-text'
-                        }`}
-                        data-testid={`post-deadline-${p.id}`}
-                      >
-                        <div className="font-bold text-xs">{p.title}</div>
-                        <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{p.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            {/* Section 3: Enrollment Policy & Capacity */}
-            <Card className="p-6 sm:p-7 bg-surface border border-border rounded-2xl shadow-xs space-y-6">
+            {/* Section 2: Training & Supervision Staff (طاقم التدريب والإشراف) */}
+            <Card
+              className="p-6 sm:p-7 bg-surface border border-border rounded-2xl shadow-xs space-y-6"
+              data-testid="group-staff-section"
+            >
               <div className="flex items-center gap-3 pb-4 border-b border-border/70">
                 <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
                   <Icon name="user" size="md" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-text-heading">سياسة الانضمام وسعة المجموعة</h2>
+                  <h2 className="text-base font-bold text-text-heading">طاقم التدريب والإشراف</h2>
                   <p className="text-xs text-text-muted mt-0.5">
-                    قواعد قبول المتدربين والحد الأقصى للسعة وصلاحية رمز الانضمام السريع
+                    تعيين المحاضر الأساسي والمحاضرين المساعدين للمجموعة التدريبية من حسابات المحاضرين المعتمدة
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-5">
-                {/* Enrollment Policy */}
+              <div className="space-y-6">
+                {/* 1. Primary Instructor Selection */}
                 <div className="space-y-3">
-                  <label className="block text-xs font-bold text-text">
-                    سياسة قبول المتدربين في المجموعة
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                    {[
-                      {
-                        id: 'open',
-                        title: 'انضمام تلقائي مفتوح',
-                        desc: 'ينضم المتدرب فور مسح رمز الاستجابة السريعة QR',
-                      },
-                      {
-                        id: 'approval_required',
-                        title: 'موافقة المشرف مطلوبة',
-                        desc: 'يُرسل المتدرب طلباً وينتظر اعتماد مشرف المجموعة',
-                      },
-                      {
-                        id: 'closed',
-                        title: 'انضمام مغلق / تعيين مباشر',
-                        desc: 'لا يُسمح بالانضمام الذاتي وتقتصر الإضافة على الإدارة',
-                      },
-                    ].map((pol) => (
-                      <button
-                        key={pol.id}
-                        type="button"
-                        onClick={() => handleFieldChange(setEnrollmentPolicy)(pol.id as GroupEnrollmentPolicy)}
-                        className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer ${
-                          enrollmentPolicy === pol.id
-                            ? 'border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary/30'
-                            : 'border-border bg-bg text-text-muted hover:bg-neutral-light hover:text-text'
-                        }`}
-                        data-testid={`enrollment-policy-${pol.id}`}
-                      >
-                        <div className="font-bold text-xs">{pol.title}</div>
-                        <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{pol.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-border/60">
-                  {/* Max Trainees Capacity */}
-                  <div>
-                    <FormInput
-                      label="الحد الأقصى لعدد المتدربين (السعة القصوى)"
-                      type="number"
-                      min="1"
-                      value={maxTrainees}
-                      onChange={(e) => handleFieldChange(setMaxTrainees)(e.target.value)}
-                      placeholder="اتركه فارغاً لسعة غير محدودة"
-                      helperText="يمنع النظام التسجيل الإضافي تلقائياً عند بلوغ السعة"
-                      error={errors.maxTrainees}
-                      id="group-capacity-input"
-                      data-testid="group-capacity-input"
-                    />
-                  </div>
-
-                  {/* Token Expiration */}
-                  <div className="space-y-2">
-                    <label htmlFor="group-token-expiry" className="block text-xs font-bold text-text">
-                      تاريخ انتهاء صلاحية رمز الانضمام (اختياري)
-                    </label>
-                    <input
-                      id="group-token-expiry"
-                      type="datetime-local"
-                      value={enrollmentExpiresAt}
-                      onChange={(e) => handleFieldChange(setEnrollmentExpiresAt)(e.target.value)}
-                      className="w-full px-3.5 py-2.5 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                      data-testid="group-token-expiry"
-                    />
-                    <span className="text-[11px] text-text-muted block">
-                      يُلغى قبول الرمز تلقائياً بعد هذا التاريخ
-                    </span>
-                  </div>
-                </div>
-
-                {/* Master Open/Close Toggle */}
-                <div className="flex items-center gap-3 pt-3 border-t border-border/60">
-                  <input
-                    type="checkbox"
-                    id="enrollment-open-toggle"
-                    checked={isEnrollmentOpen}
-                    onChange={(e) => handleFieldChange(setIsEnrollmentOpen)(e.target.checked)}
-                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer accent-primary"
-                    data-testid="enrollment-open-toggle"
-                  />
                   <label
-                    htmlFor="enrollment-open-toggle"
-                    className="text-xs font-medium text-text cursor-pointer select-none"
+                    htmlFor="primary-instructor-select"
+                    className="block text-xs font-bold text-text"
                   >
-                    فتح استقبال طلبات الانضمام فوراً عبر رمز الاستجابة السريعة QR
+                    المحاضر الأساسي للمجموعة
                   </label>
-                </div>
-              </div>
-            </Card>
+                  <select
+                    id="primary-instructor-select"
+                    value={primaryInstructorId}
+                    onChange={(e) => handlePrimaryInstructorChange(e.target.value)}
+                    className="w-full px-4 py-2.5 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                    data-testid="primary-instructor-select"
+                  >
+                    <option value="">— بدون محاضر أساسي محدد حالياً —</option>
+                    {candidateLecturers.map((lec) => (
+                      <option key={lec.id} value={lec.id}>
+                        {lec.name} — {lec.jobTitle} ({lec.department})
+                      </option>
+                    ))}
+                  </select>
 
-            {/* Section 4: Renewal Schedule */}
-            <Card className="p-6 sm:p-7 bg-surface border border-border rounded-2xl shadow-xs space-y-6">
-              <div className="flex items-center gap-3 pb-4 border-b border-border/70">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <Icon name="refresh" size="md" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-text-heading">جدول دورات التجديد الدوري للمجموعة</h2>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    تحديد نمط تكرار الدورات التدريبية بفترة محددة بالأيام وتتبع سجلات المتدربين لكل دورة
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-5 max-w-2xl">
-                {/* Automatic Renewal Toggle */}
-                <div className="flex items-center gap-3 bg-bg/60 p-4 rounded-xl border border-border">
-                  <input
-                    type="checkbox"
-                    id="auto-renewal-toggle"
-                    checked={autoRenewalEnabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      handleFieldChange(setAutoRenewalEnabled)(enabled);
-                      if (enabled && !renewalIntervalDays) {
-                        handleFieldChange(setRenewalIntervalDays)('30');
-                      }
-                    }}
-                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer accent-primary"
-                    data-testid="auto-renewal-toggle"
-                  />
-                  <div>
-                    <label
-                      htmlFor="auto-renewal-toggle"
-                      className="text-xs font-bold text-text cursor-pointer select-none block"
+                  {selectedPrimaryLecturer ? (
+                    <div
+                      className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-primary/30 bg-primary/5"
+                      data-testid="assigned-primary-instructor-card"
                     >
-                      تفعيل التجديد الدوري الآلي للمجموعة التدريبية
-                    </label>
-                    <span className="text-[11px] text-text-muted block mt-0.5">
-                      إنشاء دورة تجديد تدريبي جديدة تلقائياً عند حلول موعد الاستحقاق المجدول
-                    </span>
-                  </div>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0 font-bold text-sm">
+                          {selectedPrimaryLecturer.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-text-heading truncate">
+                              {selectedPrimaryLecturer.name}
+                            </span>
+                            <Badge variant="primary" size="sm">
+                              المحاضر الأساسي
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-text-muted truncate mt-0.5">
+                            {selectedPrimaryLecturer.jobTitle} • {selectedPrimaryLecturer.department}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePrimaryInstructorChange('')}
+                        data-testid="clear-primary-instructor-btn"
+                        className="text-xs text-danger hover:text-danger shrink-0"
+                      >
+                        إلغاء التعيين
+                      </Button>
+                    </div>
+                  ) : (
+                    <p
+                      className="text-xs text-text-muted bg-neutral-light/40 border border-border/60 rounded-xl px-3.5 py-2.5"
+                      data-testid="no-primary-instructor-notice"
+                    >
+                      لم يتم تعيين محاضر أساسي لهذه المجموعة بعد. اختر محاضراً من القائمة أعلاه.
+                    </p>
+                  )}
                 </div>
 
-                {autoRenewalEnabled ? (
-                  <div className="space-y-4 pr-1">
-                    <p className="text-xs text-text-muted leading-relaxed">
-                      حدد عدد الأيام الفاصلة بين دورات التجديد الآلية. يتم احتساب تاريخ بدء الدورة الجديدة تلقائياً بإضافة عدد الأيام المحدد إلى تاريخ بداية الدورة التدريبية الحالية (تاريخ البداية + N يوم).
-                    </p>
-
-                    {/* Presets and Custom Input */}
-                    <div className="space-y-2.5">
-                      <label htmlFor="renewal-interval-days-input" className="block text-xs font-bold text-text">
-                        فترة التجديد الدوري (بالأيام)
-                      </label>
-
-                      {/* Preset shortcuts */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[11px] font-semibold text-text-muted">خيارات سريعة:</span>
-                        {[30, 60, 90].map((preset) => {
-                          const isSelected = renewalIntervalDays === String(preset);
-                          return (
-                            <button
-                              key={preset}
-                              type="button"
-                              onClick={() => handleFieldChange(setRenewalIntervalDays)(String(preset))}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                isSelected
-                                  ? 'bg-primary text-white border-primary shadow-xs'
-                                  : 'bg-bg text-text hover:bg-neutral-light border-border'
-                              }`}
-                              data-testid={`preset-interval-${preset}`}
-                            >
-                              {preset} يوماً
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Manual numeric input */}
-                      <div className="max-w-xs mt-2">
-                        <input
-                          id="renewal-interval-days-input"
-                          type="number"
-                          min="1"
-                          max="730"
-                          step="1"
-                          value={renewalIntervalDays}
-                          onChange={(e) => handleFieldChange(setRenewalIntervalDays)(e.target.value)}
-                          placeholder="مثال: 17، 30، 45، 60، 90، 120"
-                          className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
-                            errors.renewalIntervalDays ? 'border-danger focus:ring-danger' : 'border-border'
-                          }`}
-                          data-testid="renewal-interval-days-input"
-                        />
-                        {errors.renewalIntervalDays && (
-                          <p className="text-[11px] text-danger mt-1 font-medium" data-testid="renewal-interval-error">
-                            {errors.renewalIntervalDays}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Calculated Next Renewal Date Live Preview */}
-                    {calculatedNextRenewalPreview && (
-                      <div
-                        className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 flex items-center gap-3 text-xs"
-                        data-testid="calculated-next-renewal-date-preview"
+                {/* 2. Assistant Lecturers Assignment */}
+                <div className="space-y-3 pt-4 border-t border-border/60">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <label
+                        htmlFor="assistant-lecturer-select"
+                        className="block text-xs font-bold text-text"
                       >
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                          <Icon name="calendar" size="sm" />
-                        </div>
-                        <div className="space-y-0.5">
-                          <div className="font-bold text-text">
-                            تاريخ التجديد الآلي القادم المحتسب:
-                            <span className="text-primary font-bold mr-1.5 underline decoration-primary/40 underline-offset-4">
-                              {calculatedNextRenewalPreview}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-text-muted">
-                            محسوب من تاريخ بداية الدورة بإضافة {renewalIntervalDays} يوماً تقويمياً.
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                        المحاضرون المساعدون
+                      </label>
+                      <p className="text-[11px] text-text-muted mt-0.5">
+                        يمكنك إسناد محاضر مساعد أو أكثر لمعاونة المحاضر الأساسي في متابعة المتدربين وإدارة محتوى المجموعة
+                      </p>
+                    </div>
+                    <Badge variant="neutral" size="sm">
+                      {assignedAssistantLecturers.length} محاضر مساعد
+                    </Badge>
                   </div>
-                ) : (
-                  <p className="text-[11px] text-text-muted leading-relaxed bg-neutral-light/40 p-3 rounded-xl border border-border/50">
-                    التجديد الدوري الآلي معطل حالياً. يمكنك بدء دورات التجديد يدوياً في أي وقت من تبويب المقررات التدريبية، مع الحفاظ الكامل على سجل المحاولات وتاريخ الإنجاز.
-                  </p>
-                )}
+
+                  {/* Search & Select to Add Assistant Lecturer */}
+                  <div className="space-y-2.5">
+                    {candidateLecturers.length > 3 && (
+                      <input
+                        type="search"
+                        value={lecturerSearchQuery}
+                        onChange={(e) => setLecturerSearchQuery(e.target.value)}
+                        placeholder="ابحث عن محاضر بالاسم أو الإدارة..."
+                        className="w-full px-3.5 py-2 text-xs bg-bg border border-border rounded-xl text-text placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary"
+                        data-testid="assistant-lecturer-search-input"
+                      />
+                    )}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                      <select
+                        id="assistant-lecturer-select"
+                        value={selectedAssistantToAdd}
+                        onChange={(e) => setSelectedAssistantToAdd(e.target.value)}
+                        className="flex-1 px-4 py-2.5 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        data-testid="assistant-lecturer-select"
+                      >
+                        <option value="">
+                          {availableAssistantLecturers.length > 0
+                            ? '— اختر محاضراً مساعداً لإضافته —'
+                            : '— لا يوجد محاضرون إضافيون متاحون للاختيار —'}
+                        </option>
+                        {availableAssistantLecturers.map((lec) => (
+                          <option key={lec.id} value={lec.id}>
+                            {lec.name} — {lec.jobTitle} ({lec.department})
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        leftIcon="plus"
+                        disabled={!selectedAssistantToAdd}
+                        onClick={() => handleAddAssistantLecturer()}
+                        data-testid="add-assistant-lecturer-btn"
+                        className="font-bold text-xs shrink-0"
+                      >
+                        إضافة محاضر مساعد
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Currently Assigned Assistant Lecturers List */}
+                  {assignedAssistantLecturers.length > 0 ? (
+                    <div
+                      className="space-y-2.5 pt-1"
+                      data-testid="assigned-assistant-lecturers-list"
+                    >
+                      {assignedAssistantLecturers.map((assistant) => (
+                        <div
+                          key={assistant.id}
+                          className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-border bg-bg"
+                          data-testid={`assigned-assistant-card-${assistant.id}`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0 font-bold text-xs">
+                              {assistant.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-bold text-text-heading truncate">
+                                  {assistant.name}
+                                </span>
+                                <Badge variant="info" size="sm">
+                                  المحاضر المساعد
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-text-muted truncate mt-0.5">
+                                {assistant.jobTitle}
+                                {assistant.department ? ` • ${assistant.department}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveAssistantLecturer(assistant.id)}
+                            data-testid={`remove-assistant-lecturer-${assistant.id}`}
+                            className="text-xs text-danger hover:text-danger shrink-0"
+                          >
+                            إزالة
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p
+                      className="text-xs text-text-muted bg-neutral-light/40 border border-border/60 rounded-xl px-3.5 py-2.5"
+                      data-testid="no-assistant-lecturers-notice"
+                    >
+                      لا يوجد محاضرون مساعدون مسندون لهذه المجموعة حالياً.
+                    </p>
+                  )}
+                </div>
               </div>
             </Card>
 
@@ -1145,9 +1527,9 @@ export const GroupEditorPage: React.FC = () => {
               </Button>
             </div>
           </form>
-    </>
-  )}
-</div>
+        </div>
+      )}
+    </div>
   );
 };
 

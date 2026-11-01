@@ -1,9 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/features/auth';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 
 export const Footer: React.FC = () => {
+  const { user } = useAuth();
+
   return (
     <footer className="mt-auto border-t border-border bg-surface/80 py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-text-muted">
@@ -22,13 +25,16 @@ export const Footer: React.FC = () => {
             المرحلة 2: هيكل التطبيق (v0.2.0)
           </Badge>
 
-          <Link
-            to="/design-system"
-            className="flex items-center gap-1.5 font-medium text-primary hover:text-primary-dark transition-colors"
-          >
-            <Icon name="palette" size="sm" />
-            <span>معمل التصميم</span>
-          </Link>
+          {/* Surface 11: Developer-only link */}
+          {user?.role === 'developer' && (
+            <Link
+              to="/design-system"
+              className="flex items-center gap-1.5 font-medium text-primary hover:text-primary-dark transition-colors"
+            >
+              <Icon name="palette" size="sm" />
+              <span>معمل التصميم</span>
+            </Link>
+          )}
 
           <span className="text-border">•</span>
           <span>جميع الحقوق محفوظة © 2026</span>

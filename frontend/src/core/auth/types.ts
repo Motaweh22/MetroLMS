@@ -6,6 +6,8 @@
  */
 
 export type UserRole =
+  | 'developer'
+  | 'super_admin'
   | 'admin'
   | 'assistant_admin'
   | 'lecturer'

@@ -92,6 +92,8 @@ export interface UserFilterParams {
  * Arabic display labels for user roles
  */
 export const USER_ROLE_LABELS_AR: Record<UserRole, string> = {
+  developer: 'مطور',
+  super_admin: 'مسؤول أعلى',
   admin: 'مدير',
   assistant_admin: 'مساعد مدير',
   lecturer: 'محاضر',

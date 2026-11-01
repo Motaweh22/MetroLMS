@@ -12,7 +12,7 @@ import { SYNTHETIC_DEMO_ACCOUNTS } from '@/core/auth/demoAccounts';
  * 3. Learning metrics (learning hours, completed courses) are NOT duplicated here;
  *    they will be dynamically computed in Phase 3.
  */
-export const INITIAL_MANAGED_USERS: ManagedUserDTO[] = [
+export const BASE_MANAGED_USERS: ManagedUserDTO[] = [
   // ── 3 Synthetic Active Demo Personas ─────────────────────────────────
   {
     id: SYNTHETIC_DEMO_ACCOUNTS.admin.user.id,
@@ -98,7 +98,7 @@ export const INITIAL_MANAGED_USERS: ManagedUserDTO[] = [
     status: 'active',
     createdAt: '2025-01-15',
     lastLogin: '2025-09-20T10:30:00',
-    legacyAliases: ['usr003'],
+    legacyAliases: ['usr003', 'usr_lect_001'],
   },
   {
     id: 'USR004',
@@ -229,89 +229,76 @@ export const INITIAL_MANAGED_USERS: ManagedUserDTO[] = [
 ];
 
 /**
- * Explicit map of legacy and alternative identifiers to canonical user IDs.
- * Resolved deterministically and case-insensitively.
+ * Synthetic Developer Fixture Persona (MFR-45 / Surface 1–11)
+ *
+ * STRICT GATING RULE:
+ * This fixture is strictly gated behind `import.meta.env.DEV === true`.
+ * In production builds (Vite production mode), `import.meta.env.DEV` compiles to `false`
+ * and Rollup dead-code elimination permanently eliminates the object literal from production bundles.
  */
-export const USER_ALIAS_MAP: Record<string, string> = {
-  // Lowercased legacy IDs
-  usr001: 'USR001',
-  usr002: 'USR002',
-  usr003: 'USR003',
-  usr004: 'USR004',
-  usr005: 'USR005',
-  usr006: 'USR006',
-  usr007: 'USR007',
-  usr008: 'USR008',
-  usr009: 'USR009',
-  usr010: 'USR010',
-  usr011: 'USR011',
-  usr012: 'USR012',
-
-  // Uppercased legacy IDs
-  USR001: 'USR001',
-  USR002: 'USR002',
-  USR003: 'USR003',
-  USR004: 'USR004',
-  USR005: 'USR005',
-  USR006: 'USR006',
-  USR007: 'USR007',
-  USR008: 'USR008',
-  USR009: 'USR009',
-  USR010: 'USR010',
-  USR011: 'USR011',
-  USR012: 'USR012',
-  USR016: 'USR016',
-  usr016: 'USR016',
-  assistant_admin_demo: 'USR016',
-  USR017: 'USR017',
-  usr017: 'USR017',
-  assistant_lecturer_demo: 'USR017',
-
-  // Active demo personas (canonical IDs map to themselves)
-  usr_admin_001: 'usr_admin_001',
-  usr_lect_002: 'usr_lect_002',
-  usr_trainee_003: 'usr_trainee_003',
-};
+export const SYNTHETIC_DEVELOPER_USER: ManagedUserDTO | null = import.meta.env.DEV
+  ? {
+      id: 'USR_DEV_001',
+      name: 'مطور النظام',
+      username: 'developer_internal',
+      email: 'developer.metro@internal.local',
+      phone: '01000000000',
+      jobTitle: 'كبير مهندسي النظام',
+      department: 'هندسة البرمجيات والتطوير',
+      role: 'developer',
+      status: 'active',
+      createdAt: '2025-01-01T00:00:00Z',
+      lastLogin: '2026-03-01T08:00:00Z',
+      legacyAliases: ['usr_dev_001'],
+    }
+  : null;
 
 /**
- * Resolves any legacy identifier or canonical ID to its canonical directory user ID.
- * Case-insensitive lookup with collision detection.
+ * Synthetic Super Admin Test Persona (OD-01 / INV-R2 Verification)
+ *
+ * Gated strictly to development and testing environments.
  */
-export function resolveCanonicalUserId(identifier: string): string {
-  if (!identifier) return identifier;
-  const trimmed = identifier.trim();
-  const lower = trimmed.toLowerCase();
-
-  // 1. Direct match in alias map (case-insensitive)
-  for (const [alias, canonicalId] of Object.entries(USER_ALIAS_MAP)) {
-    if (alias.toLowerCase() === lower) {
-      return canonicalId;
+export const SYNTHETIC_SUPER_ADMIN_USER: ManagedUserDTO | null = import.meta.env.DEV
+  ? {
+      id: 'USR_SUPER_001',
+      name: 'م. ياسين رضوان',
+      username: 'super_admin_demo',
+      email: 'superadmin@cairo-metro.com',
+      phone: '01000000001',
+      jobTitle: 'المسؤول الأعلى للأنظمة',
+      department: 'الإدارة العليا',
+      role: 'super_admin',
+      status: 'active',
+      createdAt: '2025-01-01T00:00:00Z',
+      lastLogin: '2026-03-01T08:00:00Z',
+      legacyAliases: ['usr_super_001'],
     }
+  : null;
+
+/**
+ * Centrally Managed Canonical Users Fixture Dataset.
+ * In development: includes base users + synthetic developer + super admin.
+ * In production: strictly limited to base users; zero synthetic developer/super admin records.
+ */
+export const INITIAL_MANAGED_USERS: ManagedUserDTO[] = [
+  ...BASE_MANAGED_USERS,
+  ...(import.meta.env.DEV && SYNTHETIC_DEVELOPER_USER && SYNTHETIC_SUPER_ADMIN_USER
+    ? [SYNTHETIC_DEVELOPER_USER, SYNTHETIC_SUPER_ADMIN_USER]
+    : []),
+];
+
+/**
+ * Test helper to resolve managed users fixture for a target environment mode
+ * without mutating Vite runtime globals.
+ */
+export function getManagedUsersFixture(
+  envMode: 'development' | 'production' = import.meta.env.DEV ? 'development' : 'production'
+): ManagedUserDTO[] {
+  if (envMode === 'development' && SYNTHETIC_DEVELOPER_USER && SYNTHETIC_SUPER_ADMIN_USER) {
+    return [...BASE_MANAGED_USERS, SYNTHETIC_DEVELOPER_USER, SYNTHETIC_SUPER_ADMIN_USER];
   }
-
-  // 2. Direct match against canonical user list
-  const foundUser = INITIAL_MANAGED_USERS.find(
-    (u) =>
-      u.id.toLowerCase() === lower ||
-      u.username.toLowerCase() === lower ||
-      u.legacyAliases?.some((a) => a.toLowerCase() === lower)
-  );
-
-  if (foundUser) {
-    return foundUser.id;
-  }
-
-  // 3. Direct match against synthetic demo accounts
-  const demoAccount = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find(
-    (acc) =>
-      acc.user.id.toLowerCase() === lower ||
-      acc.credentials.email.toLowerCase() === lower ||
-      (acc.user.email && acc.user.email.toLowerCase() === lower)
-  );
-  if (demoAccount) {
-    return demoAccount.user.id;
-  }
-
-  // 4. Unresolved identifier is returned trimmed
-  return trimmed;
+  return [...BASE_MANAGED_USERS];
 }
+
+// Re-export canonical identity definitions from core domain
+export { USER_ALIAS_MAP, resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';

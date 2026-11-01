@@ -137,7 +137,7 @@ describe('Global Loading System, Error Pages & Application Integration', () => {
       expect(screen.getByText(/جميع الحقوق محفوظة © 2026/i)).toBeInTheDocument();
     });
 
-    it('renders ForbiddenPage (403) with user role and return action', () => {
+    it('renders ForbiddenPage (403) with user role and return action', async () => {
       authStorage.setSession({
         user: SYNTHETIC_DEMO_ACCOUNTS.trainee.user,
         token: 'token-trainee',
@@ -152,10 +152,12 @@ describe('Global Loading System, Error Pages & Application Integration', () => {
         </AuthProvider>
       );
 
-      expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
-      expect(screen.getByText(/غير مصرح بالوصول \(403\)/i)).toBeInTheDocument();
-      expect(screen.getByText(/ليس لديك الصلاحيات الكافية للوصول/i)).toBeInTheDocument();
-      expect(screen.getByText(/متدرب فني/i)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('forbidden-page')).toBeInTheDocument();
+        expect(screen.getByText(/غير مصرح بالوصول \(403\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/ليس لديك الصلاحيات الكافية للوصول/i)).toBeInTheDocument();
+        expect(screen.getByText(/متدرب فني/i)).toBeInTheDocument();
+      });
       expect(screen.getByRole('link', { name: /العودة إلى لوحة المتابعة/i })).toBeInTheDocument();
     });
 

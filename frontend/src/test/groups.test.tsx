@@ -62,9 +62,11 @@ describe('Increment 7: Trainee Groups & Authorization Verification', () => {
 
     expect(screen.getByText('مجموعاتي والبرامج التدريبية')).toBeInTheDocument();
     // Trainee is a member of GRP-101
-    expect(
-      screen.getByText('برنامج تشغيل وتأمين الخط الثاني والتحكم الميداني — الدفعة 42')
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByText('برنامج تشغيل وتأمين الخط الثاني والتحكم الميداني — الدفعة 42')
+      ).toBeInTheDocument();
+    });
     expect(
       screen.getAllByText(/عرض تفاصيل المجموعة والمحتوى/i).length
     ).toBeGreaterThan(0);

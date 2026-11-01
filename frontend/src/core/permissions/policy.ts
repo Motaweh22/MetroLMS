@@ -1,5 +1,5 @@
 import type { UserRole } from '@/core/auth/types';
-import { resolveCanonicalUserId } from '@/mocks/fixtures/userDirectoryFixtures';
+import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import type {
   SystemCapability,
   PermissionCheckResult,
@@ -11,9 +11,119 @@ import { ROLE_CANONICAL_LABELS_AR } from './types';
 /**
  * Exact Fixed Baseline Role Capabilities Matrix
  * Grounded in Section 3 of docs/frontend/authorization-and-permissions-design.md
- * 4 Canonical System Roles Only.
+ * Six Canonical System Roles.
  */
 export const ROLE_DEFAULT_CAPABILITIES: Record<UserRole, Partial<Record<SystemCapability, boolean>>> = {
+  developer: {
+    // 1. User Directory
+    'users.view_directory': true,
+    'users.view_transcript': true,
+    'users.export_roster': true,
+    // 2. Account Lifecycle
+    'users.create': true,
+    'users.change_role': true,
+    'users.change_status': true,
+    'users.delete': true,
+    // 3. Group Management
+    'groups.create': true,
+    'groups.edit_config': true,
+    'groups.archive': true,
+    'groups.manage_members': true,
+    // 4. QR & Join Requests
+    'groups.generate_qr': true,
+    'groups.review_join_requests': true,
+    // 5. Group Materials
+    'materials.manage_folders': true,
+    'materials.upload_files': true,
+    'materials.delete_files': true,
+    'materials.manage_meetings': true,
+    // 6. Course Operations
+    'courses.create': true,
+    'courses.edit_metadata': true,
+    'courses.publish': true,
+    // 7. Curriculum Authoring
+    'courses.edit_curriculum': true,
+    'courses.upload_lectures': true,
+    'courses.delete_lectures': true,
+    // 8. Quality & Approvals
+    'reviews.submit_course': true,
+    'reviews.decide_course': true,
+    // 9. Trainee Access
+    'learning.access_assigned': true,
+    'learning.self_enroll': false,
+    // 10. Permissions & Delegation
+    'permissions.view_matrix': true,
+    'permissions.configure_roles': true,
+    'permissions.configure_users': true,
+    'permissions.manage_delegation': true,
+    'permissions.configure_departments': true,
+    // 11. Audit & Compliance
+    'audit.view_system_logs': true,
+    // 12. Approvals Management
+    'approvals.submit_request': false,
+    'approvals.decide_request': true,
+    // 13. Comments Moderation
+    'comments.moderate': true,
+    'comments.delete': true,
+    'comments.ignore_report': true,
+    'comments.toggle': true,
+  },
+
+  super_admin: {
+    // 1. User Directory
+    'users.view_directory': true,
+    'users.view_transcript': true,
+    'users.export_roster': true,
+    // 2. Account Lifecycle
+    'users.create': true,
+    'users.change_role': true,
+    'users.change_status': true,
+    'users.delete': true,
+    // 3. Group Management
+    'groups.create': true,
+    'groups.edit_config': true,
+    'groups.archive': true,
+    'groups.manage_members': true,
+    // 4. QR & Join Requests
+    'groups.generate_qr': true,
+    'groups.review_join_requests': true,
+    // 5. Group Materials
+    'materials.manage_folders': true,
+    'materials.upload_files': true,
+    'materials.delete_files': true,
+    'materials.manage_meetings': true,
+    // 6. Course Operations
+    'courses.create': true,
+    'courses.edit_metadata': true,
+    'courses.publish': true,
+    // 7. Curriculum Authoring
+    'courses.edit_curriculum': true,
+    'courses.upload_lectures': true,
+    'courses.delete_lectures': true,
+    // 8. Quality & Approvals
+    'reviews.submit_course': true,
+    'reviews.decide_course': true,
+    // 9. Trainee Access
+    'learning.access_assigned': true,
+    'learning.self_enroll': false,
+    // 10. Permissions & Delegation
+    'permissions.view_matrix': true,
+    'permissions.configure_roles': true,
+    'permissions.configure_users': true,
+    'permissions.manage_delegation': true,
+    'permissions.configure_departments': true,
+    // 11. Audit & Compliance
+    'audit.view_system_logs': true,
+    // 12. Approvals Management
+    'approvals.submit_request': false,
+    'approvals.decide_request': true,
+    // 13. Comments Moderation
+    'comments.moderate': true,
+    'comments.delete': true,
+    'comments.ignore_report': true,
+    'comments.toggle': true,
+  },
+
   admin: {
     // 1. User Directory
     'users.view_directory': true,
@@ -150,6 +260,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<UserRole, Partial<Record<SystemCa
     // 6. Course Operations (Restricted by default, grantable via individual override)
     'courses.create': false,
     'courses.edit_metadata': false,
+    'courses.publish': false,
     // 7. Curriculum Authoring (Restricted by default, grantable via individual override)
     'courses.edit_curriculum': false,
     'courses.upload_lectures': false,
@@ -204,6 +315,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<UserRole, Partial<Record<SystemCa
     // 6. Course Operations
     'courses.create': false,
     'courses.edit_metadata': false,
+    'courses.publish': false,
     // 7. Curriculum Authoring
     'courses.edit_curriculum': false,
     'courses.upload_lectures': false,
@@ -313,6 +425,92 @@ export const ROLE_CAPABILITY_CEILINGS: Record<UserRole, ReadonlySet<SystemCapabi
 
   // System Admin: Highest ordinary authority across all capabilities, subject to immutable safety invariants.
   admin: new Set<SystemCapability>([
+    'users.view_directory',
+    'users.view_transcript',
+    'users.export_roster',
+    'users.create',
+    'users.change_role',
+    'users.change_status',
+    'users.delete',
+    'groups.create',
+    'groups.edit_config',
+    'groups.archive',
+    'groups.manage_members',
+    'groups.generate_qr',
+    'groups.review_join_requests',
+    'materials.manage_folders',
+    'materials.upload_files',
+    'materials.delete_files',
+    'materials.manage_meetings',
+    'courses.create',
+    'courses.edit_metadata',
+    'courses.edit_curriculum',
+    'courses.upload_lectures',
+    'courses.delete_lectures',
+    'courses.publish',
+    'reviews.submit_course',
+    'reviews.decide_course',
+    'learning.access_assigned',
+    'learning.self_enroll',
+    'permissions.view_matrix',
+    'permissions.configure_roles',
+    'permissions.configure_users',
+    'permissions.manage_delegation',
+    'permissions.configure_departments',
+    'audit.view_system_logs',
+    'approvals.submit_request',
+    'approvals.decide_request',
+    'comments.moderate',
+    'comments.delete',
+    'comments.ignore_report',
+    'comments.toggle',
+  ]),
+
+  // Super Admin: Highest normal administrative authority; sovereign capability ceiling.
+  super_admin: new Set<SystemCapability>([
+    'users.view_directory',
+    'users.view_transcript',
+    'users.export_roster',
+    'users.create',
+    'users.change_role',
+    'users.change_status',
+    'users.delete',
+    'groups.create',
+    'groups.edit_config',
+    'groups.archive',
+    'groups.manage_members',
+    'groups.generate_qr',
+    'groups.review_join_requests',
+    'materials.manage_folders',
+    'materials.upload_files',
+    'materials.delete_files',
+    'materials.manage_meetings',
+    'courses.create',
+    'courses.edit_metadata',
+    'courses.edit_curriculum',
+    'courses.upload_lectures',
+    'courses.delete_lectures',
+    'courses.publish',
+    'reviews.submit_course',
+    'reviews.decide_course',
+    'learning.access_assigned',
+    'learning.self_enroll',
+    'permissions.view_matrix',
+    'permissions.configure_roles',
+    'permissions.configure_users',
+    'permissions.manage_delegation',
+    'permissions.configure_departments',
+    'audit.view_system_logs',
+    'approvals.submit_request',
+    'approvals.decide_request',
+    'comments.moderate',
+    'comments.delete',
+    'comments.ignore_report',
+    'comments.toggle',
+  ]),
+
+  // Developer: Sovereign hidden system role; full ceiling across all currently defined SystemCapability values.
+  developer: new Set<SystemCapability>([
     'users.view_directory',
     'users.view_transcript',
     'users.export_roster',
@@ -509,12 +707,296 @@ export function validateAdminGovernanceIntegrity(
   return { valid: true, viableAdminCount: viableCount };
 }
 
+export type AccountManagementAction =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'change_role'
+  | 'suspend'
+  | 'activate'
+  | 'delete'
+  | 'manage_permissions';
+
+export interface ActionToCapabilityOptions {
+  subsystem?: 'permissions' | 'delegation';
+  isDelegation?: boolean;
+  scope?: 'directory' | 'transcript';
+  isTranscript?: boolean;
+}
+
+/**
+ * Maps an AccountManagementAction or raw action string to its canonical SystemCapability key.
+ * Fails closed (returns null) for unknown operations or invalid capability keys.
+ */
+export function mapActionToSystemCapability(
+  action: AccountManagementAction | SystemCapability | string,
+  options?: ActionToCapabilityOptions
+): SystemCapability | null {
+  if (!action || typeof action !== 'string') {
+    return null;
+  }
+
+  switch (action) {
+    case 'create':
+      return 'users.create';
+    case 'change_role':
+      return 'users.change_role';
+    case 'suspend':
+    case 'activate':
+      return 'users.change_status';
+    case 'delete':
+      return 'users.delete';
+    case 'manage_permissions':
+      if (options?.isDelegation || options?.subsystem === 'delegation') {
+        return 'permissions.manage_delegation';
+      }
+      return 'permissions.configure_users';
+    case 'view':
+      if (options?.isTranscript || options?.scope === 'transcript') {
+        return 'users.view_transcript';
+      }
+      return 'users.view_directory';
+    case 'edit':
+      // 'users.edit' is not a canonical operational capability.
+      // Profile editing is governed by self-profile boundaries and is not an authorized delegable capability.
+      // Fails closed by returning null.
+      return null;
+    default:
+      // If action is already a valid canonical SystemCapability, return it
+      if (ROLE_CAPABILITY_CEILINGS.developer.has(action as SystemCapability)) {
+        return action as SystemCapability;
+      }
+      // Fails closed for unknown operation or invalid capability string
+      return null;
+  }
+}
+
+export interface AccountManagementContext {
+  isSelf?: boolean;
+  requestedNewRole?: UserRole;
+  hasDelegation?: boolean;
+}
+
+/**
+ * Evaluates whether an actor with actorRole is authorized to perform action on a target account with targetRole.
+ * Grounded in Section 2.2 (Account Management Authorization Matrix) and Section 2.3 (Invariants INV-R1 through INV-R8)
+ * of docs/backend/pre-backend-migration-remediation-roadmap.md (Revision 5).
+ */
+export function canActorManageTargetAccount(
+  actorRole: UserRole,
+  targetRole: UserRole,
+  action: AccountManagementAction,
+  context?: AccountManagementContext
+): { allowed: boolean; code?: string; messageAr?: string } {
+  // 1. Invariant INV-R6: Anti-Self-Dealing
+  // No user may delete, suspend, change the role of, or grant permissions/delegation to their own account.
+  if (context?.isSelf) {
+    if (action === 'delete' || action === 'suspend' || action === 'change_role' || action === 'manage_permissions') {
+      return {
+        allowed: false,
+        code: 'INVARIANT_SELF_MUTATION_PROHIBITED',
+        messageAr: 'غير مصرح: لا يمكن للمستخدم حذف أو إيقاف حسابه الذاتي أو تعديل رتبته أو منح نفسه صلاحيات',
+      };
+    }
+    if (action === 'edit' || action === 'view') {
+      return { allowed: true };
+    }
+    if (action === 'create') {
+      return {
+        allowed: false,
+        code: 'INVARIANT_SELF_MUTATION_PROHIBITED',
+        messageAr: 'غير مصرح: لا يمكن للمستخدم إنشاء حساب ذاتي',
+      };
+    }
+  }
+
+  // 2. Invariant INV-R1: Developer Account Protection
+  // - No API endpoint or in-app form may create or mutate developer accounts (Bootstrap CLI only)
+  // - Non-developers querying developer accounts return uniform 404 (INV-R8)
+  if (targetRole === 'developer') {
+    if (action === 'create') {
+      return {
+        allowed: false,
+        code: 'INVARIANT_DEVELOPER_IMMUTABLE',
+        messageAr: 'غير مصرح: لا يمكن إنشاء أو ترقية أو تعديل حسابات المطورين برمجياً عبر إدارة المستخدمين',
+      };
+    }
+    if (action === 'view') {
+      if (actorRole === 'developer') {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        code: 'INVARIANT_DEVELOPER_IMMUTABLE',
+        messageAr: 'المستخدم المطلوب غير موجود في دليل النظام',
+      };
+    }
+    // All other operations on developer accounts in-app are forbidden
+    return {
+      allowed: false,
+      code: 'INVARIANT_DEVELOPER_IMMUTABLE',
+      messageAr: 'غير مصرح: لا يمكن إنشاء أو ترقية أو تعديل حسابات المطورين برمجياً عبر إدارة المستخدمين',
+    };
+  }
+
+  // Dual-State check: attempting to assign developer role to any account
+  if (action === 'change_role' && context?.requestedNewRole === 'developer') {
+    return {
+      allowed: false,
+      code: 'INVARIANT_DEVELOPER_IMMUTABLE',
+      messageAr: 'غير مصرح: لا يمكن إنشاء أو ترقية أو تعديل حسابات المطورين برمجياً عبر إدارة المستخدمين',
+    };
+  }
+
+  // 3. Lecturer and User roles cannot perform user management actions
+  if (actorRole === 'lecturer' || actorRole === 'user') {
+    if (action === 'view') {
+      if (actorRole === 'lecturer' && (targetRole === 'lecturer' || targetRole === 'user')) {
+        return { allowed: true };
+      }
+      if (actorRole === 'user' && targetRole === 'user' && context?.isSelf) {
+        return { allowed: true };
+      }
+      if (targetRole === 'lecturer' && action === 'view') {
+        return { allowed: true }; // Public bio
+      }
+      return {
+        allowed: false,
+        code: 'INVARIANT_ROLE_TRANSITION_UNAUTHORIZED',
+        messageAr: 'غير مصرح بعرض هذا الحساب',
+      };
+    }
+    return {
+      allowed: false,
+      code: 'INVARIANT_ROLE_TRANSITION_UNAUTHORIZED',
+      messageAr: 'غير مصرح: هذه العملية مخصصة لمديري النظام ولا يملك هذا الدور صلاحية إدارة المستخدمين',
+    };
+  }
+
+  // 4. Invariant INV-R7: Dual-State Role Transition Check
+  // Validates actor authority against both current role and requested new role
+  if (action === 'change_role' && context?.requestedNewRole) {
+    const newRoleCreationCheck = canActorManageTargetAccount(actorRole, context.requestedNewRole, 'create', {
+      hasDelegation: context.hasDelegation,
+    });
+    if (!newRoleCreationCheck.allowed) {
+      return {
+        allowed: false,
+        code: newRoleCreationCheck.code === 'INVARIANT_DEVELOPER_IMMUTABLE'
+          ? 'INVARIANT_DEVELOPER_IMMUTABLE'
+          : 'INVARIANT_ROLE_TRANSITION_UNAUTHORIZED',
+        messageAr: 'غير مصرح: لا يملك المنفذ صلاحية الترقية إلى الرتبة المستهدفة',
+      };
+    }
+  }
+
+  // 5. Target: super_admin (INV-R2, OD-01, D-04)
+  if (targetRole === 'super_admin') {
+    if (action === 'view') {
+      if (['developer', 'super_admin', 'admin', 'assistant_admin'].includes(actorRole)) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        code: 'INVARIANT_SUPER_ADMIN_EXCLUSIVITY',
+        messageAr: 'غير مصرح بعرض حسابات المسؤول الأعلى',
+      };
+    }
+
+    // Only developer can mutate super_admin (OD-01 confirms peer super_admin is read-only)
+    if (actorRole === 'developer') {
+      return { allowed: true };
+    }
+
+    return {
+      allowed: false,
+      code: 'INVARIANT_SUPER_ADMIN_EXCLUSIVITY',
+      messageAr: 'غير مصرح: إدارة حسابات المسؤول الأعلى محجوزة حصراً للمطور؛ لا يملك المسؤول الأعلى صلاحية تعديل حسابات النظراء',
+    };
+  }
+
+  // 6. Target: admin (INV-R3)
+  if (targetRole === 'admin') {
+    if (action === 'view') {
+      if (['developer', 'super_admin', 'admin', 'assistant_admin'].includes(actorRole)) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        code: 'INVARIANT_ADMIN_PROTECTED',
+        messageAr: 'غير مصرح بعرض حسابات مديري النظام',
+      };
+    }
+
+    // Only developer and super_admin can mutate admin accounts
+    if (actorRole === 'developer' || actorRole === 'super_admin') {
+      return { allowed: true };
+    }
+
+    if (actorRole === 'admin') {
+      return {
+        allowed: false,
+        code: 'INVARIANT_ADMIN_PROTECTED',
+        messageAr: 'غير مصرح: إدارة حسابات مديري النظام محجوزة للمطور والمسؤول الأعلى فقط؛ لا يملك مدير النظام صلاحية تعديل حسابات النظراء',
+      };
+    }
+
+    return {
+      allowed: false,
+      code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
+      messageAr: 'غير مصرح: لا يملك مساعد مدير النظام صلاحية إدارة حسابات مديري النظام',
+    };
+  }
+
+  // 7. Target: assistant_admin (INV-R4, INV-R5, D-05, OD-02)
+  if (targetRole === 'assistant_admin') {
+    if (action === 'view') {
+      return { allowed: true };
+    }
+
+    // developer, super_admin, admin can manage assistant_admin (including permanent deletion per OD-02)
+    if (['developer', 'super_admin', 'admin'].includes(actorRole)) {
+      return { allowed: true };
+    }
+
+    // assistant_admin cannot manage assistant_admin (INV-R5)
+    return {
+      allowed: false,
+      code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
+      messageAr: 'غير مصرح: لا يملك مساعد مدير النظام صلاحية إدارة حسابات المساعدين أو الرتب الأعلى',
+    };
+  }
+
+  // 8. Target: lecturer or user (INV-R4, INV-R5)
+  if (targetRole === 'lecturer' || targetRole === 'user') {
+    if (action === 'view') {
+      return { allowed: true };
+    }
+
+    // developer, super_admin, admin have direct execution (INV-R4)
+    if (['developer', 'super_admin', 'admin'].includes(actorRole)) {
+      return { allowed: true };
+    }
+
+    // assistant_admin can manage lecturer and user (mode A: requires approval by default, direct if delegated)
+    if (actorRole === 'assistant_admin') {
+      return { allowed: true };
+    }
+  }
+
+  return {
+    allowed: false,
+    code: 'INVARIANT_ROLE_TRANSITION_UNAUTHORIZED',
+    messageAr: 'غير مصرح بتنفيذ هذه العملية',
+  };
+}
+
 /**
  * Evaluates whether an action violates any Protected Administrator Invariants
  */
 export function evaluateProtectedInvariant(
   actor: { id: string; role: UserRole },
-  capability: SystemCapability,
+  capability: SystemCapability | AccountManagementAction | string,
   context?: EvaluationContext,
   allUsers?: Array<{ id: string; role: UserRole; status?: string }>,
   governanceOptions?: {
@@ -522,84 +1004,189 @@ export function evaluateProtectedInvariant(
     userOverrides?: Record<string, UserPermissionOverride>;
   }
 ): { allowed: boolean; code?: string; messageAr?: string } {
-  // Invariant 1: Assistant Administrator can NEVER mutate or decide operations on a System Administrator,
-  // and can NEVER create a new System Administrator account.
-  if (actor.role === 'assistant_admin') {
-    if (capability === 'users.create' && (context?.targetRole === 'admin' || context?.targetUser?.role === 'admin')) {
-      return {
-        allowed: false,
-        code: 'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN',
-        messageAr: 'غير مصرح: لا يمكن لمساعد مدير النظام إنشاء حساب برتبة مدير نظام سواء بطلب اعتماد أو تفويض مباشر',
-      };
-    }
-    if (context?.targetUser?.role === 'admin') {
-      if (['users.change_role', 'users.change_status', 'users.delete', 'approvals.decide_request'].includes(capability)) {
-        return {
-          allowed: false,
-          code: 'INVARIANT_ASSISTANT_CANNOT_MUTATE_ADMIN',
-          messageAr: 'غير مصرح: لا يمكن لمساعد مدير النظام تعديل أو إيقاف أو حذف حساب مدير النظام أو البت في طلب يتعلق به',
-        };
-      }
-    }
-  }
+  const actorCanonical = resolveCanonicalUserId(actor.id)?.toLowerCase();
+  const targetCanonical = context?.targetUser ? resolveCanonicalUserId(context.targetUser.id)?.toLowerCase() : undefined;
+  const isSelf = !!(actorCanonical && targetCanonical && actorCanonical === targetCanonical);
+  const hasDelegation = context?.hasDelegationBypass;
 
-  // Invariant 2: Self-Mutation Prohibition & Peer Verification Safeguard
-  // A System Administrator cannot demote, suspend, or delete their own account.
-  // Sensitive account mutations targeting an Admin require peer administrator action.
-  if (actor.role === 'admin' && context?.targetUser) {
-    const actorCanonical = resolveCanonicalUserId(actor.id);
-    const targetCanonical = resolveCanonicalUserId(context.targetUser.id);
-
-    if (actorCanonical && targetCanonical && actorCanonical === targetCanonical) {
-      if (capability === 'users.delete') {
-        return {
-          allowed: false,
-          code: 'INVARIANT_SELF_MUTATION_PROHIBITED',
-          messageAr: 'غير مصرح: لا يمكن لمدير النظام حذف حسابه الذاتي',
-        };
-      }
-      if (capability === 'users.change_role' && (!context.targetRole || context.targetRole !== 'admin')) {
-        return {
-          allowed: false,
-          code: 'INVARIANT_SELF_MUTATION_PROHIBITED',
-          messageAr: 'غير مصرح: لا يمكن لمدير النظام تخفيض رتبة حسابه الذاتي؛ تتطلب العملية تدقيقاً من مدير نظام نظير',
-        };
-      }
-      if (capability === 'users.change_status' && (!context.targetStatus || context.targetStatus === 'suspended')) {
-        return {
-          allowed: false,
-          code: 'INVARIANT_SELF_MUTATION_PROHIBITED',
-          messageAr: 'غير مصرح: لا يمكن لمدير النظام إيقاف حسابه الذاتي',
-        };
-      }
+  // AccountManagementAction 'edit': evaluates directly via 6×6 Account Management Matrix
+  // Grounded in Revision 5 §2.2 row 'Edit Account Details' (Matrix-Only Authority)
+  if (capability === 'edit') {
+    const targetRole = context?.targetRole || context?.targetUser?.role;
+    if (targetRole) {
+      return canActorManageTargetAccount(actor.role, targetRole, 'edit', {
+        isSelf,
+        hasDelegation,
+      });
     }
-  }
-
-  // Invariant 2b: Protected Administrator Deletion
-  // An existing system-administrator account cannot be deleted by anyone through ordinary user management.
-  if (capability === 'users.delete' && context?.targetUser?.role === 'admin') {
+    if (isSelf) {
+      return { allowed: true };
+    }
     return {
       allowed: false,
-      code: 'INVARIANT_ADMIN_ACCOUNT_NON_DELETABLE',
-      messageAr: 'غير مصرح: حسابات مديري النظام محصنة ولا يمكن حذفها نهائياً عبر إدارة المستخدمين',
+      code: 'INVARIANT_CONTEXT_MISSING',
+      messageAr: 'غير مصرح: لا يمكن تنفيذ تعديل الحساب دون تمرير سياق المستخدم المستهدف',
     };
   }
 
-  // Invariant 3: Last Active Administrator Lockout Prevention
+  const canonicalCap = mapActionToSystemCapability(capability, {
+    isDelegation: context?.isDelegation,
+    isTranscript: context?.isTranscript,
+    subsystem: context?.subsystem,
+    scope: context?.scope,
+  });
+
+  if (!canonicalCap) {
+    return {
+      allowed: false,
+      code: 'INVARIANT_UNKNOWN_CAPABILITY',
+      messageAr: 'غير مصرح: العملية أو الصلاحية المطلوبة غير معرفة في النظام',
+    };
+  }
+
+  // Invariant Fail-Safe: Guardrail when sensitive target context is missing
+  if (['users.change_role', 'users.change_status', 'users.delete'].includes(canonicalCap)) {
+    if (!context?.targetUser) {
+      return {
+        allowed: false,
+        code: 'INVARIANT_CONTEXT_MISSING',
+        messageAr: 'غير مصرح: لا يمكن تنفيذ عمليات تعديل الحسابات الحساسة دون تمرير سياق المستخدم المستهدف',
+      };
+    }
+  }
+
+  // Invariants INV-R1 through INV-R7: Evaluate Account Management Matrix
+  if (canonicalCap === 'users.create') {
+    const targetRole = context?.targetRole || context?.targetUser?.role;
+    if (targetRole) {
+      const check = canActorManageTargetAccount(actor.role, targetRole, 'create', {
+        hasDelegation,
+      });
+      if (!check.allowed) {
+        if (actor.role === 'assistant_admin' && targetRole === 'admin') {
+          return {
+            allowed: false,
+            code: 'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN',
+            messageAr: 'غير مصرح: لا يمكن لمساعد مدير النظام إنشاء حساب برتبة مدير نظام سواء بطلب اعتماد أو تفويض مباشر',
+          };
+        }
+        return check;
+      }
+    }
+  }
+
+  if (canonicalCap === 'users.change_role') {
+    const targetRole = context?.targetUser?.role;
+    if (targetRole) {
+      const check = canActorManageTargetAccount(actor.role, targetRole, 'change_role', {
+        isSelf,
+        requestedNewRole: context?.targetRole,
+        hasDelegation,
+      });
+      if (!check.allowed) {
+        if (actor.role === 'assistant_admin' && targetRole === 'admin') {
+          return {
+            allowed: false,
+            code: 'INVARIANT_ASSISTANT_CANNOT_MUTATE_ADMIN',
+            messageAr: 'غير مصرح: لا يمكن لمساعد مدير النظام تعديل أو إيقاف أو حذف حساب مدير النظام أو البت في طلب يتعلق به',
+          };
+        }
+        return check;
+      }
+    }
+  }
+
+  if (canonicalCap === 'users.change_status') {
+    const targetRole = context?.targetUser?.role;
+    if (targetRole) {
+      const check = canActorManageTargetAccount(actor.role, targetRole, 'suspend', {
+        isSelf,
+        hasDelegation,
+      });
+      if (!check.allowed) {
+        if (actor.role === 'assistant_admin' && targetRole === 'admin') {
+          return {
+            allowed: false,
+            code: 'INVARIANT_ASSISTANT_CANNOT_MUTATE_ADMIN',
+            messageAr: 'غير مصرح: لا يمكن لمساعد مدير النظام تعديل أو إيقاف أو حذف حساب مدير النظام أو البت في طلب يتعلق به',
+          };
+        }
+        return check;
+      }
+    }
+  }
+
+  if (canonicalCap === 'users.delete') {
+    const targetRole = context?.targetUser?.role;
+    if (targetRole) {
+      const check = canActorManageTargetAccount(actor.role, targetRole, 'delete', {
+        isSelf,
+        hasDelegation,
+      });
+      if (!check.allowed) {
+        if (actor.role === 'assistant_admin' && targetRole === 'admin') {
+          return {
+            allowed: false,
+            code: 'INVARIANT_ASSISTANT_CANNOT_MUTATE_ADMIN',
+            messageAr: 'غير مصرح: لا يمكن لمساعد مدير النظام تعديل أو إيقاف أو حذف حساب مدير النظام أو البت في طلب يتعلق به',
+          };
+        }
+        return check;
+      }
+    }
+  }
+
+  if (canonicalCap === 'permissions.configure_users' || canonicalCap === 'permissions.manage_delegation') {
+    const targetRole = context?.targetUser?.role;
+    if (targetRole) {
+      const check = canActorManageTargetAccount(actor.role, targetRole, 'manage_permissions', {
+        isSelf,
+        hasDelegation,
+      });
+      if (!check.allowed) {
+        return check;
+      }
+    }
+  }
+
+  if (canonicalCap === 'users.view_directory' || canonicalCap === 'users.view_transcript') {
+    const targetRole = context?.targetUser?.role;
+    if (targetRole) {
+      const check = canActorManageTargetAccount(actor.role, targetRole, 'view', {
+        isSelf,
+        hasDelegation,
+      });
+      if (!check.allowed) {
+        return check;
+      }
+    }
+  }
+
+  if (canonicalCap === 'approvals.decide_request') {
+    if (actor.role === 'assistant_admin' && (context?.targetUser?.role === 'admin' || context?.targetUser?.role === 'super_admin' || context?.targetUser?.role === 'developer')) {
+      return {
+        allowed: false,
+        code: 'INVARIANT_ASSISTANT_CANNOT_MUTATE_ADMIN',
+        messageAr: 'غير مصرح: لا يمكن لمساعد مدير النظام تعديل أو إيقاف أو حذف حساب مدير النظام أو البت في طلب يتعلق به',
+      };
+    }
+  }
+
+  // Invariant 3: Last Active Administrator Lockout Prevention (Regression Safety Guardrail)
   if (context?.targetUser?.role === 'admin' && allUsers && allUsers.length > 0) {
     const isTargetCurrentlyActive = context.targetUser.status !== 'suspended';
     const isRemovingAdmin =
-      capability === 'users.delete' ||
-      (capability === 'users.change_role' && (!context.targetRole || context.targetRole !== 'admin')) ||
-      (capability === 'users.change_status' && (!context.targetStatus || context.targetStatus === 'suspended'));
+      canonicalCap === 'users.delete' ||
+      (canonicalCap === 'users.change_role' && (!context.targetRole || context.targetRole !== 'admin')) ||
+      (canonicalCap === 'users.change_status' && (!context.targetStatus || context.targetStatus === 'suspended'));
 
     if (isRemovingAdmin && isTargetCurrentlyActive) {
-      const targetCanonical = resolveCanonicalUserId(context.targetUser.id).toLowerCase();
+      const targetCanon = resolveCanonicalUserId(context.targetUser.id).toLowerCase();
       const remainingActiveAdmins = allUsers.filter(
         (u) =>
           u.role === 'admin' &&
           u.status !== 'suspended' &&
-          resolveCanonicalUserId(u.id).toLowerCase() !== targetCanonical
+          resolveCanonicalUserId(u.id).toLowerCase() !== targetCanon
       );
 
       if (remainingActiveAdmins.length === 0) {
@@ -624,17 +1211,6 @@ export function evaluateProtectedInvariant(
           };
         }
       }
-    }
-  }
-
-  // Invariant 4: Fail-Safe Guardrail when Sensitive Target Context is Missing
-  if (['users.change_role', 'users.change_status', 'users.delete'].includes(capability)) {
-    if (!context?.targetUser) {
-      return {
-        allowed: false,
-        code: 'INVARIANT_CONTEXT_MISSING',
-        messageAr: 'غير مصرح: لا يمكن تنفيذ عمليات تعديل الحسابات الحساسة دون تمرير سياق المستخدم المستهدف',
-      };
     }
   }
 

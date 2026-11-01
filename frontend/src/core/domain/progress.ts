@@ -47,7 +47,13 @@ export function isLessonLocked(
   completedItemIds: string[],
   userRole?: UserRole
 ): boolean {
-  if (userRole === 'admin' || userRole === 'lecturer') {
+  if (
+    userRole === 'admin' ||
+    userRole === 'super_admin' ||
+    userRole === 'developer' ||
+    userRole === 'assistant_admin' ||
+    userRole === 'lecturer'
+  ) {
     return false;
   }
 

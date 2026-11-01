@@ -1,5 +1,6 @@
 import type { SemanticIconName } from '@/shared/ui/Icon';
 import type { BadgeVariant } from '@/shared/ui/Badge';
+import type { UserRole } from '@/core/auth/types';
 
 export type NavItemStatus = 'implemented' | 'planned' | 'demo';
 
@@ -14,6 +15,8 @@ export interface NavItem {
   badgeVariant?: BadgeVariant;
   plannedIncrement?: string;
   descriptionAr?: string;
+  /** Explicit list of roles authorized to view this navigation link */
+  allowedRoles?: UserRole[];
 }
 
 export interface NavSection {
@@ -50,6 +53,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'الواجهة الرئيسية لهيكل التطبيق وحالة التطوير المستمرة',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
       {
         id: 'design-system',
@@ -61,6 +65,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'معتمد',
         badgeVariant: 'info',
         descriptionAr: 'مكتبة ومختبر المكونات والرموز الدلالية الموحدة',
+        allowedRoles: ['developer'],
       },
     ],
   },
@@ -79,6 +84,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'استعراض البرامج التدريبية المتاحة وتصفية المسارات',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
       {
         id: 'my-courses',
@@ -90,6 +96,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'متابعة المحتوى التدريبي الملتحق به ونسب التقدم',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
       {
         id: 'my-groups',
@@ -101,6 +108,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'المجموعات والدفعات الميدانية المخصصة ومتابعة المهل',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
     ],
   },
@@ -119,6 +127,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'متابعة الدفعات ومؤشرات الانتباه والمواعيد النهائية',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'course-builder',
@@ -130,6 +139,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'إعداد الدروس والاختبارات وحقائب التدريب',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer'],
       },
       {
         id: 'quality-audit',
@@ -141,6 +151,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'مراجعة واعتماد المقررات ومتابعة جودة المحتوى',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'user-management',
@@ -152,6 +163,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'دليل المستخدمين الموحد والتحقق من الهويات والصلاحيات',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'permissions-matrix',
@@ -163,6 +175,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'مرجع سياسات الأدوار، سقوف الصلاحيات، وحوكمة التفويض',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'system-security-audit',
@@ -174,6 +187,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'السجل المركزي لعمليات الرقابة الأمنية والقرارات الإدارية الحساسة',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'department-tracks',
@@ -185,6 +199,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'تخصيص مسارات التدريب المسموحة لكل إدارة تشغيلية',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'comment-moderation',
@@ -196,6 +211,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مفعل',
         badgeVariant: 'primary',
         descriptionAr: 'متابعة طابور البلاغات ومراجعة نقاشات المقررات والتحكم بالسياسات',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'administration',
@@ -208,6 +224,7 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         badge: 'مجدول (12)',
         badgeVariant: 'neutral',
         descriptionAr: 'لوحات الإدارة الشاملة والتحليلات والإعدادات العامة',
+        allowedRoles: ['developer', 'super_admin', 'admin'],
       },
     ],
   },
@@ -218,6 +235,15 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
  */
 export function getAllNavItems(): NavItem[] {
   return NAVIGATION_SECTIONS.flatMap((section) => section.items);
+}
+
+/**
+ * Checks whether a given navigation item is visible for a user's role
+ */
+export function isNavItemVisibleForRole(item: NavItem, role?: UserRole | string | null): boolean {
+  if (!role) return false;
+  if (!item.allowedRoles || item.allowedRoles.length === 0) return true;
+  return item.allowedRoles.includes(role as UserRole);
 }
 
 /**

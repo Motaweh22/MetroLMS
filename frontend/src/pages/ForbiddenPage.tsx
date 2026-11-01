@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
 import { useAuth } from '@/features/auth';
+import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
 
 export interface ForbiddenPageProps {
   /** Optional custom title */
@@ -66,11 +67,7 @@ export const ForbiddenPage: React.FC<ForbiddenPageProps> = ({
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-bg-alt text-xs text-text-muted mb-6">
           <span>الدور الحالي المسجل:</span>
           <span className="font-bold text-text">
-            {user.role === 'admin'
-              ? 'مسؤول النظام'
-              : user.role === 'lecturer'
-              ? 'محاضر معتمد'
-              : 'متدرب فني'}
+            {ROLE_CANONICAL_LABELS_AR[user.role] || user.role}
           </span>
         </div>
       )}

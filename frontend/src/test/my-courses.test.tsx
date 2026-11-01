@@ -63,7 +63,9 @@ describe('Increment 7: Trainee Courses Page (/my-courses) Verification', () => {
     ).toBeInTheDocument();
 
     // Check pre-enrolled courses for usr_trainee_003 (CRS002)
-    expect(screen.getByText('خدمة العملاء في مترو الأنفاق')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('خدمة العملاء في مترو الأنفاق')).toBeInTheDocument();
+    });
   });
 
   it('filters courses by status tabs (all, in-progress, completed)', async () => {

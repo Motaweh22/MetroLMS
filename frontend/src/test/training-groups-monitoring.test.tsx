@@ -36,13 +36,14 @@ describe('Increment 10 — Phase 8: Group Monitoring Dashboard & Historical Cycl
       renderWithApp('/admin/groups/GRP-101/monitoring', adminUser);
 
       await waitFor(() => {
-        expect(screen.getByTestId('cycle-selector')).toBeInTheDocument();
+        expect(screen.getByTestId('group-monitoring-status-overview')).toBeInTheDocument();
       });
 
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/برنامج تشغيل وتأمين الخط الثاني/);
       expect(screen.getByTestId('cohort-metric-total-members')).toBeInTheDocument();
       expect(screen.getByTestId('tab-trainees-view')).toBeInTheDocument();
       expect(screen.getByTestId('tab-courses-view')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-join-requests-view')).toBeInTheDocument();
     });
 
     it('navigates to monitoring dashboard from groups list action button', async () => {
@@ -324,46 +325,45 @@ describe('Increment 10 — Phase 8: Group Monitoring Dashboard & Historical Cycl
     });
   });
 
-  // ── 6. Historical Cycle Navigation & Data Isolation ──────────────────
+  // ── 6. Consolidated Summary Without Obsolete Cycle Selector ──────────
 
-  describe('6. Historical Renewal Cycle Switcher and Attempt Isolation', () => {
-    it('switches to historical cycle, displays historical banner, and isolates prior attempts', async () => {
-      // 1. Advance GRP-101 to a new renewal cycle (Cycle 2)
-      inMemoryStore.createRenewalCycle('GRP-101', {
-        title: 'دورة 2026/Q2 المتقدمة',
-        startDateTime: '2026-04-01T08:00:00Z',
-        deadlineDateTime: '2026-06-30T18:00:00Z',
-        postDeadlinePolicy: 'keep_no_cert',
-        courses: [
-          {
-            courseId: 'CRS001',
-            courseRole: 'core',
-            order: 1,
-            customStartDateTime: null,
-            customDeadlineDateTime: null,
-            customPostDeadlinePolicy: null,
-          },
-        ],
-      });
-
+  describe('6. Consolidated Group Schedule Summary Without Obsolete Multi-Cycle Switcher', () => {
+    it('summarizes the group schedule in one compact overview without the obsolete cycle selector or duplicate requests button', async () => {
       renderWithApp('/admin/groups/GRP-101/monitoring', adminUser);
 
       await waitFor(() => {
-        expect(screen.getByTestId('cycle-selector')).toBeInTheDocument();
+        expect(screen.getByTestId('group-monitoring-status-overview')).toBeInTheDocument();
       });
 
-      // Switch to historical Cycle 1: CYC-GRP-101-01
-      const cycleSelect = screen.getByTestId('cycle-selector');
-      fireEvent.change(cycleSelect, { target: { value: 'CYC-GRP-101-01' } });
+      expect(screen.queryByTestId('cycle-selector')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('overview-open-requests-btn')).not.toBeInTheDocument();
+      expect(screen.getByTestId('overview-schedule-summary')).toBeInTheDocument();
+      expect(screen.getByTestId('temporal-status-badge')).toBeInTheDocument();
+    });
+  });
 
-      // Verify Historical Cycle Banner appears
+  // ── 7. Group Status Overview & Enrollment Request Monitoring ─────────
+
+  describe('7. Group Status Overview & Enrollment Request Management in Monitoring Page', () => {
+    it('displays compact group status overview and allows approving and rejecting enrollment requests', async () => {
+      renderWithApp('/admin/groups/GRP-101/monitoring', adminUser);
+
       await waitFor(() => {
-        expect(screen.getByTestId('historical-cycle-banner')).toBeInTheDocument();
+        expect(screen.getByTestId('group-monitoring-status-overview')).toBeInTheDocument();
       });
-      expect(screen.getByText(/أنت تستعرض دورة تجديد تاريخية سابقة/)).toBeInTheDocument();
 
-      // Countdown strip shows historical status
-      expect(screen.getByTestId('temporal-status-badge')).toHaveTextContent(/سجل تاريخي مؤرشف/);
+      expect(screen.getByTestId('overview-lifecycle-status')).toHaveTextContent(/نشطة/);
+      expect(screen.getByTestId('overview-enrollment-status')).toHaveTextContent(/التسجيل مفتوح/);
+      expect(screen.getByTestId('overview-schedule-summary')).toBeInTheDocument();
+      expect(screen.getByTestId('overview-capacity-requests')).toBeInTheDocument();
+      expect(screen.getByTestId('tab-join-requests-view')).toBeInTheDocument();
+
+      // Switch to join requests tab
+      fireEvent.click(screen.getByTestId('tab-join-requests-view'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('join-requests-view')).toBeInTheDocument();
+      });
     });
   });
 });

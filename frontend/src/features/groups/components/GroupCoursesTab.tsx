@@ -19,17 +19,20 @@ import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
 import { useToast } from '@/shared/ui/Toast';
 import { CourseOverrideModal } from './CourseOverrideModal';
-import { StartRenewalCycleModal } from './StartRenewalCycleModal';
 import { formatArabicDate, formatArabicDateTime } from '../utils/dateUtils';
 
 export interface GroupCoursesTabProps {
   group: TrainingGroup;
   onGroupUpdated: (updatedGroup: TrainingGroup) => void;
+  postDeadlinePolicy?: PostDeadlinePolicy;
+  onPostDeadlinePolicyChange?: (policy: PostDeadlinePolicy) => void;
 }
 
 export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
   group,
   onGroupUpdated,
+  postDeadlinePolicy: controlledPolicy,
+  onPostDeadlinePolicyChange,
 }) => {
   const toast = useToast();
 
@@ -39,8 +42,11 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Active courses for the selected cycle
+  // Active courses for the group's cycle
   const [cycleCourses, setCycleCourses] = useState<GroupCycleCourseAssignment[]>([]);
+  const [selectedPolicy, setSelectedPolicy] = useState<PostDeadlinePolicy>(
+    controlledPolicy || group.postDeadlinePolicy || 'keep_no_cert'
+  );
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -52,7 +58,14 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
   // Modal states
   const [overrideTargetCourse, setOverrideTargetCourse] =
     useState<GroupCycleCourseAssignment | null>(null);
-  const [isRenewModalOpen, setIsRenewModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (controlledPolicy) {
+      setSelectedPolicy(controlledPolicy);
+    } else if (group.postDeadlinePolicy) {
+      setSelectedPolicy(group.postDeadlinePolicy);
+    }
+  }, [controlledPolicy, group.postDeadlinePolicy]);
 
   // Fetch cycles and catalog courses
   const loadData = useCallback(async () => {
@@ -75,7 +88,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
       }
       setIsDirty(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'تعذر تحميل بيانات دورات التجديد والمقررات';
+      const msg = err instanceof Error ? err.message : 'تعذر تحميل بيانات المقررات التدريبية';
       setLoadError(msg);
     } finally {
       setLoading(false);
@@ -86,29 +99,33 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
     loadData();
   }, [loadData]);
 
-  // Currently selected cycle object
+  // Underlying cycle object for compatibility with domain/store contracts
   const currentCycle = useMemo(() => {
-    return cycles.find((c) => c.id === selectedCycleId) || null;
+    return cycles.find((c) => c.id === selectedCycleId) || cycles[0] || null;
   }, [cycles, selectedCycleId]);
 
-  const isCurrentCycleActive = currentCycle?.status === 'active';
+  const isCurrentCycleActive =
+    group.adminStatus !== 'archived' && (currentCycle ? currentCycle.status === 'active' : true);
 
-  // Handle cycle switch
-  const handleSelectCycle = (cycleId: string) => {
-    if (isDirty) {
-      const confirmed = window.confirm(
-        'لديك تعديلات غير محفوظة في مقررات الدورة الحالية. هل ترغب في تبديل الدورة وتجاهل التغييرات؟'
-      );
-      if (!confirmed) return;
-    }
-
-    setSelectedCycleId(cycleId);
-    const target = cycles.find((c) => c.id === cycleId);
-    if (target) {
-      setCycleCourses(target.courses || []);
-    }
-    setIsDirty(false);
+  // Handle group-wide post-deadline policy change
+  const handlePolicySelect = async (newPolicy: PostDeadlinePolicy) => {
+    if (!isCurrentCycleActive) return;
+    const previousPolicy = selectedPolicy;
+    setSelectedPolicy(newPolicy);
     setSaveError(null);
+
+    try {
+      const updatedGroup = await groupsApi.updateGroup(group.id, {
+        postDeadlinePolicy: newPolicy,
+      });
+      onPostDeadlinePolicyChange?.(newPolicy);
+      onGroupUpdated(updatedGroup);
+    } catch (err: unknown) {
+      setSelectedPolicy(previousPolicy);
+      const msg = err instanceof Error ? err.message : 'تعذر تحديث سياسة ما بعد الموعد النهائي';
+      setSaveError(msg);
+      toast.error(msg);
+    }
   };
 
   // Add course to cycle
@@ -244,6 +261,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
     try {
       const updatedCycle = await groupsApi.assignCycleCourses(group.id, {
         cycleId: currentCycle.id,
+        postDeadlinePolicy: selectedPolicy,
         courses: cycleCourses,
       });
 
@@ -266,17 +284,6 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
     }
   };
 
-  // Handle cycle creation callback
-  const handleCycleCreated = (newCycle: GroupRenewalCycle) => {
-    setCycles((prev) => [
-      newCycle,
-      ...prev.map((c) => (c.status === 'active' ? { ...c, status: 'completed' as const } : c)),
-    ]);
-    setSelectedCycleId(newCycle.id);
-    setCycleCourses(newCycle.courses || []);
-    setIsDirty(false);
-  };
-
   // Unassigned courses for picker
   const unassignedCourses = availableCourses.filter(
     (c) => !cycleCourses.some((cc) => cc.courseId.toLowerCase() === c.id.toLowerCase())
@@ -286,7 +293,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-surface rounded-xl border border-border" data-testid="courses-tab-loading">
         <Icon name="clock" size="lg" className="animate-spin text-primary mb-3" />
-        <p className="text-text-muted text-sm font-medium">جارٍ تحميل المقررات ودورات التجديد...</p>
+        <p className="text-text-muted text-sm font-medium">جارٍ تحميل المقررات التدريبية...</p>
       </div>
     );
   }
@@ -308,77 +315,70 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
 
   return (
     <div className="space-y-6" dir="rtl" data-testid="group-courses-tab">
-      {/* ── 1. Renewal Cycle Switcher & Actions Header ──────────────── */}
-      <div className="bg-surface rounded-2xl p-5 sm:p-6 border border-border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Icon name="refresh" size="md" className="text-primary" />
-            <h3 className="text-base font-bold text-text">دورات التجديد التدريبي والمقررات</h3>
-            {currentCycle && (
+      {/* ── 1. Group Courses & Post-Deadline Policy Header ──────────── */}
+      <div className="bg-surface rounded-2xl p-5 sm:p-6 border border-border shadow-xs space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/70">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Icon name="courses" size="md" className="text-primary" />
+              <h3 className="text-base font-bold text-text">المقررات التدريبية وسياسة ما بعد انتهاء الموعد</h3>
               <Badge
-                variant={currentCycle.status === 'active' ? 'primary' : 'neutral'}
+                variant={isCurrentCycleActive ? 'primary' : 'neutral'}
                 size="sm"
-                data-testid="selected-cycle-status-badge"
               >
-                {currentCycle.status === 'active' ? 'الدورة النشطة الحالية' : 'دورة مكتملة / سابقة'}
+                {isCurrentCycleActive ? 'مجموعة نشطة' : 'مجموعة مؤرشفة'}
               </Badge>
-            )}
+            </div>
+            <p className="text-xs text-text-muted">
+              تعيين المقررات الأساسية والتنشيطية للمجموعة، وتخصيص مواعيد المقررات، وضبط سياسة التعامل مع المحتوى بعد انتهاء الموعد النهائي.
+            </p>
           </div>
-          <p className="text-xs text-text-muted">
-            إدارة دورات التجديد الدورية، وتعيين المقررات الأساسية والتنشيطية، وتخصيص المواعيد المستقلة.
-          </p>
         </div>
 
-        {/* Action: Start New Renewal Cycle */}
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          onClick={() => setIsRenewModalOpen(true)}
-          data-testid="start-renew-cycle-btn"
-        >
-          <Icon name="plus" size="sm" />
-          <span>بدء دورة تجديد جديدة</span>
-        </Button>
-      </div>
-
-      {/* Cycle Tabs / Dropdown Selector */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-border" data-testid="cycle-selector-tabs">
-        <span className="text-xs font-bold text-text-muted shrink-0 pl-1">اختر دورة التجديد:</span>
-        {cycles.map((cyc) => {
-          const isSelected = cyc.id === selectedCycleId;
-          const isActive = cyc.status === 'active';
-
-          return (
-            <button
-              key={cyc.id}
-              type="button"
-              onClick={() => handleSelectCycle(cyc.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 flex items-center gap-2 border ${
-                isSelected
-                  ? 'bg-primary text-white border-primary shadow-xs'
-                  : 'bg-surface text-text hover:bg-neutral-light border-border'
-              }`}
-              data-testid={`cycle-tab-${cyc.id}`}
-            >
-              <span>{cyc.title}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-md ${
-                  isSelected
-                    ? 'bg-white/20 text-white'
-                    : isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'bg-neutral-light text-text-muted'
+        {/* Group-Wide Post-Deadline Policy Control (Single Authoritative Source) */}
+        <div className="space-y-3" data-testid="group-post-deadline-policy-panel">
+          <div>
+            <label className="block text-xs font-bold text-text">
+              سياسة التعامل مع المحتوى بعد انتهاء الموعد النهائي للمجموعة
+            </label>
+            <p className="text-[11px] text-text-muted mt-0.5">
+              تطبق هذه السياسة الموحدة على المجموعة وجميع المقررات التدريبية المسندة إليها بعد انتهاء الموعد النهائي
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {[
+              {
+                id: 'keep_no_cert' as PostDeadlinePolicy,
+                title: 'إتاحة المحتوى بدون شهادة (الموصى به)',
+                desc: 'يبقى المحتوى متاحاً للمطالعة والمراجعة ولا تُمنح شهادة اجتياز جديدة',
+              },
+              {
+                id: 'hide' as PostDeadlinePolicy,
+                title: 'إخفاء المحتوى تماماً',
+                desc: 'يُحجب المحتوى التدريبي ويختفي من قائمة الدورات لدى المتدرب فور انتهاء الموعد',
+              },
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={!isCurrentCycleActive}
+                onClick={() => handlePolicySelect(p.id)}
+                className={`p-3.5 rounded-xl border text-right transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+                  selectedPolicy === p.id
+                    ? 'border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary/30'
+                    : 'border-border bg-bg text-text-muted hover:bg-neutral-light hover:text-text'
                 }`}
+                data-testid={`post-deadline-${p.id}`}
               >
-                {isActive ? 'نشطة' : 'مكتملة'}
-              </span>
-            </button>
-          );
-        })}
+                <div className="font-bold text-xs">{p.title}</div>
+                <div className="text-[11px] text-text-muted mt-1 leading-relaxed">{p.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Selected Cycle Overview Banner */}
+      {/* Group Schedule & Renewal Summary Banner */}
       {currentCycle && (
         <div
           className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs ${
@@ -390,22 +390,21 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
         >
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-text text-sm">{currentCycle.title}</span>
-              <span className="text-text-muted text-[11px]">(الدورة {currentCycle.cycleNumber})</span>
+              <span className="font-bold text-text text-sm">{group.name}</span>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-text-muted text-[11px]">
               <div>
                 <span className="font-semibold text-text">تاريخ البداية: </span>
-                <span>{formatArabicDateTime(currentCycle.startDateTime)}</span>
+                <span>{formatArabicDateTime(group.startDateTime || currentCycle.startDateTime)}</span>
               </div>
               <div>
                 <span className="font-semibold text-text">الموعد النهائي: </span>
-                <span>{formatArabicDateTime(currentCycle.deadlineDateTime)}</span>
+                <span>{formatArabicDateTime(group.deadlineDateTime || currentCycle.deadlineDateTime)}</span>
               </div>
               <div>
                 <span className="font-semibold text-text">سياسة ما بعد الموعد: </span>
                 <span>
-                  {currentCycle.postDeadlinePolicy === 'hide'
+                  {selectedPolicy === 'hide'
                     ? 'حجب المحتوى (hide)'
                     : 'إتاحة دون شهادة (keep_no_cert)'}
                 </span>
@@ -429,7 +428,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
           {!isCurrentCycleActive && (
             <div className="flex items-center gap-1.5 text-text-muted text-[11px] bg-surface px-3 py-1.5 rounded-lg border border-border shrink-0">
               <Icon name="lock" size="sm" />
-              <span>دورة سابقة مكتملة ومحمية من التعديل</span>
+              <span>مجموعة مؤرشفة ومحمية من التعديل</span>
             </div>
           )}
         </div>
@@ -779,20 +778,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
           cycle={currentCycle}
           initialCustomStartDateTime={overrideTargetCourse.customStartDateTime}
           initialCustomDeadlineDateTime={overrideTargetCourse.customDeadlineDateTime}
-          initialCustomPostDeadlinePolicy={overrideTargetCourse.customPostDeadlinePolicy}
           onApply={handleApplyOverride}
-        />
-      )}
-
-      {/* Start New Renewal Cycle Modal */}
-      {isRenewModalOpen && (
-        <StartRenewalCycleModal
-          isOpen={isRenewModalOpen}
-          onClose={() => setIsRenewModalOpen(false)}
-          group={group}
-          currentCycle={currentCycle}
-          availableCourses={availableCourses}
-          onCycleCreated={handleCycleCreated}
         />
       )}
     </div>

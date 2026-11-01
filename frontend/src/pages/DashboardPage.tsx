@@ -544,7 +544,10 @@ export const DashboardPage: React.FC = () => {
     <div className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-7xl mx-auto" data-testid="dashboard-page">
       {data.role === 'user' && <TraineeDashboard data={data} />}
       {data.role === 'lecturer' && <LecturerDashboard data={data} />}
-      {data.role === 'admin' && <AdminDashboard data={data} />}
+      {(data.role === 'admin' ||
+        data.role === 'assistant_admin' ||
+        data.role === 'super_admin' ||
+        data.role === 'developer') && <AdminDashboard data={data} />}
     </div>
   );
 };

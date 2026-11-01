@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { ManagedUserDTO, UserRole, UserStatus } from '@/core/user-management/types';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
-import { resolveCanonicalUserId } from '@/mocks/fixtures/userDirectoryFixtures';
+import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import { UserFilterBar } from '@/features/user-management/components/UserFilterBar';
 import { UserTable } from '@/features/user-management/components/UserTable';
 import { AddUserModal } from '@/features/user-management/components/AddUserModal';

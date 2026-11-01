@@ -17,7 +17,12 @@ export type NotificationType =
   | 'new_registration_request'
   | 'enrollment_request'
   | 'deadline_reminder'
-  | 'general_alert';
+  | 'general_alert'
+  | 'group_renewed'
+  | 'group_archived'
+  | 'instructor_assigned'
+  | 'group_updated'
+  | 'course_completed';
 
 export interface NotificationItem {
   id: string;
@@ -26,6 +31,10 @@ export interface NotificationItem {
   title?: string;
   message: string;
   courseId?: string | null;
+  groupId?: string | null;
+  requestId?: string | null;
+  targetUrl?: string | null;
+  dedupeKey?: string;
   read: boolean;
   createdAt: string;
 }

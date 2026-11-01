@@ -24,6 +24,7 @@ import type {
   ReplaceMaterialFileRequestDTO,
   GroupPreviewInfoDTO,
   CandidateTraineeDTO,
+  CandidateLecturerDTO,
 } from '@/core/groups/dtos';
 
 export type EnrichedTrainingGroup = TrainingGroup & {
@@ -196,13 +197,39 @@ export const groupsApi = {
   ): Promise<{
     renewed: boolean;
     cycle?: GroupRenewalCycle;
+    successorGroup?: TrainingGroup;
+    archivedGroup?: TrainingGroup;
     group: TrainingGroup;
   }> {
     return apiClient<{
       renewed: boolean;
       cycle?: GroupRenewalCycle;
+      successorGroup?: TrainingGroup;
+      archivedGroup?: TrainingGroup;
       group: TrainingGroup;
     }>(`/api/admin/groups/${encodeURIComponent(groupId)}/check-auto-renewal`, {
+      method: 'POST',
+      ...options,
+    });
+  },
+
+  /**
+   * Check and process automatic renewal for all eligible groups whose scheduled date is reached (Batch)
+   */
+  async checkAllDueRenewals(
+    options?: RequestOptions
+  ): Promise<{
+    totalChecked: number;
+    renewedCount: number;
+    renewedGroupIds: string[];
+    createdGroupIds?: string[];
+  }> {
+    return apiClient<{
+      totalChecked: number;
+      renewedCount: number;
+      renewedGroupIds: string[];
+      createdGroupIds?: string[];
+    }>('/api/admin/groups/check-all-due-renewals', {
       method: 'POST',
       ...options,
     });
@@ -279,6 +306,34 @@ export const groupsApi = {
       method: 'GET',
       ...options,
     });
+  },
+
+  /**
+   * List all eligible lecturer accounts for group primary instructor / assistant lecturer assignment (Admin or Lecturer)
+   */
+  async getCandidateLecturers(options?: RequestOptions): Promise<CandidateLecturerDTO[]> {
+    return apiClient<CandidateLecturerDTO[]>('/api/admin/lecturers', {
+      method: 'GET',
+      ...options,
+    });
+  },
+
+  /**
+   * Update a training group's assigned assistant lecturers (Admin or Group Primary Instructor only)
+   */
+  async updateGroupAssistants(
+    groupId: string,
+    assistantLecturerIds: string[],
+    options?: RequestOptions
+  ): Promise<TrainingGroup> {
+    return apiClient<TrainingGroup>(
+      `/api/admin/groups/${encodeURIComponent(groupId)}/assistants`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ assistantLecturerIds }),
+        ...options,
+      }
+    );
   },
 
   /**

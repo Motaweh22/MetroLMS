@@ -12,6 +12,7 @@ import { Alert } from '@/shared/ui/Alert';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { ProgressBar } from '@/shared/ui/ProgressBar';
 import { useToast } from '@/shared/ui/Toast';
+import { ManageGroupAssistantsModal } from '@/features/groups/components';
 
 /**
  * Format timestamp in Arabic or return a fallback
@@ -89,10 +90,19 @@ export const AdminGroupsPage: React.FC = () => {
   // Archive modal state
   const [archiveTarget, setArchiveTarget] = useState<GroupSummaryDTO | null>(null);
   const [isArchiving, setIsArchiving] = useState<boolean>(false);
+  const [manageAssistantsGroup, setManageAssistantsGroup] = useState<GroupSummaryDTO | null>(null);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdministrativeViewer =
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'developer' ||
+    user?.role === 'assistant_admin';
+  const isOperationalAdmin =
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'developer';
   const isSupervisor = user?.role === 'lecturer';
-  const isAuthorized = isAdmin || isSupervisor;
+  const isAuthorized = isAdministrativeViewer || isSupervisor;
 
   // Load group summaries
   const loadGroups = useCallback(async () => {
@@ -242,7 +252,7 @@ export const AdminGroupsPage: React.FC = () => {
           </p>
         </div>
 
-        {isAdmin && (
+        {isOperationalAdmin && (
           <Button
             variant="primary"
             size="md"
@@ -400,7 +410,7 @@ export const AdminGroupsPage: React.FC = () => {
               ? 'لا توجد نتائج مطابقة لمعايير البحث والتصفية المحددة. جرب تغيير خيارات التصفية.'
               : 'لم يتم إنشاء أي مجموعات تدريبية بعد. يمكنك البدء بإنشاء المجموعة الأولى الآن.'}
           </p>
-          {isAdmin && (
+          {isOperationalAdmin && (
             <Button
               variant="outline"
               size="sm"
@@ -486,6 +496,11 @@ export const AdminGroupsPage: React.FC = () => {
                             {g.attentionTraineesCount} بحاجة لمتابعة
                           </div>
                         )}
+                        {(g.pendingJoinRequestsCount ?? 0) > 0 && (
+                          <div className="text-[10px] text-primary font-semibold mt-0.5">
+                            {g.pendingJoinRequestsCount} طلب انضمام معلق
+                          </div>
+                        )}
                       </td>
 
                       {/* Courses count */}
@@ -519,23 +534,44 @@ export const AdminGroupsPage: React.FC = () => {
                             leftIcon="activity"
                             onClick={() => navigate(`/admin/groups/${encodeURIComponent(g.id)}/monitoring`)}
                             data-testid={`monitor-group-btn-${g.id}`}
-                            title="لوحة المتابعة الميدانية"
+                            title="متابعة المجموعة"
                           >
-                            متابعة
+                            متابعة المجموعة
                           </Button>
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            leftIcon="edit"
-                            onClick={() => navigate(`/admin/groups/${encodeURIComponent(g.id)}/edit`)}
-                            data-testid={`edit-group-btn-${g.id}`}
-                            title="تعديل إعدادات المجموعة"
-                          >
-                            تعديل
-                          </Button>
+                          {(isOperationalAdmin ||
+                            Boolean(
+                              isSupervisor &&
+                                user &&
+                                g.primaryInstructorId &&
+                                g.primaryInstructorId.toLowerCase() === user.id.toLowerCase()
+                            )) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              leftIcon="user"
+                              onClick={() => setManageAssistantsGroup(g)}
+                              data-testid={`manage-assistants-btn-${g.id}`}
+                              title="إدارة المحاضرين المساعدين"
+                            >
+                              إدارة المحاضرين المساعدين
+                            </Button>
+                          )}
 
-                          {isAdmin && !isArchived && (
+                          {isOperationalAdmin && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              leftIcon="edit"
+                              onClick={() => navigate(`/admin/groups/${encodeURIComponent(g.id)}/edit`)}
+                              data-testid={`edit-group-btn-${g.id}`}
+                              title="تعديل إعدادات المجموعة"
+                            >
+                              تعديل
+                            </Button>
+                          )}
+
+                          {isOperationalAdmin && !isArchived && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -596,6 +632,26 @@ export const AdminGroupsPage: React.FC = () => {
               </div>
             </div>
           }
+        />
+      )}
+
+      {/* Manage Group Assistants Modal (Primary Instructor or Admin) */}
+      {manageAssistantsGroup && (
+        <ManageGroupAssistantsModal
+          isOpen={Boolean(manageAssistantsGroup)}
+          onClose={() => setManageAssistantsGroup(null)}
+          group={{
+            ...manageAssistantsGroup,
+            supervisorIds: [
+              ...(manageAssistantsGroup.primaryInstructorId
+                ? [manageAssistantsGroup.primaryInstructorId]
+                : []),
+              ...(manageAssistantsGroup.assistantLecturerIds || []),
+            ],
+          }}
+          onAssistantsUpdated={() => {
+            loadGroups();
+          }}
         />
       )}
     </div>

@@ -58,19 +58,33 @@ const AdminMonitoringParamRedirect: React.FC = () => {
 
 const GroupsAdaptiveRedirect: React.FC = () => {
   const { user } = useAuth();
-  if (user?.role === 'admin') {
+  if (
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'developer' ||
+    user?.role === 'assistant_admin'
+  ) {
     return <Navigate to="/admin/groups" replace />;
   }
   return <Navigate to="/my-groups" replace />;
 };
 
 
+// eslint-disable-next-line react-refresh/only-export-components
+export const DeveloperRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAuthenticated } = useAuth();
+  if (!isAuthenticated || user?.role !== 'developer') {
+    return <NotFoundPage standalone />;
+  }
+  return <>{children}</>;
+};
+
 /**
  * Centrally Managed Application Route Elements
  *
  * Routing Rules:
  * - /login: Standalone public authentication page (AuthLayout).
- * - /design-system: Public developer visual laboratory (unprotected).
+ * - /design-system: Developer-only visual laboratory guarded with 404 parity for non-developers (Surface 11).
  * - /: Protected application shell (AppLayout) with ProtectedRoute guard.
  *   Redirects unauthenticated visitors to /login.
  */
@@ -87,8 +101,16 @@ export const appRouteElements = (
     <Route path="/403" element={<ForbiddenPage />} />
     <Route path="/500" element={<UnexpectedErrorPage />} />
 
-    {/* Public Developer Preview: Never locked behind authentication */}
-    <Route path="/design-system" element={<DesignSystemPreviewPage />} errorElement={<RouteErrorBoundary />} />
+    {/* Surface 11: Developer-Only Design System Route (404 parity for non-developers) */}
+    <Route
+      path="/design-system"
+      element={
+        <DeveloperRouteGuard>
+          <DesignSystemPreviewPage />
+        </DeveloperRouteGuard>
+      }
+      errorElement={<RouteErrorBoundary />}
+    />
 
     {/* Protected Application Shell */}
     <Route
@@ -115,19 +137,61 @@ export const appRouteElements = (
       <Route path="profile" element={<ProfilePage />} />
       <Route path="notifications" element={<NotificationsPage />} />
       {/* Increment 10: Training Groups Management */}
-      <Route path="admin/groups" element={<AdminGroupsPage />} />
-      <Route path="admin/groups/new" element={<GroupEditorPage />} />
-      <Route path="admin/groups/:groupId" element={<GroupEditorPage />} />
-      <Route path="admin/groups/:groupId/edit" element={<GroupEditorPage />} />
-      <Route path="admin/groups/:groupId/monitoring" element={<GroupMonitoringPage />} />
+      <Route
+        path="admin/groups"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
+            <AdminGroupsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="admin/groups/new"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin']}>
+            <GroupEditorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="admin/groups/:groupId"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin']}>
+            <GroupEditorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="admin/groups/:groupId/edit"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin']}>
+            <GroupEditorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="admin/groups/:groupId/monitoring"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer']}>
+            <GroupMonitoringPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="admin/group-monitoring" element={<Navigate to="/admin/groups" replace />} />
       <Route path="admin/group-monitoring/:groupId" element={<AdminMonitoringParamRedirect />} />
-      <Route path="admin/create-group" element={<Navigate to="/admin/groups/new" replace />} />
+      <Route
+        path="admin/create-group"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin']}>
+            <Navigate to="/admin/groups/new" replace />
+          </ProtectedRoute>
+        }
+      />
       {/* Increment 11: Central User Directory & User Transcript */}
       <Route
         path="admin/users"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'assistant_admin']}>
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
             <UserManagementPage />
           </ProtectedRoute>
         }
@@ -135,7 +199,7 @@ export const appRouteElements = (
       <Route
         path="admin/users/:userId"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'assistant_admin']}>
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
             <UserDetailsPage />
           </ProtectedRoute>
         }
@@ -144,7 +208,7 @@ export const appRouteElements = (
       <Route
         path="admin/permissions"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'assistant_admin']}>
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
             <PermissionsMatrixPage />
           </ProtectedRoute>
         }
@@ -153,7 +217,7 @@ export const appRouteElements = (
       <Route
         path="admin/audit"
         element={
-          <ProtectedRoute allowedRoles={['admin']}>
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
             <SecurityAuditPage />
           </ProtectedRoute>
         }
@@ -162,7 +226,7 @@ export const appRouteElements = (
       <Route
         path="admin/department-tracks"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'assistant_admin']}>
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
             <DepartmentTracksPage />
           </ProtectedRoute>
         }
@@ -171,33 +235,82 @@ export const appRouteElements = (
       <Route
         path="admin/comment-moderation"
         element={
-          <ProtectedRoute allowedRoles={['admin', 'assistant_admin']}>
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
             <CommentModerationPage />
           </ProtectedRoute>
         }
       />
       {/* Lecturer Workspace & Course Builder */}
-      <Route path="lecturer/courses" element={<LecturerCoursesPage />} />
-      <Route path="lecturer/builder/new" element={<Navigate to="/lecturer/courses?new=true" replace />} />
-      <Route path="lecturer/builder/:courseId" element={<CourseBuilderPage />} />
-      <Route path="builder" element={<Navigate to="/lecturer/courses" replace />} />
-      <Route path="builder/:courseId" element={<Navigate to="/lecturer/builder/:courseId" replace />} />
+      <Route
+        path="lecturer/courses"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer']}>
+            <LecturerCoursesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="lecturer/builder/new"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'lecturer']}>
+            <Navigate to="/lecturer/courses?new=true" replace />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="lecturer/builder/:courseId"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'lecturer']}>
+            <CourseBuilderPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="builder"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'lecturer']}>
+            <Navigate to="/lecturer/courses" replace />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="builder/:courseId"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'lecturer']}>
+            <Navigate to="/lecturer/builder/:courseId" replace />
+          </ProtectedRoute>
+        }
+      />
       {/* Increment 11 Phase 5D: Lecturer Course Performance & Trainee Nudges */}
       <Route
         path="lecturer/performance/:courseId"
         element={
-          <ProtectedRoute allowedRoles={['lecturer', 'admin', 'assistant_admin']}>
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer']}>
             <CoursePerformancePage />
           </ProtectedRoute>
         }
       />
       <Route path="performance/:courseId" element={<Navigate to="/lecturer/performance/:courseId" replace />} />
       {/* Increment 9: Review & Quality Audit Workflow */}
-      <Route path="approvals" element={<ApprovalsPage />} />
+      <Route
+        path="approvals"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer']}>
+            <ApprovalsPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="audit" element={<Navigate to="/approvals" replace />} />
       <Route path="admin/approvals" element={<Navigate to="/approvals" replace />} />
       <Route path="admin/approvals/:courseId" element={<AdminReviewParamRedirect />} />
-      <Route path="admin/review/:courseId" element={<CourseReviewPage />} />
+      <Route
+        path="admin/review/:courseId"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
+            <CourseReviewPage />
+          </ProtectedRoute>
+        }
+      />
       {/* Error Routes within Application Shell */}
       <Route path="403" element={<ForbiddenPage />} />
       <Route path="500" element={<UnexpectedErrorPage />} />

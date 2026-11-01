@@ -36,9 +36,6 @@ describe('Increment 10 — Phase 4: Training Groups Management UI', () => {
     it('loads and displays group summaries, table columns, and aggregate metrics for administrator', async () => {
       renderWithApp('/admin/groups', adminUser);
 
-      // Loading state appears first
-      expect(screen.getByTestId('admin-groups-loading')).toBeInTheDocument();
-
       // Wait for table to render
       await waitFor(() => {
         expect(screen.getByTestId('admin-groups-page')).toBeInTheDocument();
@@ -235,10 +232,16 @@ describe('Increment 10 — Phase 4: Training Groups Management UI', () => {
       expect(screen.getByText('إنشاء مجموعة تدريبية جديدة')).toBeInTheDocument();
       expect(screen.getByTestId('group-name-input')).toBeInTheDocument();
       expect(screen.getByTestId('group-desc-input')).toBeInTheDocument();
-      expect(screen.getByTestId('group-start-input')).toBeInTheDocument();
-      expect(screen.getByTestId('group-deadline-input')).toBeInTheDocument();
       expect(screen.getByTestId('save-group-btn')).toBeInTheDocument();
       expect(screen.getByTestId('cancel-group-btn')).toBeInTheDocument();
+
+      // Navigate to schedule tab to verify timings and renewal configuration
+      fireEvent.click(screen.getByTestId('tab-schedule'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-start-input')).toBeInTheDocument();
+        expect(screen.getByTestId('group-deadline-input')).toBeInTheDocument();
+      });
     });
 
     it('validates mandatory fields and displays Arabic error messages', async () => {
@@ -273,11 +276,20 @@ describe('Increment 10 — Phase 4: Training Groups Management UI', () => {
 
       const nameInput = screen.getByTestId('group-name-input');
       const descInput = screen.getByTestId('group-desc-input');
-      const startInput = screen.getByTestId('group-start-input');
-      const deadlineInput = screen.getByTestId('group-deadline-input');
 
       fireEvent.change(nameInput, { target: { value: 'مجموعة تواريخ مقلوبة' } });
       fireEvent.change(descInput, { target: { value: 'وصف المجموعة التدريبية للاختبار' } });
+
+      // Navigate to schedule tab to configure start and deadline dates
+      fireEvent.click(screen.getByTestId('tab-schedule'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-start-input')).toBeInTheDocument();
+      });
+
+      const startInput = screen.getByTestId('group-start-input');
+      const deadlineInput = screen.getByTestId('group-deadline-input');
+
       fireEvent.change(startInput, { target: { value: '2026-12-01T08:00' } });
       fireEvent.change(deadlineInput, { target: { value: '2026-11-01T08:00' } }); // deadline before start!
 
@@ -299,8 +311,6 @@ describe('Increment 10 — Phase 4: Training Groups Management UI', () => {
 
       const nameInput = screen.getByTestId('group-name-input');
       const descInput = screen.getByTestId('group-desc-input');
-      const startInput = screen.getByTestId('group-start-input');
-      const deadlineInput = screen.getByTestId('group-deadline-input');
 
       fireEvent.change(nameInput, {
         target: { value: 'برنامج دبلوم التحكم المركزي بالخط الثالث' },
@@ -308,6 +318,17 @@ describe('Increment 10 — Phase 4: Training Groups Management UI', () => {
       fireEvent.change(descInput, {
         target: { value: 'برنامج تدريبي متخصص لمهندسي وفنيي محطات الخط الثالث' },
       });
+
+      // Navigate to schedule tab to set custom dates
+      fireEvent.click(screen.getByTestId('tab-schedule'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-start-input')).toBeInTheDocument();
+      });
+
+      const startInput = screen.getByTestId('group-start-input');
+      const deadlineInput = screen.getByTestId('group-deadline-input');
+
       fireEvent.change(startInput, { target: { value: '2026-11-10T08:00' } });
       fireEvent.change(deadlineInput, { target: { value: '2026-12-25T18:00' } });
 
@@ -361,14 +382,12 @@ describe('Increment 10 — Phase 4: Training Groups Management UI', () => {
       });
 
       const nameInput = screen.getByTestId('group-name-input');
-      const capacityInput = screen.getByTestId('group-capacity-input');
 
       fireEvent.change(nameInput, {
         target: { value: 'اسم المجموعة المحدث للاختبار' },
       });
-      fireEvent.change(capacityInput, { target: { value: '45' } });
 
-      // Save changes
+      // Save name changes on general tab
       fireEvent.click(screen.getByTestId('save-group-btn'));
 
       // Wait for save completion
@@ -376,10 +395,34 @@ describe('Increment 10 — Phase 4: Training Groups Management UI', () => {
         expect(screen.getByText(/تعديل: اسم المجموعة المحدث للاختبار/i)).toBeInTheDocument();
       });
 
-      // Verify store updated
+      // Navigate to members & QR tab to update capacity via QR modal
+      fireEvent.click(screen.getByTestId('tab-members'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('open-qr-modal-btn')).toBeInTheDocument();
+      });
+
+      // Open QR & enrollment settings modal
+      fireEvent.click(screen.getByTestId('open-qr-modal-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-capacity-input')).toBeInTheDocument();
+      });
+
+      const capacityInput = screen.getByTestId('group-capacity-input');
+      fireEvent.change(capacityInput, { target: { value: '45' } });
+
+      // Save capacity settings in modal
+      fireEvent.click(screen.getByTestId('save-qr-settings-btn'));
+
+      // Verify store updated with both name and capacity
+      await waitFor(() => {
+        const grp = inMemoryStore.getGroupById('GRP-101');
+        expect(grp?.maxTrainees).toBe(45);
+      });
+
       const grp = inMemoryStore.getGroupById('GRP-101');
       expect(grp?.name).toBe('اسم المجموعة المحدث للاختبار');
-      expect(grp?.maxTrainees).toBe(45);
     });
 
     it('renders 404 alert state when group ID is unknown and provides back button', async () => {

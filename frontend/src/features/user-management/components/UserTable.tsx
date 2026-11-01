@@ -1,7 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import type { ManagedUserDTO, UserRole, UserStatus } from '@/core/user-management/types';
-import { USER_STATUS_LABELS_AR } from '@/core/user-management/types';
+import { USER_STATUS_LABELS_AR, USER_ROLE_LABELS_AR } from '@/core/user-management/types';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { canActorManageTargetAccount } from '@/core/permissions/policy';
+import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import { Badge, type BadgeVariant } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
@@ -53,6 +56,8 @@ export const UserTable: React.FC<UserTableProps> = ({
   onManagePermissions,
   updatingUserId,
 }) => {
+  const { user: currentUser } = useAuth();
+  const actorRole = currentUser?.role || 'admin';
   if (isLoading) {
     return <SectionSkeleton variant="table" count={6} ariaLabel="جارٍ تحميل دليل المستخدمين..." />;
   }
@@ -128,6 +133,16 @@ export const UserTable: React.FC<UserTableProps> = ({
               const statusVariant = getStatusBadgeVariant(u.status);
               const initials = getInitials(u.name);
               const isUpdating = updatingUserId === u.id;
+              const isSelf = Boolean(
+                currentUser &&
+                resolveCanonicalUserId(currentUser.id)?.toLowerCase() === resolveCanonicalUserId(u.id)?.toLowerCase()
+              );
+              const canEditRole = canActorManageTargetAccount(actorRole, u.role, 'change_role', { isSelf }).allowed;
+              const candidateRoles: UserRole[] = ['super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'];
+              const allowedRolesForTarget: UserRole[] = candidateRoles.filter(
+                (r) => canActorManageTargetAccount(actorRole, u.role, 'change_role', { isSelf, requestedNewRole: r }).allowed
+              );
+              const canSuspend = canActorManageTargetAccount(actorRole, u.role, 'suspend', { isSelf }).allowed;
 
               return (
                 <tr
@@ -183,28 +198,35 @@ export const UserTable: React.FC<UserTableProps> = ({
                     </div>
                   </td>
 
-                  {/* Role Selector */}
+                  {/* Role Selector or Badge */}
                   <td className="py-3.5 px-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <select
-                        aria-label={`تعديل دور ${u.name}`}
-                        data-testid={`role-select-${u.id}`}
-                        value={u.role}
-                        disabled={isUpdating}
-                        onChange={(e) => onRoleChange?.(u, e.target.value as UserRole)}
-                        className="bg-bg text-text text-xs rounded-lg border border-border py-1.5 px-2.5 font-medium focus:border-primary outline-none transition-colors"
-                      >
-                        <option value="user">متدرب</option>
-                        <option value="lecturer">محاضر</option>
-                        <option value="assistant_admin">مساعد مدير</option>
-                        <option value="admin">مدير</option>
-                      </select>
-                      {isUpdating && (
-                        <span className="text-text-muted text-[11px] animate-pulse">
-                          جارٍ الحفظ...
-                        </span>
-                      )}
-                    </div>
+                    {canEditRole && allowedRolesForTarget.length > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <select
+                          aria-label={`تعديل دور ${u.name}`}
+                          data-testid={`role-select-${u.id}`}
+                          value={u.role}
+                          disabled={isUpdating}
+                          onChange={(e) => onRoleChange?.(u, e.target.value as UserRole)}
+                          className="bg-bg text-text text-xs rounded-lg border border-border py-1.5 px-2.5 font-medium focus:border-primary outline-none transition-colors"
+                        >
+                          {allowedRolesForTarget.map((r) => (
+                            <option key={r} value={r}>
+                              {USER_ROLE_LABELS_AR[r] || r}
+                            </option>
+                          ))}
+                        </select>
+                        {isUpdating && (
+                          <span className="text-text-muted text-[11px] animate-pulse">
+                            جارٍ الحفظ...
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <Badge variant="neutral" size="sm" data-testid={`role-badge-${u.id}`}>
+                        {USER_ROLE_LABELS_AR[u.role] || u.role}
+                      </Badge>
+                    )}
                   </td>
 
                   {/* Status Badge */}
@@ -266,32 +288,34 @@ export const UserTable: React.FC<UserTableProps> = ({
                         تحديد الصلاحيات
                       </Button>
 
-                      {u.status === 'active' ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onOpenStatusModal?.(u, 'suspended')}
-                          disabled={isUpdating}
-                          data-testid={`suspend-user-btn-${u.id}`}
-                          className="text-xs text-danger hover:text-danger-dark border-danger/30 hover:border-danger/60 hover:bg-danger/5 px-2"
-                        >
-                          <Icon name="alertCircle" size="sm" className="ml-1" />
-                          إيقاف
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onOpenStatusModal?.(u, 'active')}
-                          disabled={isUpdating}
-                          data-testid={`activate-user-btn-${u.id}`}
-                          className="text-xs text-success hover:text-success-dark border-success/30 hover:border-success/60 hover:bg-success/5 px-2"
-                        >
-                          <Icon name="check" size="sm" className="ml-1" />
-                          تنشيط
-                        </Button>
+                      {canSuspend && (
+                        u.status === 'active' ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onOpenStatusModal?.(u, 'suspended')}
+                            disabled={isUpdating}
+                            data-testid={`suspend-user-btn-${u.id}`}
+                            className="text-xs text-danger hover:text-danger-dark border-danger/30 hover:border-danger/60 hover:bg-danger/5 px-2"
+                          >
+                            <Icon name="alertCircle" size="sm" className="ml-1" />
+                            إيقاف
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onOpenStatusModal?.(u, 'active')}
+                            disabled={isUpdating}
+                            data-testid={`activate-user-btn-${u.id}`}
+                            className="text-xs text-success hover:text-success-dark border-success/30 hover:border-success/60 hover:bg-success/5 px-2"
+                          >
+                            <Icon name="check" size="sm" className="ml-1" />
+                            تنشيط
+                          </Button>
+                        )
                       )}
                     </div>
                   </td>

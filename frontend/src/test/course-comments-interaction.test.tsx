@@ -387,8 +387,8 @@ describe('Increment 11 — Phase 5C: Course Discussion UI & Reporting Dialog', (
     });
 
     it('displays enrollment-required banner and hides composer for unenrolled trainees', async () => {
-      // USR011 is NOT enrolled in CRS003
-      setTestSession('user', 'USR011');
+      // USR007 is NOT enrolled in CRS003
+      setTestSession('user', 'USR007');
 
       renderWithProviders(
         <CourseCommentsSection
@@ -410,8 +410,8 @@ describe('Increment 11 — Phase 5C: Course Discussion UI & Reporting Dialog', (
     });
 
     it('enforces enrollment at the API layer when an unenrolled user posts directly', async () => {
-      // USR011 is NOT enrolled in CRS003
-      setTestSession('user', 'USR011');
+      // USR007 is NOT enrolled in CRS003
+      setTestSession('user', 'USR007');
 
       await expect(
         commentsApi.createComment('CRS003', 'محاولة إضافة تعليق بدون تسجيل في الكورس')
@@ -853,8 +853,8 @@ describe('Increment 11 — Phase 5C: Course Discussion UI & Reporting Dialog', (
     });
 
     it('unenrolled trainee cannot report comments via API or UI', async () => {
-      // USR011 is a trainee who is NOT enrolled in CRS003
-      setTestSession('user', 'USR011');
+      // USR007 is a trainee who is NOT enrolled in CRS003
+      setTestSession('user', 'USR007');
 
       renderWithProviders(
         <CourseCommentsSection

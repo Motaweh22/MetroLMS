@@ -53,7 +53,12 @@ const handleGetReviewQueue = ({ request }: { request: Request }) => {
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isAdministrativeReader =
+    user.role === 'developer' ||
+    user.role === 'super_admin' ||
+    user.role === 'admin' ||
+    user.role === 'assistant_admin';
+  if (!isAdministrativeReader) {
     return HttpResponse.json(
       { message: 'غير مصرح لك بعرض قائمة المراجعة' },
       { status: 403 }
@@ -113,7 +118,12 @@ const handleGetAdminReviewData = ({ request, params }: { request: Request; param
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isAdministrativeReader =
+    user.role === 'developer' ||
+    user.role === 'super_admin' ||
+    user.role === 'admin' ||
+    user.role === 'assistant_admin';
+  if (!isAdministrativeReader) {
     return HttpResponse.json(
       { message: 'غير مصرح لك باستعراض بيانات مراجعة المقرر كمسؤول' },
       { status: 403 }
@@ -138,7 +148,12 @@ const handleGetStagedEdits = ({ request, params }: { request: Request; params: H
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isAdministrativeReader =
+    user.role === 'developer' ||
+    user.role === 'super_admin' ||
+    user.role === 'admin' ||
+    user.role === 'assistant_admin';
+  if (!isAdministrativeReader) {
     return HttpResponse.json(
       { message: 'غير مصرح لك بعرض التعديلات المؤقتة' },
       { status: 403 }
@@ -163,7 +178,9 @@ const handleSaveStagedEdits = async ({ request, params }: { request: Request; pa
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isOperationalAdmin =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isOperationalAdmin) {
     return HttpResponse.json(
       { message: 'غير مصرح لك بتعديل محتوى المقرر كمسؤول' },
       { status: 403 }
@@ -189,7 +206,9 @@ const handleDeleteStagedEdits = ({ request, params }: { request: Request; params
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isOperationalAdmin =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isOperationalAdmin) {
     return HttpResponse.json(
       { message: 'غير مصرح لك بحذف التعديلات المؤقتة كمسؤول' },
       { status: 403 }
@@ -214,7 +233,12 @@ const handleGetWorkingNotes = ({ request, params }: { request: Request; params: 
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isAdministrativeReader =
+    user.role === 'developer' ||
+    user.role === 'super_admin' ||
+    user.role === 'admin' ||
+    user.role === 'assistant_admin';
+  if (!isAdministrativeReader) {
     return HttpResponse.json(
       { message: 'غير مصرح لك بعرض الملاحظات الخاصة بالمراجعين' },
       { status: 403 }
@@ -239,7 +263,9 @@ const handleSaveWorkingNotes = async ({ request, params }: { request: Request; p
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isOperationalAdmin =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isOperationalAdmin) {
     return HttpResponse.json(
       { message: 'غير مصرح لك بحفظ الملاحظات الخاصة بالمراجعين' },
       { status: 403 }
@@ -265,7 +291,9 @@ const handleDeleteWorkingNote = ({ request, params }: { request: Request; params
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isOperationalAdmin =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isOperationalAdmin) {
     return HttpResponse.json(
       { message: 'غير مصرح لك بحذف الملاحظات الخاصة بالمراجعين' },
       { status: 403 }
@@ -294,7 +322,9 @@ const handleExecuteDecision = async ({ request, params }: { request: Request; pa
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isDecisionMaker =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isDecisionMaker) {
     return HttpResponse.json(
       { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
       { status: 403 }
@@ -320,7 +350,9 @@ const handleApprove = async ({ request, params }: { request: Request; params: Ha
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isDecisionMaker =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isDecisionMaker) {
     return HttpResponse.json(
       { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
       { status: 403 }
@@ -357,7 +389,9 @@ const handleReturnWithEdits = async ({ request, params }: { request: Request; pa
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isDecisionMaker =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isDecisionMaker) {
     return HttpResponse.json(
       { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
       { status: 403 }
@@ -394,7 +428,9 @@ const handleReject = async ({ request, params }: { request: Request; params: Han
       { status: 401 }
     );
   }
-  if (user.role !== 'admin') {
+  const isDecisionMaker =
+    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+  if (!isDecisionMaker) {
     return HttpResponse.json(
       { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
       { status: 403 }

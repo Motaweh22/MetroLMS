@@ -16,7 +16,7 @@ export const notificationHandlers = [
       );
     }
 
-    const notifications = inMemoryStore.getNotificationsForUser(user.id);
+    const notifications = inMemoryStore.getNotificationsForUser(user.id, user.role);
     const unreadCount = inMemoryStore.getUnreadNotificationsCount(user.id);
 
     return HttpResponse.json(
@@ -41,7 +41,7 @@ export const notificationHandlers = [
 
     const notificationId = params.id as string;
     try {
-      const updated = inMemoryStore.markNotificationRead(notificationId, user.id);
+      const updated = inMemoryStore.markNotificationRead(notificationId, user.id, user.role);
       const unreadCount = inMemoryStore.getUnreadNotificationsCount(user.id);
 
       return HttpResponse.json(

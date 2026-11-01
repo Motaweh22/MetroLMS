@@ -53,6 +53,7 @@ import {
   calculateNextRenewalDate,
   migrateLegacyRecurrenceType,
 } from '@/core/domain/groups';
+import { isAttachmentResource } from '@/features/groups/utils/meetingUtils';
 import type {
   TrainingGroup,
   GroupMetrics,
@@ -70,6 +71,7 @@ import type {
   TraineeGroupMetrics,
   CohortSummaryMetrics,
   AssignedCourseProgressMetric,
+  GroupInstructorDTO,
 } from '@/core/groups/types';
 import type {
   CreateGroupRequestDTO,
@@ -82,8 +84,11 @@ import type {
   ReviewJoinRequestDTO,
   CreateMaterialFolderDTO,
   CandidateTraineeDTO,
+  CandidateLecturerDTO,
 } from '@/core/groups/dtos';
 import { SYNTHETIC_DEMO_ACCOUNTS } from '@/core/auth/demoAccounts';
+import { authStorage } from '@/core/auth/authStorage';
+import { CONTROLLED_TEST_FIXTURE_USERS, getControlledTestFixtures } from '../handlers/resolveUser';
 import type {
   ManagedUserDTO,
   UserFilterParams,
@@ -93,7 +98,7 @@ import type {
   UserTranscriptCourseItem,
 } from '@/core/user-management/types';
 import { INITIAL_MANAGED_USERS, resolveCanonicalUserId } from '../fixtures/userDirectoryFixtures';
-import type { NotificationItem } from '@/core/notifications/types';
+import type { NotificationItem, NotificationType } from '@/core/notifications/types';
 import type {
   DashboardData,
   TraineeContinueLearningCard,
@@ -102,6 +107,7 @@ import type {
 import type {
   RolePermissionsConfig,
   UserPermissionOverride,
+  DelegationGrant,
   ApprovalRequest,
   PermissionKey,
   SystemCapability,
@@ -127,10 +133,15 @@ import { INITIAL_SECURITY_AUDIT_LOGS } from '../fixtures/securityAuditFixtures';
 import {
   evaluatePermission,
   evaluateProtectedInvariant,
+  canActorManageTargetAccount,
   validatePermissionOverride,
   ROLE_DEFAULT_CAPABILITIES,
   ROLE_CAPABILITY_CEILINGS,
   validateAdminGovernanceIntegrity,
+  ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES,
+  IMMUTABLE_BLOCKED_FOR_ASSISTANT_ADMIN,
+  mapActionToSystemCapability,
+  type AccountManagementAction,
 } from '@/core/permissions/policy';
 import type {
   CourseComment,
@@ -159,6 +170,22 @@ import type {
   UserWhatsAppVisibilityConfigDTO,
   ResolvedSupportContactDTO,
 } from '@/features/whatsapp/types';
+
+/**
+ * Developer Persona Fixture Fingerprints (MFR-45 / Surface 1–11)
+ *
+ * Gated strictly behind `import.meta.env.DEV === true`.
+ * In production builds, this evaluates to null, allowing dead-code elimination
+ * to purge all synthetic developer strings from production bundles.
+ */
+const DEV_FINGERPRINTS = import.meta.env.DEV
+  ? {
+      id: 'USR_DEV_001',
+      canonicalId: 'usr_dev_001',
+      email: 'developer.metro@internal.local',
+      name: 'مطور النظام',
+    }
+  : null;
 
 export class MockStoreError extends Error {
   status: number;
@@ -213,12 +240,15 @@ class InMemoryStore {
   private materialFiles: GroupMaterialFile[] = [];
   // Increment 11 Central Users Directory
   private users: ManagedUserDTO[] = [];
+  // Phase 1 MFR-13: Deleted User Tombstones to prevent synthetic fallback resurrection
+  private deletedUserTombstones: Set<string> = new Set<string>();
   // Increment 11 Credential separation: credentials are kept isolated from ManagedUserDTO
   private mockUserCredentials: Record<string, string> = {};
   // Increment 11 Phase 4: Permissions & Governance Ledgers
   private rolePermissionConfigs: Partial<Record<UserRole, RolePermissionsConfig>> = {};
   private userPermissionOverrides: Record<string, UserPermissionOverride> = {};
-  private delegatedOperationalAuthority: Record<string, boolean> = {};
+  private delegatedOperationalAuthority: Record<string, boolean | DelegationGrant> = {};
+  private delegatedGrants: Record<string, DelegationGrant[]> = {};
   private approvalRequests: ApprovalRequest[] = [];
   private groupAssistantAssignments: GroupAssistantAssignment[] = [];
   // Increment 11 Phase 4D: System Security Audit Trail Ledger
@@ -292,6 +322,7 @@ class InMemoryStore {
     this.stagedAdminEdits = {};
     this.reviewerWorkingNotes = {};
     this.users = JSON.parse(JSON.stringify(INITIAL_MANAGED_USERS));
+    this.deletedUserTombstones.clear();
     this.mockUserCredentials = {};
     for (const acc of Object.values(SYNTHETIC_DEMO_ACCOUNTS)) {
       this.mockUserCredentials[acc.credentials.email.toLowerCase()] = acc.credentials.password;
@@ -307,6 +338,7 @@ class InMemoryStore {
     this.rolePermissionConfigs = {};
     this.userPermissionOverrides = {};
     this.delegatedOperationalAuthority = {};
+    this.delegatedGrants = {};
     this.approvalRequests = [];
     this.groupAssistantAssignments = [];
     // Increment 11 Phase 4D: Reset Security Audit Trail Ledger
@@ -381,6 +413,17 @@ class InMemoryStore {
       } else {
         group.renewalSchedule = migrateLegacyRecurrenceType(group.renewalSchedule);
       }
+
+      const normalizedStaff = this.normalizeAndValidateGroupStaff({
+        primaryInstructorId: group.primaryInstructorId,
+        assistantLecturerIds: group.assistantLecturerIds,
+        supervisorIds: group.supervisorIds,
+      });
+      group.primaryInstructorId = normalizedStaff.primaryInstructorId;
+      group.assistantLecturerIds = normalizedStaff.assistantLecturerIds;
+      group.supervisorIds = normalizedStaff.supervisorIds;
+      this.syncGroupAssistantLedger(group);
+      this.enrichGroupWithStaff(group);
 
       const cycle1Id = `CYC-${group.id}-01`;
       group.currentCycleId = cycle1Id;
@@ -619,10 +662,22 @@ class InMemoryStore {
 
     // Idempotently add or update demo groups
     for (const group of demo.groups) {
+      const normalizedDemoStaff = this.normalizeAndValidateGroupStaff({
+        primaryInstructorId: group.primaryInstructorId,
+        assistantLecturerIds: group.assistantLecturerIds,
+        supervisorIds: group.supervisorIds,
+      });
+      group.primaryInstructorId = normalizedDemoStaff.primaryInstructorId;
+      group.assistantLecturerIds = normalizedDemoStaff.assistantLecturerIds;
+      group.supervisorIds = normalizedDemoStaff.supervisorIds;
+      this.syncGroupAssistantLedger(group);
+      this.enrichGroupWithStaff(group);
       const idx = this.groups.findIndex((g) => g.id === group.id);
       if (idx >= 0) {
         this.groups[idx] = group;
       } else {
+        this.syncGroupAssistantLedger(group);
+        this.enrichGroupWithStaff(group);
         this.groups.push(group);
       }
     }
@@ -747,8 +802,12 @@ class InMemoryStore {
    * Get all enrollments for a specific user
    */
   public getUserEnrollments(userId: string): CourseEnrollment[] {
+    const canonicalId = resolveCanonicalUserId(userId).toLowerCase();
+    const rawId = userId.trim().toLowerCase();
     return this.enrollments.filter(
-      (e) => e.userId.toLowerCase() === userId.trim().toLowerCase()
+      (e) =>
+        resolveCanonicalUserId(e.userId).toLowerCase() === canonicalId ||
+        e.userId.toLowerCase() === rawId
     );
   }
 
@@ -763,10 +822,14 @@ class InMemoryStore {
    * Get user's enrollment for a specific course
    */
   public getCourseEnrollment(courseId: string, userId: string): CourseEnrollment | undefined {
+    const canonicalId = resolveCanonicalUserId(userId).toLowerCase();
+    const rawId = userId.trim().toLowerCase();
+    const cId = courseId.trim().toLowerCase();
     return this.enrollments.find(
       (e) =>
-        e.courseId.toLowerCase() === courseId.trim().toLowerCase() &&
-        e.userId.toLowerCase() === userId.trim().toLowerCase()
+        e.courseId.toLowerCase() === cId &&
+        (resolveCanonicalUserId(e.userId).toLowerCase() === canonicalId ||
+          e.userId.toLowerCase() === rawId)
     );
   }
 
@@ -807,11 +870,12 @@ class InMemoryStore {
       throw new MockStoreError('أنت مسجل بالفعل في هذه الدورة التدريبية', 409);
     }
 
-    // Create unique enrollment record
+    // Create unique enrollment record using canonical user ID
+    const canonicalUserId = resolveCanonicalUserId(userId);
     const enrollment: CourseEnrollment = {
       id: `ENR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
       courseId: course.id,
-      userId,
+      userId: canonicalUserId,
       enrolledAt: new Date().toISOString(),
       status: 'active',
     };
@@ -820,6 +884,16 @@ class InMemoryStore {
 
     // Atomically increment aggregate enrollmentCount on the course
     course.enrollmentCount = (course.enrollmentCount || 0) + 1;
+
+    this.createNotification({
+      userId,
+      type: 'enrollment_approved',
+      title: 'تم التسجيل في الدورة التدريبية',
+      message: `تم تسجيلك بنجاح في الدورة التدريبية "${course.title}". يمكنك البدء في التعلم الآن.`,
+      courseId: course.id,
+      targetUrl: `/courses/${course.id}`,
+      dedupeKey: `course_enrolled:${course.id}:${resolveCanonicalUserId(userId)}`,
+    });
 
     return {
       enrollment,
@@ -838,17 +912,24 @@ class InMemoryStore {
     }
 
     const flatItems = this.getCourseItems(courseId);
-    const normalizedUserId = userId.toLowerCase().trim();
+    const canonicalUserId = resolveCanonicalUserId(userId).toLowerCase().trim();
+    const rawUserId = userId.toLowerCase().trim();
     const normalizedCourseId = course.id.toLowerCase().trim();
 
-    const userCourseProgress = this.userProgress[normalizedUserId]?.[normalizedCourseId] || {};
+    const userCourseProgress =
+      this.userProgress[canonicalUserId]?.[normalizedCourseId] ||
+      this.userProgress[rawUserId]?.[normalizedCourseId] ||
+      {};
     const completedItemIds = flatItems
       .filter((it) => userCourseProgress[it.id]?.completed)
       .map((it) => it.id);
 
     const progressPercent = calculateTraineeProgress(flatItems.length, completedItemIds.length);
     const isCompleted = flatItems.length > 0 && completedItemIds.length === flatItems.length;
-    const lastWatchedItemId = this.lastWatched[normalizedUserId]?.[normalizedCourseId] || null;
+    const lastWatchedItemId =
+      this.lastWatched[canonicalUserId]?.[normalizedCourseId] ||
+      this.lastWatched[rawUserId]?.[normalizedCourseId] ||
+      null;
 
     return {
       courseId: course.id,
@@ -859,6 +940,147 @@ class InMemoryStore {
       isCompleted,
       updatedAt: new Date().toISOString(),
       itemsProgress: userCourseProgress,
+    };
+  }
+
+  /**
+   * Authoritatively resolves a user's role and identity classification for learning progress operations.
+   * Strictly enforces:
+   * 1. Canonical directory / fixture / session source of truth.
+   * 2. Tombstone and account suspension checks (fails closed).
+   * 3. Protection against caller role spoofing (caller-supplied role NEVER overrides authoritative record).
+   * 4. Complete production fixture isolation (test fixtures never resolve in production mode).
+   * 5. Fails closed (returns null) for unresolvable user identities.
+   */
+  public resolveAuthoritativeProgressRole(
+    userId: string,
+    candidateRole?: UserRole,
+    envMode: 'development' | 'production' = import.meta.env.DEV ? 'development' : 'production'
+  ): {
+    canonicalUserId: string;
+    role: UserRole;
+    isPreview: boolean;
+    isAuthoritativeTrainee: boolean;
+  } | null {
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return null;
+    }
+
+    const trimmedId = userId.trim();
+    const canonicalUserId = resolveCanonicalUserId(trimmedId).toLowerCase().trim();
+    const rawUserId = trimmedId.toLowerCase();
+
+    // 1. Tombstone check: strictly fail closed
+    if (
+      this.isUserTombstoned(trimmedId) ||
+      this.isUserTombstoned(canonicalUserId) ||
+      this.deletedUserTombstones.has(canonicalUserId) ||
+      this.deletedUserTombstones.has(rawUserId)
+    ) {
+      return null;
+    }
+
+    // 2. Query authoritative central directory
+    let authoritativeRole: UserRole | undefined;
+
+    // Pass 'developer' as actorRole query so developer accounts are not masked by privacy controls
+    const managedUser =
+      this.getManagedUserById(canonicalUserId, 'developer') ||
+      this.getManagedUserById(trimmedId, 'developer');
+
+    if (managedUser) {
+      // In production mode, synthetic Developer and Super Admin personas must never resolve
+      if (
+        envMode === 'production' &&
+        (managedUser.role === 'developer' || managedUser.role === 'super_admin')
+      ) {
+        return null;
+      }
+      // Suspended accounts cannot record progress: fail closed
+      if (managedUser.status === 'suspended') {
+        return null;
+      }
+      authoritativeRole = managedUser.role;
+    }
+
+    // 3. In development/testing environments ONLY: check synthetic demo accounts
+    if (!authoritativeRole && envMode === 'development') {
+      const matchedDemo = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find(
+        (acc) =>
+          acc.user.id.toLowerCase() === canonicalUserId ||
+          acc.user.id.toLowerCase() === rawUserId ||
+          (acc.user.username && acc.user.username.toLowerCase() === rawUserId)
+      );
+      if (matchedDemo) {
+        authoritativeRole = matchedDemo.user.role;
+      }
+    }
+
+    // 4. In development/testing environments ONLY: check controlled test fixture personas
+    if (!authoritativeRole && envMode === 'development') {
+      const fixtureUsers = getControlledTestFixtures('development');
+      const fixtureUser =
+        fixtureUsers[canonicalUserId] ||
+        fixtureUsers[rawUserId] ||
+        fixtureUsers[trimmedId];
+      if (fixtureUser) {
+        authoritativeRole = fixtureUser.role;
+      }
+    }
+
+    // 5. Check active session if available
+    if (!authoritativeRole) {
+      try {
+        const session = authStorage.getSession();
+        if (session && session.user && session.user.id) {
+          // Explicit expiry verification: expired sessions fail closed
+          if (session.expiresAt && Date.now() > session.expiresAt) {
+            return null;
+          }
+          const sessionCanonical = resolveCanonicalUserId(session.user.id).toLowerCase().trim();
+          if (
+            sessionCanonical === canonicalUserId ||
+            session.user.id.toLowerCase() === rawUserId
+          ) {
+            // In production mode, synthetic Developer and Super Admin sessions cannot resolve
+            if (
+              envMode === 'production' &&
+              (session.user.role === 'developer' || session.user.role === 'super_admin')
+            ) {
+              return null;
+            }
+            authoritativeRole = session.user.role;
+          }
+        }
+      } catch {
+        // Storage restricted or non-browser environment
+      }
+    }
+
+    // 6. Fail closed if identity cannot be authoritatively resolved
+    if (!authoritativeRole) {
+      return null;
+    }
+
+    // 7. Security invariant: Caller-supplied role must NEVER override authoritative stored role.
+    // Even if candidateRole is passed (e.g. candidateRole === 'user' for an admin account),
+    // authoritativeRole always prevails.
+    const effectiveRole = authoritativeRole;
+
+    const isPreview =
+      effectiveRole === 'developer' ||
+      effectiveRole === 'super_admin' ||
+      effectiveRole === 'admin' ||
+      effectiveRole === 'assistant_admin' ||
+      effectiveRole === 'lecturer';
+
+    const isAuthoritativeTrainee = effectiveRole === 'user';
+
+    return {
+      canonicalUserId,
+      role: effectiveRole,
+      isPreview,
+      isAuthoritativeTrainee,
     };
   }
 
@@ -890,30 +1112,40 @@ class InMemoryStore {
       throw new MockStoreError('الدرس غير موجود في هذه الدورة التدريبية', 404);
     }
 
-    // Preview isolation: Lecturers and admins preview without mutating trainee records
-    if (userRole === 'admin' || userRole === 'lecturer') {
+    // Authoritative Identity & Role Resolution (MFR-21 / Security Reconciliation)
+    const authResolution = this.resolveAuthoritativeProgressRole(userId, userRole);
+    if (!authResolution) {
+      // Fail closed: Unresolvable identity, tombstoned actor, or suspended user
+      throw new MockStoreError('تعذر التحقق من هوية المستخدم بشكل موثوق للوصول إلى سجلات التقدم', 401);
+    }
+
+    const canonicalUserId = authResolution.canonicalUserId;
+    const normalizedCourseId = course.id.toLowerCase().trim();
+
+    // Preview isolation (MFR-21): Preview activity by admin-class roles or lecturers never mutates trainee records.
+    // Pre-existing progress records and lastWatched entries (if any) are strictly preserved unmodified.
+    if (authResolution.isPreview) {
+      const existing = this.userProgress[canonicalUserId]?.[normalizedCourseId]?.[itemId];
+
       return {
         itemId,
-        completed: false,
-        lastPositionSeconds: activity.lastPositionSeconds ?? 0,
-        furthestWatchedSeconds: activity.furthestWatchedSeconds ?? 0,
-        eligibleViewingSeconds: activity.eligibleViewingSeconds ?? 0,
-        durationSeconds: activity.durationSeconds,
-        updatedAt: new Date().toISOString(),
+        completed: existing?.completed ?? false,
+        lastPositionSeconds: activity.lastPositionSeconds ?? existing?.lastPositionSeconds ?? 0,
+        furthestWatchedSeconds: activity.furthestWatchedSeconds ?? existing?.furthestWatchedSeconds ?? 0,
+        eligibleViewingSeconds: activity.eligibleViewingSeconds ?? existing?.eligibleViewingSeconds ?? 0,
+        durationSeconds: activity.durationSeconds ?? existing?.durationSeconds,
+        updatedAt: existing?.updatedAt ?? new Date().toISOString(),
       };
     }
 
-    const normalizedUserId = userId.toLowerCase().trim();
-    const normalizedCourseId = course.id.toLowerCase().trim();
-
-    if (!this.userProgress[normalizedUserId]) {
-      this.userProgress[normalizedUserId] = {};
+    if (!this.userProgress[canonicalUserId]) {
+      this.userProgress[canonicalUserId] = {};
     }
-    if (!this.userProgress[normalizedUserId][normalizedCourseId]) {
-      this.userProgress[normalizedUserId][normalizedCourseId] = {};
+    if (!this.userProgress[canonicalUserId][normalizedCourseId]) {
+      this.userProgress[canonicalUserId][normalizedCourseId] = {};
     }
 
-    const existing = this.userProgress[normalizedUserId][normalizedCourseId][itemId] || {
+    const existing = this.userProgress[canonicalUserId][normalizedCourseId][itemId] || {
       itemId,
       completed: false,
       lastPositionSeconds: 0,
@@ -943,12 +1175,12 @@ class InMemoryStore {
       updatedAt: new Date().toISOString(),
     };
 
-    this.userProgress[normalizedUserId][normalizedCourseId][itemId] = updated;
+    this.userProgress[canonicalUserId][normalizedCourseId][itemId] = updated;
 
-    if (!this.lastWatched[normalizedUserId]) {
-      this.lastWatched[normalizedUserId] = {};
+    if (!this.lastWatched[canonicalUserId]) {
+      this.lastWatched[canonicalUserId] = {};
     }
-    this.lastWatched[normalizedUserId][normalizedCourseId] = itemId;
+    this.lastWatched[canonicalUserId][normalizedCourseId] = itemId;
 
     return updated;
   }
@@ -985,34 +1217,44 @@ class InMemoryStore {
       throw new MockStoreError('الدرس غير موجود في هذه الدورة التدريبية', 404);
     }
 
-    // Preview mode: return simulated completion without persisting
-    if (userRole === 'admin' || userRole === 'lecturer') {
+    // Authoritative Identity & Role Resolution (MFR-21 / Security Reconciliation)
+    const authResolution = this.resolveAuthoritativeProgressRole(userId, userRole);
+    if (!authResolution) {
+      // Fail closed: Unresolvable identity, tombstoned actor, or suspended user
+      throw new MockStoreError('تعذر التحقق من هوية المستخدم بشكل موثوق للوصول إلى سجلات التقدم', 401);
+    }
+
+    const canonicalUserId = authResolution.canonicalUserId;
+    const normalizedCourseId = course.id.toLowerCase().trim();
+
+    // Preview mode (MFR-21): return simulated completion without persisting to trainee progress.
+    // Pre-existing progress records and lastWatched entries (if any) are strictly preserved unmodified.
+    if (authResolution.isPreview) {
       const previewProgress = this.getCourseProgress(userId, courseId);
+      const existing = this.userProgress[canonicalUserId]?.[normalizedCourseId]?.[itemId];
+
       return {
         progress: previewProgress,
         completedItem: {
           itemId,
           completed: true,
-          completedAt: new Date().toISOString(),
-          lastPositionSeconds: 0,
-          furthestWatchedSeconds: 0,
-          eligibleViewingSeconds: 0,
-          updatedAt: new Date().toISOString(),
+          completedAt: existing?.completedAt || new Date().toISOString(),
+          lastPositionSeconds: existing?.lastPositionSeconds ?? 0,
+          furthestWatchedSeconds: existing?.furthestWatchedSeconds ?? 0,
+          eligibleViewingSeconds: existing?.eligibleViewingSeconds ?? 0,
+          updatedAt: existing?.updatedAt || new Date().toISOString(),
         },
         message: 'معاينة: تم استكمال الدرس دون تعديل سجلات المتدرب',
         justCompletedCourse: false,
       };
     }
 
-    const normalizedUserId = userId.toLowerCase().trim();
-    const normalizedCourseId = course.id.toLowerCase().trim();
-
     const currentProgress = this.getCourseProgress(userId, courseId);
     const isLocked = isLessonLocked(
       itemIndex,
       flatItems,
       currentProgress.completedItemIds,
-      userRole
+      authResolution.role
     );
     if (isLocked) {
       throw new MockStoreError(
@@ -1021,14 +1263,14 @@ class InMemoryStore {
       );
     }
 
-    if (!this.userProgress[normalizedUserId]) {
-      this.userProgress[normalizedUserId] = {};
+    if (!this.userProgress[canonicalUserId]) {
+      this.userProgress[canonicalUserId] = {};
     }
-    if (!this.userProgress[normalizedUserId][normalizedCourseId]) {
-      this.userProgress[normalizedUserId][normalizedCourseId] = {};
+    if (!this.userProgress[canonicalUserId][normalizedCourseId]) {
+      this.userProgress[canonicalUserId][normalizedCourseId] = {};
     }
 
-    const existing = this.userProgress[normalizedUserId][normalizedCourseId][itemId] || {
+    const existing = this.userProgress[canonicalUserId][normalizedCourseId][itemId] || {
       itemId,
       completed: false,
       lastPositionSeconds: 0,
@@ -1050,15 +1292,27 @@ class InMemoryStore {
       updatedAt: new Date().toISOString(),
     };
 
-    this.userProgress[normalizedUserId][normalizedCourseId][itemId] = completedItem;
+    this.userProgress[canonicalUserId][normalizedCourseId][itemId] = completedItem;
 
-    if (!this.lastWatched[normalizedUserId]) {
-      this.lastWatched[normalizedUserId] = {};
+    if (!this.lastWatched[canonicalUserId]) {
+      this.lastWatched[canonicalUserId] = {};
     }
-    this.lastWatched[normalizedUserId][normalizedCourseId] = itemId;
+    this.lastWatched[canonicalUserId][normalizedCourseId] = itemId;
 
     const updatedCourseProgress = this.getCourseProgress(userId, courseId);
     const justCompletedCourse = !wasCourseCompleted && updatedCourseProgress.isCompleted;
+
+    if (justCompletedCourse) {
+      this.createNotification({
+        userId,
+        type: 'course_completed',
+        title: 'تهانينا! أتممت الدورة التدريبية',
+        message: `لقد أكملت جميع دروس الدورة التدريبية "${course.title}" بنجاح بنسبة 100%.`,
+        courseId: course.id,
+        targetUrl: `/courses/${course.id}`,
+        dedupeKey: `course_completed:${course.id}:${resolveCanonicalUserId(userId)}`,
+      });
+    }
 
     return {
       progress: updatedCourseProgress,
@@ -1075,29 +1329,32 @@ class InMemoryStore {
    */
   public getGroups(userId?: string, userRole?: UserRole): TrainingGroup[] {
     for (const g of this.groups) {
-      if (g.renewalSchedule?.autoRenewalEnabled) {
-        this.checkAndProcessAutoRenewal(g.id);
-      }
+      this.enrichGroupWithStaff(g);
     }
+    const isAdministrativeReader =
+      !userId ||
+      userRole === 'developer' ||
+      userRole === 'super_admin' ||
+      userRole === 'admin' ||
+      userRole === 'assistant_admin';
 
-    if (!userId || userRole === 'admin') {
+    if (isAdministrativeReader) {
       return [...this.groups];
     }
 
     const normalizedUserId = userId.trim();
+    const canonicalUserId = resolveCanonicalUserId(normalizedUserId).toLowerCase();
 
     if (userRole === 'lecturer') {
-      return this.groups.filter((g) =>
-        (g.supervisorIds || []).some(
-          (sid) => sid.toLowerCase() === normalizedUserId.toLowerCase()
-        )
-      );
+      return this.groups.filter((g) => this.isUserAssignedGroupSupervisor(g, normalizedUserId));
     }
 
     // Trainee view: only return groups where trainee is explicitly enrolled
     return this.groups.filter((g) =>
       (g.traineeIds || []).some(
-        (tid) => tid.toLowerCase() === normalizedUserId.toLowerCase()
+        (tid) =>
+          tid.toLowerCase() === normalizedUserId.toLowerCase() ||
+          resolveCanonicalUserId(tid).toLowerCase() === canonicalUserId
       )
     );
   }
@@ -1110,22 +1367,26 @@ class InMemoryStore {
     userId?: string,
     userRole?: UserRole
   ): TrainingGroup | null {
-    this.checkAndProcessAutoRenewal(groupId);
-
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) return null;
+    this.enrichGroupWithStaff(group);
 
-    if (!userId || userRole === 'admin') {
+    const isAdministrativeReader =
+      !userId ||
+      userRole === 'developer' ||
+      userRole === 'super_admin' ||
+      userRole === 'admin' ||
+      userRole === 'assistant_admin';
+
+    if (isAdministrativeReader) {
       return group;
     }
 
     const normalizedUserId = userId.trim().toLowerCase();
+    const canonicalUserId = resolveCanonicalUserId(normalizedUserId).toLowerCase();
 
     if (userRole === 'lecturer') {
-      const isSupervisor = (group.supervisorIds || []).some(
-        (sid) => sid.toLowerCase() === normalizedUserId
-      );
-      if (!isSupervisor) {
+      if (!this.isUserAssignedGroupSupervisor(group, normalizedUserId)) {
         throw new MockStoreError('غير مصرح لك باستعراض بيانات هذه المجموعة التدريبية', 403);
       }
       return group;
@@ -1133,7 +1394,9 @@ class InMemoryStore {
 
     // Trainee check
     const isMember = (group.traineeIds || []).some(
-      (tid) => tid.toLowerCase() === normalizedUserId
+      (tid) =>
+        tid.toLowerCase() === normalizedUserId ||
+        resolveCanonicalUserId(tid).toLowerCase() === canonicalUserId
     );
     if (!isMember) {
       throw new MockStoreError('أنت لست عضواً في هذه المجموعة التدريبية', 403);
@@ -1144,22 +1407,23 @@ class InMemoryStore {
 
   /**
    * Calculate aggregated metrics for a specific group, optionally scoped to a renewal cycle.
+   * Surface 3: If viewerRole !== 'developer', excludes Developer from traineeMetricsList and aggregations.
    */
-  public getGroupMetrics(groupId: string, cycleId?: string): GroupMetrics | null {
-    if (!cycleId) {
-      this.checkAndProcessAutoRenewal(groupId);
+  public getGroupMetrics(groupId: string, cycleId?: string, viewerRole?: UserRole): GroupMetrics | null {
+    const targetGroupForEnrich = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+    if (targetGroupForEnrich) {
+      this.enrichGroupWithStaff(targetGroupForEnrich);
     }
-
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) return null;
 
     const targetCycle = cycleId
       ? this.renewalCycles.find(
-          (c) => c.id.toLowerCase() === cycleId.toLowerCase() && c.groupId.toLowerCase() === group.id.toLowerCase()
-        )
+        (c) => c.id.toLowerCase() === cycleId.toLowerCase() && c.groupId.toLowerCase() === group.id.toLowerCase()
+      )
       : (group.currentCycleId
-          ? this.renewalCycles.find((c) => c.id.toLowerCase() === group.currentCycleId?.toLowerCase())
-          : null);
+        ? this.renewalCycles.find((c) => c.id.toLowerCase() === group.currentCycleId?.toLowerCase())
+        : null);
 
     const now = new Date();
     const groupStart = new Date(targetCycle ? targetCycle.startDateTime : group.startDateTime);
@@ -1208,7 +1472,15 @@ class InMemoryStore {
       groupMemberMap.set(m.userId.toLowerCase(), m);
     }
 
-    const traineeMetricsList: TraineeGroupMetrics[] = (group.traineeIds || []).map((traineeId) => {
+    const rawTraineeIds = (group.traineeIds || []).filter((tid) => {
+      if (viewerRole && viewerRole !== 'developer') {
+        const u = this.getManagedUserById(tid, viewerRole);
+        return Boolean(u) && u.role !== 'developer';
+      }
+      return true;
+    });
+
+    const traineeMetricsList: TraineeGroupMetrics[] = rawTraineeIds.map((traineeId) => {
       let totalCompletedLessons = 0;
       let completedCoursesCount = 0;
       let worstAttention: TraineeAttentionResult = {
@@ -1224,11 +1496,11 @@ class InMemoryStore {
         // Look up cycle attempt for progress isolation
         const cycleAttempt = targetCycle
           ? this.courseAttempts.find(
-              (a) =>
-                a.userId.toLowerCase() === traineeId.toLowerCase() &&
-                a.courseId.toLowerCase() === ac.courseId.toLowerCase() &&
-                a.cycleId?.toLowerCase() === targetCycle.id.toLowerCase()
-            )
+            (a) =>
+              a.userId.toLowerCase() === traineeId.toLowerCase() &&
+              a.courseId.toLowerCase() === ac.courseId.toLowerCase() &&
+              a.cycleId?.toLowerCase() === targetCycle.id.toLowerCase()
+          )
           : null;
 
         let progressPercent = 0;
@@ -1339,9 +1611,9 @@ class InMemoryStore {
           ? Math.round((totalCompletedLessons / programTotalRequiredLessons) * 100)
           : rawAssignedCourses.length > 0
             ? Math.round(
-                rawAssignedCourses.reduce((sum, ac) => sum + (courseProgressMap[ac.courseId]?.percent || 0), 0) /
-                  rawAssignedCourses.length
-              )
+              rawAssignedCourses.reduce((sum, ac) => sum + (courseProgressMap[ac.courseId]?.percent || 0), 0) /
+              rawAssignedCourses.length
+            )
             : 0;
 
       return {
@@ -1383,8 +1655,8 @@ class InMemoryStore {
       const averageProgressPercent =
         enrolledCount > 0
           ? Math.round(
-              courseTrainees.reduce((sum, cp) => sum + (cp.percent || 0), 0) / enrolledCount
-            )
+            courseTrainees.reduce((sum, cp) => sum + (cp.percent || 0), 0) / enrolledCount
+          )
           : 0;
 
       return {
@@ -1416,8 +1688,8 @@ class InMemoryStore {
     const averageProgressPercent =
       totalMembers > 0
         ? Math.round(
-            traineeMetricsList.reduce((sum, t) => sum + t.programPercent, 0) / totalMembers
-          )
+          traineeMetricsList.reduce((sum, t) => sum + t.programPercent, 0) / totalMembers
+        )
         : 0;
 
     const warningAlertsCount = traineeMetricsList.filter(
@@ -1484,13 +1756,20 @@ class InMemoryStore {
       lastWatchedItemId?: string;
     }
   > {
+    const canonicalUserId = resolveCanonicalUserId(userId).toLowerCase().trim();
     const normalizedUserId = userId.trim().toLowerCase();
     const userEnrollments = this.enrollments.filter(
-      (e) => e.userId.toLowerCase() === normalizedUserId
+      (e) =>
+        resolveCanonicalUserId(e.userId).toLowerCase() === canonicalUserId ||
+        e.userId.toLowerCase() === normalizedUserId
     );
 
     const traineeGroups = this.groups.filter((g) =>
-      (g.traineeIds || []).some((tid) => tid.toLowerCase() === normalizedUserId)
+      (g.traineeIds || []).some(
+        (tid) =>
+          resolveCanonicalUserId(tid).toLowerCase() === canonicalUserId ||
+          tid.toLowerCase() === normalizedUserId
+      )
     );
 
     const now = new Date();
@@ -1512,7 +1791,8 @@ class InMemoryStore {
       const progress = this.getCourseProgress(userId, course.id);
 
       // Check group-level and course-level deadline policy
-      let isExpired = false;
+      let hasActiveAssignment = false;
+      let hasExpiredAssignment = false;
       let effectivePolicy: 'keep_no_cert' | 'hide' = 'keep_no_cert';
 
       for (const grp of traineeGroups) {
@@ -1522,11 +1802,18 @@ class InMemoryStore {
         if (assignment) {
           const eff = getEffectiveCourseSettings(grp, assignment, now);
           if (eff.isExpired) {
-            isExpired = true;
+            hasExpiredAssignment = true;
             effectivePolicy = eff.postDeadlinePolicy;
+          } else if (grp.adminStatus !== 'archived') {
+            hasActiveAssignment = true;
+          } else {
+            hasExpiredAssignment = true;
+            effectivePolicy = grp.postDeadlinePolicy || eff.postDeadlinePolicy;
           }
         }
       }
+
+      const isExpired = !hasActiveAssignment && hasExpiredAssignment;
 
       // Approved Rule 1: hide policy omits expired course completely
       if (isExpired && effectivePolicy === 'hide' && !progress.isCompleted) {
@@ -1603,34 +1890,252 @@ class InMemoryStore {
   // ── Notification Center Methods ───────────────────────────────────────
 
   /**
-   * Get notifications scoped to user ID sorted newest first.
+   * Dispatch a cross-component notification refresh event when running in a browser/DOM environment.
    */
-  public getNotificationsForUser(userId: string): NotificationItem[] {
-    const normalizedUserId = userId.trim().toLowerCase();
-    return this.notifications
-      .filter((n) => n.userId.toLowerCase() === normalizedUserId)
+  private emitNotificationsChanged(): void {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('metro:notifications-changed'));
+    }
+  }
+
+  /**
+   * Centralized helper to create and persist an in-app notification for a single recipient.
+   * Resolves canonical user IDs, skips suspended users, prevents duplicate spam via `dedupeKey`,
+   * and notifies active UI listeners.
+   */
+  public createNotification(params: {
+    userId: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+    courseId?: string | null;
+    groupId?: string | null;
+    requestId?: string | null;
+    targetUrl?: string | null;
+    dedupeKey?: string;
+    createdAt?: string;
+  }): NotificationItem | null {
+    const rawId = params.userId?.trim();
+    if (!rawId) return null;
+
+    const canonicalUserId = resolveCanonicalUserId(rawId);
+    const managedUser = this.getManagedUserById(canonicalUserId);
+    if (managedUser && managedUser.status === 'suspended') {
+      return null;
+    }
+
+    if (params.dedupeKey) {
+      const existing = this.notifications.find(
+        (n) =>
+          resolveCanonicalUserId(n.userId).toLowerCase() === canonicalUserId.toLowerCase() &&
+          n.dedupeKey === params.dedupeKey
+      );
+      if (existing) {
+        return existing;
+      }
+    }
+
+    // Surface 6 & Decision D-08: If notification recipient is non-developer, sanitize message and title
+    // to never name Developer as actor, substituting the neutral system identity 'النظام'.
+    let sanitizedTitle = params.title;
+    let sanitizedMessage = params.message;
+    let sanitizedTargetUrl = params.targetUrl ?? null;
+    const isRecipientDeveloper = managedUser?.role === 'developer';
+    if (!isRecipientDeveloper && DEV_FINGERPRINTS) {
+      sanitizedTitle = sanitizedTitle
+        .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
+        .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
+        .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local');
+      sanitizedMessage = sanitizedMessage
+        .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
+        .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
+        .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local');
+      if (sanitizedTargetUrl && new RegExp(DEV_FINGERPRINTS.canonicalId, 'i').test(sanitizedTargetUrl)) {
+        sanitizedTargetUrl = sanitizedTargetUrl.replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'system');
+      }
+    }
+
+    const item: NotificationItem = {
+      id: `NOT_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userId: canonicalUserId,
+      type: params.type,
+      title: sanitizedTitle,
+      message: sanitizedMessage,
+      createdAt: params.createdAt ?? new Date().toISOString(),
+      read: false,
+      courseId: params.courseId ?? null,
+      groupId: params.groupId ?? null,
+      requestId: params.requestId ?? null,
+      targetUrl: sanitizedTargetUrl,
+      dedupeKey: params.dedupeKey,
+    };
+
+    this.notifications.unshift(item);
+    this.emitNotificationsChanged();
+    return item;
+  }
+
+  /**
+   * Helper to resolve canonical user IDs of all currently eligible, non-suspended administrators.
+   */
+  private getActiveAdminRecipientIds(options?: { excludeUserId?: string }): string[] {
+    const ids = new Set<string>();
+    const excludeNormalized = options?.excludeUserId
+      ? resolveCanonicalUserId(options.excludeUserId).toLowerCase()
+      : null;
+
+    for (const u of this.users) {
+      if (u.role === 'admin' && u.status !== 'suspended') {
+        const canonical = resolveCanonicalUserId(u.id);
+        if (!excludeNormalized || canonical.toLowerCase() !== excludeNormalized) {
+          ids.add(canonical);
+        }
+      }
+    }
+
+    if (ids.size === 0 && (!excludeNormalized || excludeNormalized !== 'usr_admin_001')) {
+      const fallbackAdmin = this.getManagedUserById('usr_admin_001');
+      if (!fallbackAdmin || fallbackAdmin.status !== 'suspended') {
+        ids.add('usr_admin_001');
+      }
+    }
+
+    return Array.from(ids);
+  }
+
+  /**
+   * Helper to resolve canonical user IDs of staff responsible for a group
+   * (primary instructor, assistant lecturers, supervisors, and optionally active system administrators).
+   */
+  private getGroupStaffRecipientIds(
+    group: TrainingGroup,
+    options?: { includeAdmins?: boolean; excludeUserId?: string }
+  ): string[] {
+    const ids = new Set<string>();
+    const excludeNormalized = options?.excludeUserId
+      ? resolveCanonicalUserId(options.excludeUserId).toLowerCase()
+      : null;
+
+    const addId = (id?: string | null) => {
+      if (!id || !id.trim()) return;
+      const canonical = resolveCanonicalUserId(id.trim());
+      if (excludeNormalized && canonical.toLowerCase() === excludeNormalized) return;
+      ids.add(canonical);
+    };
+
+    addId(group.primaryInstructorId);
+    for (const assistantId of group.assistantLecturerIds || []) {
+      addId(assistantId);
+    }
+    for (const assignment of this.groupAssistantAssignments) {
+      if (
+        assignment.groupId.toLowerCase() === group.id.toLowerCase() &&
+        assignment.status === 'active'
+      ) {
+        addId(assignment.assistantLecturerId);
+      }
+    }
+    for (const supervisorId of group.supervisorIds || []) {
+      addId(supervisorId);
+    }
+
+    if (options?.includeAdmins) {
+      for (const adminId of this.getActiveAdminRecipientIds({
+        excludeUserId: options.excludeUserId,
+      })) {
+        addId(adminId);
+      }
+    }
+
+    return Array.from(ids);
+  }
+
+  /**
+   * Helper to resolve canonical user IDs of course instructors (primary lecturer + co-lecturers),
+   * including the documented trusted demo lecturer pair ('USR002' <-> 'usr_lect_002').
+   */
+  private getCourseInstructorRecipientIds(
+    course: Course,
+    options?: { excludeUserId?: string }
+  ): string[] {
+    const ids = new Set<string>();
+    const excludeNormalized = options?.excludeUserId
+      ? resolveCanonicalUserId(options.excludeUserId).toLowerCase()
+      : null;
+
+    const addId = (id?: string | null) => {
+      if (!id || !id.trim()) return;
+      const canonical = resolveCanonicalUserId(id.trim());
+      if (!excludeNormalized || canonical.toLowerCase() !== excludeNormalized) {
+        ids.add(canonical);
+      }
+      // Mirror to documented synthetic demo lecturer persona when course is assigned to legacy USR002
+      if (canonical.toLowerCase() === 'usr002') {
+        if (!excludeNormalized || excludeNormalized !== 'usr_lect_002') {
+          ids.add('usr_lect_002');
+        }
+      }
+    };
+
+    addId(course.lecturerId);
+    for (const coId of course.coLecturers || []) {
+      addId(coId);
+    }
+
+    return Array.from(ids);
+  }
+
+  /**
+   * Get notifications scoped to user ID sorted newest first.
+   * Surface 6 & Decision D-08: If viewerRole !== 'developer', sanitizes any stray references to Developer as 'النظام'.
+   */
+  public getNotificationsForUser(userId: string, viewerRole?: UserRole): NotificationItem[] {
+    const canonicalUserId = resolveCanonicalUserId(userId.trim()).toLowerCase();
+    const userNotifs = this.notifications
+      .filter((n) => resolveCanonicalUserId(n.userId).toLowerCase() === canonicalUserId)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    if (viewerRole && viewerRole !== 'developer' && DEV_FINGERPRINTS) {
+      return userNotifs.map((n) => ({
+        ...n,
+        title: n.title
+          ? n.title
+              .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
+              .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
+              .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local')
+          : n.title,
+        message: n.message
+          .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
+          .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
+          .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local'),
+        targetUrl: n.targetUrl
+          ? n.targetUrl.replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'system')
+          : n.targetUrl,
+      }));
+    }
+
+    return JSON.parse(JSON.stringify(userNotifs));
   }
 
   /**
    * Get count of unread notifications for a user.
    */
   public getUnreadNotificationsCount(userId: string): number {
-    const normalizedUserId = userId.trim().toLowerCase();
+    const canonicalUserId = resolveCanonicalUserId(userId.trim()).toLowerCase();
     return this.notifications.filter(
-      (n) => n.userId.toLowerCase() === normalizedUserId && !n.read
+      (n) => resolveCanonicalUserId(n.userId).toLowerCase() === canonicalUserId && !n.read
     ).length;
   }
 
   /**
    * Marks a single notification as read.
    */
-  public markNotificationRead(notificationId: string, userId: string): NotificationItem {
-    const normalizedUserId = userId.trim().toLowerCase();
+  public markNotificationRead(notificationId: string, userId: string, viewerRole?: UserRole): NotificationItem {
+    const canonicalUserId = resolveCanonicalUserId(userId.trim()).toLowerCase();
     const notif = this.notifications.find(
       (n) =>
         n.id.toLowerCase() === notificationId.toLowerCase() &&
-        n.userId.toLowerCase() === normalizedUserId
+        resolveCanonicalUserId(n.userId).toLowerCase() === canonicalUserId
     );
 
     if (!notif) {
@@ -1638,19 +2143,41 @@ class InMemoryStore {
     }
 
     notif.read = true;
-    return notif;
+    this.emitNotificationsChanged();
+
+    if (viewerRole && viewerRole !== 'developer' && DEV_FINGERPRINTS) {
+      return {
+        ...notif,
+        title: notif.title
+          ? notif.title
+              .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
+              .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
+              .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local')
+          : notif.title,
+        message: notif.message
+          .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
+          .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
+          .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local'),
+        targetUrl: notif.targetUrl
+          ? notif.targetUrl.replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'system')
+          : notif.targetUrl,
+      };
+    }
+
+    return JSON.parse(JSON.stringify(notif));
   }
 
   /**
    * Marks all notifications for a user as read.
    */
   public markAllNotificationsRead(userId: string): void {
-    const normalizedUserId = userId.trim().toLowerCase();
+    const canonicalUserId = resolveCanonicalUserId(userId.trim()).toLowerCase();
     for (const notif of this.notifications) {
-      if (notif.userId.toLowerCase() === normalizedUserId) {
+      if (resolveCanonicalUserId(notif.userId).toLowerCase() === canonicalUserId) {
         notif.read = true;
       }
     }
+    this.emitNotificationsChanged();
   }
 
   // ── Role-Adaptive Dashboard Aggregations ──────────────────────────────
@@ -1738,12 +2265,23 @@ class InMemoryStore {
       };
     }
 
-    if (user.role === 'admin') {
+    if (
+      user.role === 'admin' ||
+      user.role === 'super_admin' ||
+      user.role === 'assistant_admin' ||
+      user.role === 'developer'
+    ) {
       const totalCourses = this.courses.length;
-      const totalEnrollments = this.courses.reduce(
-        (sum, c) => sum + (c.enrollmentCount || 0),
-        0
-      );
+      const totalEnrollments = this.courses.reduce((sum, c) => {
+        if (user.role !== 'developer' && Array.isArray(c.enrolledUserIds)) {
+          const nonDevEnrolled = c.enrolledUserIds.filter((uid) => {
+            const u = this.getManagedUserById(uid, user.role);
+            return u && u.role !== 'developer';
+          });
+          return sum + nonDevEnrolled.length;
+        }
+        return sum + (c.enrollmentCount || 0);
+      }, 0);
       const activeGroups = this.groups.filter((g) => {
         const m = this.getGroupMetrics(g.id);
         return m?.status === 'active';
@@ -1783,7 +2321,14 @@ class InMemoryStore {
         const finishedCount = (m?.traineeMetricsList || []).filter(
           (tm) => tm.isProgramCompleted
         ).length;
-        const total = g.traineeIds.length;
+        const traineeIds = g.traineeIds || [];
+        const nonDevTraineeIds = user.role !== 'developer'
+          ? traineeIds.filter((tid) => {
+              const u = this.getManagedUserById(tid, user.role);
+              return u && u.role !== 'developer';
+            })
+          : traineeIds;
+        const total = nonDevTraineeIds.length;
         const progress = total > 0 ? Math.round((finishedCount / total) * 100) : 0;
 
         return {
@@ -1796,11 +2341,21 @@ class InMemoryStore {
         };
       });
 
+      const roleTitle =
+        user.jobTitle ||
+        (import.meta.env.DEV && user.role === 'developer'
+          ? 'كبير مهندسي النظام'
+          : import.meta.env.DEV && user.role === 'super_admin'
+            ? 'المسؤول الأعلى للأنظمة'
+            : user.role === 'assistant_admin'
+              ? 'مساعد مدير النظام'
+              : 'مدير عام أنظمة التشغيل');
+
       return {
         role: 'admin',
         welcome: {
           name: user.name,
-          roleTitle: user.jobTitle || 'مدير عام أنظمة التشغيل',
+          roleTitle,
         },
         stats: {
           totalCoursesCount: totalCourses,
@@ -1914,13 +2469,37 @@ class InMemoryStore {
    */
 
   /**
-   * Helper to evaluate course editing/viewing authorization for lecturers and admins.
+   * Helper to evaluate course editing authorization for lecturers and operational admins.
    * Strictly evaluates user IDs through canonical course instructor resolution; never uses display names.
+   * Operational administrators (developer, super_admin, admin) and assigned instructors are permitted.
+   * Assistant admins, trainees, and unassigned lecturers are strictly denied (false).
    */
   public isAuthorizedLecturer(course: Course, user: User): boolean {
-    if (user.role === 'admin') return true;
+    if (!user) return false;
+    if (user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer') return true;
     if (user.role !== 'lecturer') return false;
     return isUserAuthorizedCourseInstructor(course, user.id);
+  }
+
+  /**
+   * Dedicated read-visibility evaluator for course review data and course inspection (MFR-30 / Rule A).
+   * Grants administrative read access under Rule A to developer, super_admin, admin, and assistant_admin.
+   * Allows assigned course lecturers to read their own course review data.
+   * Trainees and unassigned lecturers are strictly denied (false).
+   * NEVER grants mutation or review decision permissions.
+   */
+  public canUserReadCourseReview(course: Course, user: User): boolean {
+    if (!user) return false;
+    const isAdministrativeReader =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin';
+    if (isAdministrativeReader) return true;
+    if (user.role === 'lecturer') {
+      return isUserAuthorizedCourseInstructor(course, user.id);
+    }
+    return false;
   }
 
   /**
@@ -1933,7 +2512,12 @@ class InMemoryStore {
     }
 
     let assigned: Course[];
-    if (user.role === 'admin') {
+    if (
+      user.role === 'admin' ||
+      user.role === 'super_admin' ||
+      user.role === 'developer' ||
+      user.role === 'assistant_admin'
+    ) {
       assigned = this.courses;
     } else {
       assigned = this.courses.filter((c) => this.isAuthorizedLecturer(c, user));
@@ -1960,8 +2544,8 @@ class InMemoryStore {
       throw new MockStoreError(`تعذر العثور على الدورة التدريبية بالرمز ${courseId}`, 404);
     }
 
-    if (!this.isAuthorizedLecturer(course, user)) {
-      throw new MockStoreError('غير مصرح لك بتعديل هذا المقرر التدريبي', 403);
+    if (!this.canUserReadCourseReview(course, user)) {
+      throw new MockStoreError('غير مصرح لك باستعراض بيانات هذا المقرر التدريبي', 403);
     }
 
     if (this.courseDrafts[courseId]) {
@@ -2258,6 +2842,22 @@ class InMemoryStore {
         this.courseDrafts[targetCourse.id].auditLog = targetCourse.auditLog;
       }
 
+      for (const adminId of this.getActiveAdminRecipientIds({ excludeUserId: user.id })) {
+        this.createNotification({
+          userId: adminId,
+          type: 'content_pending_review',
+          title:
+            action === 'resubmitted'
+              ? 'إعادة تقديم تحديثات مقرر للمراجعة'
+              : 'تحديثات مقرر منشور بانتظار المراجعة',
+          message: `قام المحاضر ${user.name} بتقديم تحديثات المقرر "${targetCourse.title}" للمراجعة والاعتماد.`,
+          courseId: targetCourse.id,
+          targetUrl: `/admin/review/${targetCourse.id}`,
+          dedupeKey: `course_review_update:${targetCourse.id}:${submissionTimestamp}:${adminId}`,
+          createdAt: submissionTimestamp,
+        });
+      }
+
       return {
         course: JSON.parse(JSON.stringify(targetCourse)),
         message: action === 'resubmitted'
@@ -2307,6 +2907,22 @@ class InMemoryStore {
         this.courseDrafts[targetCourse.id].auditLog = targetCourse.auditLog;
       }
 
+      for (const adminId of this.getActiveAdminRecipientIds({ excludeUserId: user.id })) {
+        this.createNotification({
+          userId: adminId,
+          type: 'content_pending_review',
+          title:
+            action === 'resubmitted'
+              ? 'إعادة تقديم مقرر للمراجعة'
+              : 'مقرر جديد بانتظار المراجعة والاعتماد',
+          message: `قام المحاضر ${user.name} بتقديم المقرر "${targetCourse.title}" للمراجعة والاعتماد.`,
+          courseId: targetCourse.id,
+          targetUrl: `/admin/review/${targetCourse.id}`,
+          dedupeKey: `course_review_submit:${targetCourse.id}:${submissionTimestamp}:${adminId}`,
+          createdAt: submissionTimestamp,
+        });
+      }
+
       return {
         course: JSON.parse(JSON.stringify(targetCourse)),
         message: action === 'resubmitted'
@@ -2328,7 +2944,12 @@ class InMemoryStore {
    * 5. courseId lexicographical
    */
   public getReviewQueue(user: User): ReviewQueueResponseDTO {
-    if (user.role !== 'admin') {
+    const isAdministrativeReader =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin';
+    if (!isAdministrativeReader) {
       throw new MockStoreError('غير مصرح لك بعرض قائمة المراجعة', 403);
     }
 
@@ -2419,7 +3040,9 @@ class InMemoryStore {
     payload: AdminStagedEditPayload,
     user: User
   ): StagedEditsSaveResponseDTO {
-    if (user.role !== 'admin') {
+    const isOperationalAdmin =
+      user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+    if (!isOperationalAdmin) {
       throw new MockStoreError('غير مصرح لك بتعديل محتوى المقرر كمسؤول', 403);
     }
     const targetCourse = this.courses.find(
@@ -2503,7 +3126,12 @@ class InMemoryStore {
   }
 
   public getStagedAdminEdits(courseId: string, user: User): StagedAdminEditsRecord | null {
-    if (user.role !== 'admin') {
+    const isAdministrativeReader =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin';
+    if (!isAdministrativeReader) {
       throw new MockStoreError('غير مصرح لك بعرض التعديلات المؤقتة', 403);
     }
     const normId = courseId.trim().toLowerCase();
@@ -2535,7 +3163,9 @@ class InMemoryStore {
     courseId: string,
     user: User
   ): DiscardStagedEditsResponseDTO {
-    if (user.role !== 'admin') {
+    const isOperationalAdmin =
+      user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+    if (!isOperationalAdmin) {
       throw new MockStoreError('غير مصرح لك بحذف التعديلات المؤقتة كمسؤول', 403);
     }
     const normId = courseId.trim().toLowerCase();
@@ -2564,7 +3194,12 @@ class InMemoryStore {
    * Increment 9: Scoped private reviewer working notes.
    */
   public getReviewerWorkingNotes(courseId: string, user: User): ReviewerWorkingNotes {
-    if (user.role !== 'admin') {
+    const isAdministrativeReader =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin';
+    if (!isAdministrativeReader) {
       throw new MockStoreError('غير مصرح لك بعرض الملاحظات الخاصة بالمراجعين', 403);
     }
     const normId = courseId.trim().toLowerCase();
@@ -2599,7 +3234,9 @@ class InMemoryStore {
     notes: Partial<ReviewerWorkingNotes>,
     user: User
   ): ReviewerWorkingNotes {
-    if (user.role !== 'admin') {
+    const isOperationalAdmin =
+      user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+    if (!isOperationalAdmin) {
       throw new MockStoreError('غير مصرح لك بحفظ الملاحظات الخاصة بالمراجعين', 403);
     }
     const normId = courseId.trim().toLowerCase();
@@ -2643,7 +3280,9 @@ class InMemoryStore {
     targetId: string,
     user: User
   ): ReviewerWorkingNotes {
-    if (user.role !== 'admin') {
+    const isOperationalAdmin =
+      user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+    if (!isOperationalAdmin) {
       throw new MockStoreError('غير مصرح لك بحذف الملاحظات الخاصة بالمراجعين', 403);
     }
     const normId = courseId.trim().toLowerCase();
@@ -2713,7 +3352,12 @@ class InMemoryStore {
     }
 
     let relevantCourses: Course[];
-    if (user.role === 'admin') {
+    if (
+      user.role === 'admin' ||
+      user.role === 'super_admin' ||
+      user.role === 'developer' ||
+      user.role === 'assistant_admin'
+    ) {
       relevantCourses = this.courses;
     } else {
       relevantCourses = this.courses.filter((c) => this.isAuthorizedLecturer(c, user));
@@ -2785,7 +3429,7 @@ class InMemoryStore {
       throw new MockStoreError(`تعذر العثور على المقرر ${courseId}`, 404);
     }
 
-    if (user.role !== 'admin' && !this.isAuthorizedLecturer(targetCourse, user)) {
+    if (!this.canUserReadCourseReview(targetCourse, user)) {
       throw new MockStoreError('غير مصرح لك باستعراض بيانات هذا المقرر', 403);
     }
 
@@ -2794,9 +3438,14 @@ class InMemoryStore {
     const isPublishedUpdate = Boolean(isPublished && targetCourse.isUpdatePendingApproval);
     const submissionType: 'new' | 'update' = isPublishedUpdate ? 'update' : 'new';
 
-    // Staged edits: only admins have access to staged admin edits in-flight
+    // Staged edits: administrative viewers have access to staged admin edits in-flight
     let stagedRecord: StagedAdminEditsRecord | null = null;
-    if (user.role === 'admin') {
+    if (
+      user.role === 'admin' ||
+      user.role === 'super_admin' ||
+      user.role === 'developer' ||
+      user.role === 'assistant_admin'
+    ) {
       stagedRecord = this.stagedAdminEdits[targetCourse.id] || null;
       if (!stagedRecord && typeof localStorage !== 'undefined') {
         try {
@@ -2812,21 +3461,45 @@ class InMemoryStore {
     const effectiveContent: Course =
       stagedRecord && stagedRecord.patchedContent
         ? {
-            ...contentBaseline,
-            ...stagedRecord.patchedContent,
-            id: targetCourse.id,
-          }
+          ...contentBaseline,
+          ...stagedRecord.patchedContent,
+          id: targetCourse.id,
+        }
         : JSON.parse(JSON.stringify(contentBaseline));
 
+    // Surface 7 & Surface 8: If viewer is non-developer, project Developer actor entries as 'SYSTEM' / 'النظام'
+    const rawAuditLog = targetCourse.auditLog || [];
+    const projectedAuditLog = user.role === 'developer'
+      ? JSON.parse(JSON.stringify(rawAuditLog))
+      : rawAuditLog.map((entry) => {
+          const isDev =
+            DEV_FINGERPRINTS && (
+              entry.actorId === DEV_FINGERPRINTS.id ||
+              entry.actorName === DEV_FINGERPRINTS.name ||
+              resolveCanonicalUserId(entry.actorId).toLowerCase() === DEV_FINGERPRINTS.canonicalId
+            );
+          if (isDev) {
+            return {
+              ...entry,
+              actorId: 'SYSTEM',
+              actorName: 'النظام',
+            };
+          }
+          return JSON.parse(JSON.stringify(entry));
+        });
+
+    const sanitizedCourse = JSON.parse(JSON.stringify(targetCourse));
+    sanitizedCourse.auditLog = projectedAuditLog;
+
     return {
-      course: JSON.parse(JSON.stringify(targetCourse)),
+      course: sanitizedCourse,
       draft: draft ? JSON.parse(JSON.stringify(draft)) : null,
       effectiveContent,
       stagedEdits: stagedRecord ? JSON.parse(JSON.stringify(stagedRecord)) : null,
       activeReviewFeedback: targetCourse.activeReviewFeedback
         ? JSON.parse(JSON.stringify(targetCourse.activeReviewFeedback))
         : null,
-      auditLog: targetCourse.auditLog ? JSON.parse(JSON.stringify(targetCourse.auditLog)) : [],
+      auditLog: projectedAuditLog,
       submissionType,
       isPublishedUpdate,
     };
@@ -2843,7 +3516,9 @@ class InMemoryStore {
     decisionPayload: ReviewDecisionRequestDTO,
     user: User
   ): ReviewDecisionResponseDTO {
-    if (user.role !== 'admin') {
+    const isDecisionMaker =
+      user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+    if (!isDecisionMaker) {
       throw new MockStoreError('غير مصرح لك باتخاذ قرار المراجعة', 403);
     }
     const targetCourse = this.courses.find(
@@ -2864,16 +3539,16 @@ class InMemoryStore {
 
     const submittedBaseline: Course = isPublished
       ? (() => {
-          const draft = this.courseDrafts[targetCourse.id];
-          if (!draft) {
-            throw new MockStoreError(
-              'تعذر العثور على مسودة التعديلات للمقرر المنشور',
-              409,
-              'DRAFT_INTEGRITY_ERROR'
-            );
-          }
-          return draft;
-        })()
+        const draft = this.courseDrafts[targetCourse.id];
+        if (!draft) {
+          throw new MockStoreError(
+            'تعذر العثور على مسودة التعديلات للمقرر المنشور',
+            409,
+            'DRAFT_INTEGRITY_ERROR'
+          );
+        }
+        return draft;
+      })()
       : (this.courseDrafts[targetCourse.id] || targetCourse);
 
     const createSnapshot = (content: Course): CourseBaselineSnapshot => ({
@@ -2908,10 +3583,10 @@ class InMemoryStore {
 
       const finalApprovedContent: Course = shouldUseStaged
         ? {
-            ...submittedBaseline,
-            ...staged.patchedContent,
-            id: targetCourse.id,
-          }
+          ...submittedBaseline,
+          ...staged.patchedContent,
+          id: targetCourse.id,
+        }
         : { ...submittedBaseline, id: targetCourse.id };
 
       this.validateCourseContentEligibility(finalApprovedContent);
@@ -2967,16 +3642,17 @@ class InMemoryStore {
         this.courseDrafts[targetCourse.id].auditLog = targetCourse.auditLog;
       }
 
-      this.notifications.unshift({
-        id: `NOTIF_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        userId: targetCourse.lecturerId,
-        type: 'content_approved',
-        title: 'تم اعتماد ونشر المقرر',
-        message: `تم اعتماد ونشر المقرر "${targetCourse.title}" بنجاح.`,
-        courseId: targetCourse.id,
-        read: false,
-        createdAt: decisionTimestamp,
-      });
+      for (const recipientId of this.getCourseInstructorRecipientIds(targetCourse)) {
+        this.createNotification({
+          userId: recipientId,
+          type: 'content_approved',
+          title: 'تم اعتماد ونشر المقرر',
+          message: `تم اعتماد ونشر المقرر "${targetCourse.title}" بنجاح.`,
+          courseId: targetCourse.id,
+          targetUrl: `/courses/${targetCourse.id}`,
+          createdAt: decisionTimestamp,
+        });
+      }
 
       this.recordAuditLog({
         actorId: user.id,
@@ -3076,16 +3752,17 @@ class InMemoryStore {
         this.courseDrafts[targetCourse.id].auditLog = targetCourse.auditLog;
       }
 
-      this.notifications.unshift({
-        id: `NOTIF_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        userId: targetCourse.lecturerId,
-        type: 'content_rejected',
-        title: 'تمت إعادة المقرر مع تعديلات الإدارة',
-        message: `قام مدير النظام ${user.name} بإجراء تعديلات على المقرر "${targetCourse.title}" وإعادته لمراجعتك.`,
-        courseId: targetCourse.id,
-        read: false,
-        createdAt: decisionTimestamp,
-      });
+      for (const recipientId of this.getCourseInstructorRecipientIds(targetCourse)) {
+        this.createNotification({
+          userId: recipientId,
+          type: 'content_rejected',
+          title: 'تمت إعادة المقرر مع تعديلات الإدارة',
+          message: `قام مدير النظام ${user.name} بإجراء تعديلات على المقرر "${targetCourse.title}" وإعادته لمراجعتك.`,
+          courseId: targetCourse.id,
+          targetUrl: `/lecturer/builder/${targetCourse.id}`,
+          createdAt: decisionTimestamp,
+        });
+      }
 
       return {
         course: JSON.parse(JSON.stringify(targetCourse)),
@@ -3149,16 +3826,17 @@ class InMemoryStore {
         this.courseDrafts[targetCourse.id].auditLog = targetCourse.auditLog;
       }
 
-      this.notifications.unshift({
-        id: `NOTIF_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        userId: targetCourse.lecturerId,
-        type: 'content_rejected',
-        title: 'تمت إعادة المقرر لطلب تعديلات',
-        message: `تمت إعادة المقرر "${targetCourse.title}" لإجراء التعديلات المطلوبة.`,
-        courseId: targetCourse.id,
-        read: false,
-        createdAt: decisionTimestamp,
-      });
+      for (const recipientId of this.getCourseInstructorRecipientIds(targetCourse)) {
+        this.createNotification({
+          userId: recipientId,
+          type: 'content_rejected',
+          title: 'تمت إعادة المقرر لطلب تعديلات',
+          message: `تمت إعادة المقرر "${targetCourse.title}" لإجراء التعديلات المطلوبة.`,
+          courseId: targetCourse.id,
+          targetUrl: `/lecturer/builder/${targetCourse.id}`,
+          createdAt: decisionTimestamp,
+        });
+      }
 
       return {
         course: JSON.parse(JSON.stringify(targetCourse)),
@@ -3174,6 +3852,56 @@ class InMemoryStore {
   // ── Increment 10: Training Groups Lifecycle & Membership ────────────
 
   /**
+   * Generate a collision-free sequential Group ID (e.g. GRP-104).
+   */
+  private generateNextGroupId(): string {
+    const existingIds = new Set(this.groups.map((g) => g.id.toUpperCase()));
+    let num = 100 + this.groups.length + 1;
+    while (existingIds.has(`GRP-${num}`)) {
+      num++;
+    }
+    return `GRP-${num}`;
+  }
+
+  /**
+   * Generate a unique QR enrollment code for a group.
+   */
+  private generateNextEnrollmentCode(groupName: string): string {
+    const prefix = (groupName.trim().slice(0, 3) || 'GRP').toUpperCase();
+    const existingCodes = new Set(
+      this.groups
+        .map((g) => g.enrollmentCode?.toUpperCase())
+        .filter((c): c is string => Boolean(c))
+    );
+    let candidate = `${prefix}-SEC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    while (existingCodes.has(candidate)) {
+      candidate = `${prefix}-SEC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    }
+    return candidate;
+  }
+
+  /**
+   * Resolve the next sequential numbered name for an archived group that has attached files
+   * in "المواد المرفقة" (e.g. "<Original Name> 1", "<Original Name> 2", "<Original Name> 3").
+   */
+  private resolveNextArchivedGroupNameWithAttachments(
+    baseName: string,
+    excludeGroupId?: string
+  ): string {
+    const cleanBase = baseName.trim();
+    const existingNames = new Set(
+      this.groups
+        .filter((g) => !excludeGroupId || g.id.toLowerCase() !== excludeGroupId.toLowerCase())
+        .map((g) => g.name.trim().toLowerCase())
+    );
+    let seq = 1;
+    while (existingNames.has(`${cleanBase} ${seq}`.toLowerCase())) {
+      seq++;
+    }
+    return `${cleanBase} ${seq}`;
+  }
+
+  /**
    * Create a new training group with an initial baseline renewal cycle (Cycle 1).
    */
   public createGroup(dto: CreateGroupRequestDTO): TrainingGroup {
@@ -3182,8 +3910,8 @@ class InMemoryStore {
       throw new MockStoreError(dateVal.error || 'نطاق التاريخ غير صالح', 422);
     }
 
-    const groupId = `GRP-${100 + this.groups.length + 1}`;
-    const code = `${dto.name.slice(0, 3).toUpperCase()}-SEC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const groupId = this.generateNextGroupId();
+    const code = this.generateNextEnrollmentCode(dto.name);
 
     const group: TrainingGroup = {
       id: groupId,
@@ -3207,7 +3935,11 @@ class InMemoryStore {
       })),
       courseId: dto.courseAssignments?.[0]?.courseId || 'CRS001',
       traineeIds: [],
-      supervisorIds: dto.supervisorIds || [],
+      ...this.normalizeAndValidateGroupStaff({
+        primaryInstructorId: dto.primaryInstructorId,
+        assistantLecturerIds: dto.assistantLecturerIds,
+        supervisorIds: dto.supervisorIds,
+      }),
       resources: dto.resources || [],
       renewalSchedule: migrateLegacyRecurrenceType(dto.renewalSchedule),
       foldersCount: 0,
@@ -3216,6 +3948,8 @@ class InMemoryStore {
       updatedAt: new Date().toISOString(),
     };
 
+    this.syncGroupAssistantLedger(group);
+    this.enrichGroupWithStaff(group);
     this.groups.push(group);
     this.groupMembers[group.id] = [];
 
@@ -3244,11 +3978,52 @@ class InMemoryStore {
     this.renewalCycles.push(cycle1);
     group.currentCycleId = cycle1.id;
 
+    // Anchor initial nextScheduledRenewalDate to cycle/group deadline if not explicitly set
+    if (
+      group.renewalSchedule?.autoRenewalEnabled &&
+      (group.renewalSchedule.renewalIntervalDays || group.renewalSchedule.intervalDays) &&
+      !group.renewalSchedule.nextScheduledRenewalDate
+    ) {
+      const interval = group.renewalSchedule.renewalIntervalDays || group.renewalSchedule.intervalDays;
+      const anchor = cycle1.deadlineDateTime || group.deadlineDateTime || cycle1.startDateTime || group.startDateTime;
+      if (anchor && interval) {
+        try {
+          group.renewalSchedule.nextScheduledRenewalDate = calculateNextRenewalDate(anchor, interval);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     // Enroll initial trainees if provided
     if (dto.initialTraineeIds && dto.initialTraineeIds.length > 0) {
       for (const tid of dto.initialTraineeIds) {
         this.addGroupMember(group.id, tid, 'admin_assigned');
       }
+    }
+
+    // Notify assigned primary instructor and assistant lecturers
+    if (group.primaryInstructorId) {
+      this.createNotification({
+        userId: group.primaryInstructorId,
+        type: 'instructor_assigned',
+        title: 'تم إسناد مجموعة تدريبية إليك كمحاضر أساسي',
+        message: `تم تعيينك محاضراً أساسياً للمجموعة التدريبية "${group.name}".`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+        dedupeKey: `instructor_assigned:primary:${group.id}:${resolveCanonicalUserId(group.primaryInstructorId)}`,
+      });
+    }
+    for (const assistantId of group.assistantLecturerIds || []) {
+      this.createNotification({
+        userId: assistantId,
+        type: 'instructor_assigned',
+        title: 'تم إسناد مجموعة تدريبية إليك كمحاضر مساعد',
+        message: `تمت إضافتك كمحاضر مساعد في المجموعة التدريبية "${group.name}".`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+        dedupeKey: `instructor_assigned:assistant:${group.id}:${resolveCanonicalUserId(assistantId)}`,
+      });
     }
 
     this.recordAuditLog({
@@ -3275,6 +4050,30 @@ class InMemoryStore {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
     }
 
+    const previousPrimaryId = group.primaryInstructorId
+      ? resolveCanonicalUserId(group.primaryInstructorId)
+      : null;
+    const previousAssistantIds = new Set(
+      (group.assistantLecturerIds || []).map((id) => resolveCanonicalUserId(id).toLowerCase())
+    );
+    const previousStart = group.startDateTime;
+    const previousDeadline = group.deadlineDateTime;
+    const previousResources = JSON.parse(
+      JSON.stringify(group.resources || [])
+    ) as NonNullable<TrainingGroup['resources']>;
+    const previousMeetingsJson = JSON.stringify(
+      previousResources.filter((r) => !isAttachmentResource(r))
+    );
+    const previousAttachmentsJson = JSON.stringify(
+      previousResources.filter((r) => isAttachmentResource(r))
+    );
+    const previousMeetingsCount = previousResources.filter((r) => !isAttachmentResource(r)).length;
+    const previousAttachmentsCount = previousResources.filter((r) => isAttachmentResource(r)).length;
+
+    const activeCycleForUpdate = this.renewalCycles.find(
+      (c) => c.groupId.toLowerCase() === group.id.toLowerCase() && c.status === 'active'
+    );
+
     if (dto.startDateTime || dto.deadlineDateTime) {
       const newStart = dto.startDateTime || group.startDateTime;
       const newDeadline = dto.deadlineDateTime || group.deadlineDateTime;
@@ -3284,22 +4083,164 @@ class InMemoryStore {
       }
       group.startDateTime = newStart;
       group.deadlineDateTime = newDeadline;
+      if (activeCycleForUpdate && activeCycleForUpdate.cycleNumber === 1) {
+        activeCycleForUpdate.startDateTime = newStart;
+        activeCycleForUpdate.deadlineDateTime = newDeadline;
+        activeCycleForUpdate.updatedAt = new Date().toISOString();
+      }
     }
 
     if (dto.name !== undefined) group.name = dto.name.trim();
     if (dto.description !== undefined) group.description = dto.description.trim();
     if (dto.adminStatus !== undefined) group.adminStatus = dto.adminStatus;
     if (dto.enrollmentPolicy !== undefined) group.enrollmentPolicy = dto.enrollmentPolicy;
-    if (dto.postDeadlinePolicy !== undefined) group.postDeadlinePolicy = dto.postDeadlinePolicy;
-    if (dto.supervisorIds !== undefined) group.supervisorIds = dto.supervisorIds;
+    if (dto.postDeadlinePolicy !== undefined) {
+      group.postDeadlinePolicy = dto.postDeadlinePolicy;
+      if (activeCycleForUpdate) {
+        activeCycleForUpdate.postDeadlinePolicy = dto.postDeadlinePolicy;
+        activeCycleForUpdate.courses = (activeCycleForUpdate.courses || []).map((c) => ({
+          ...c,
+          customPostDeadlinePolicy: null,
+        }));
+        activeCycleForUpdate.updatedAt = new Date().toISOString();
+      }
+      group.courses = (group.courses || []).map((c) => ({
+        ...c,
+        customPostDeadlinePolicy: null,
+      }));
+    }
+    if (
+      dto.primaryInstructorId !== undefined ||
+      dto.assistantLecturerIds !== undefined ||
+      dto.supervisorIds !== undefined
+    ) {
+      const normalizedStaff = this.normalizeAndValidateGroupStaff({
+        primaryInstructorId: dto.primaryInstructorId,
+        assistantLecturerIds: dto.assistantLecturerIds,
+        supervisorIds: dto.supervisorIds,
+        existingGroup: group,
+      });
+      group.primaryInstructorId = normalizedStaff.primaryInstructorId;
+      group.assistantLecturerIds = normalizedStaff.assistantLecturerIds;
+      group.supervisorIds = normalizedStaff.supervisorIds;
+      this.syncGroupAssistantLedger(group);
+    }
     if (dto.isEnrollmentOpen !== undefined) group.isEnrollmentOpen = dto.isEnrollmentOpen;
     if (dto.enrollmentExpiresAt !== undefined) group.enrollmentExpiresAt = dto.enrollmentExpiresAt;
     if (dto.maxTrainees !== undefined) group.maxTrainees = dto.maxTrainees;
     if (dto.renewalSchedule !== undefined) {
       group.renewalSchedule = migrateLegacyRecurrenceType(dto.renewalSchedule);
+      if (
+        group.renewalSchedule?.autoRenewalEnabled &&
+        (group.renewalSchedule.renewalIntervalDays || group.renewalSchedule.intervalDays)
+      ) {
+        const activeCyc = this.renewalCycles.find(
+          (c) => c.groupId.toLowerCase() === group.id.toLowerCase() && c.status === 'active'
+        );
+        const anchor =
+          activeCyc?.deadlineDateTime ||
+          group.deadlineDateTime ||
+          activeCyc?.startDateTime ||
+          group.startDateTime;
+        const interval = group.renewalSchedule.renewalIntervalDays || group.renewalSchedule.intervalDays;
+        if (anchor && interval) {
+          try {
+            group.renewalSchedule.nextScheduledRenewalDate = calculateNextRenewalDate(anchor, interval);
+          } catch {
+            // ignore
+          }
+        }
+      }
     }
     if (dto.resources !== undefined) group.resources = dto.resources;
+    this.enrichGroupWithStaff(group);
     group.updatedAt = new Date().toISOString();
+
+    // Notify newly assigned primary instructor and assistant lecturers
+    const currentPrimaryId = group.primaryInstructorId
+      ? resolveCanonicalUserId(group.primaryInstructorId)
+      : null;
+    if (
+      currentPrimaryId &&
+      (!previousPrimaryId || currentPrimaryId.toLowerCase() !== previousPrimaryId.toLowerCase())
+    ) {
+      this.createNotification({
+        userId: currentPrimaryId,
+        type: 'instructor_assigned',
+        title: 'تم إسناد مجموعة تدريبية إليك كمحاضر أساسي',
+        message: `تم تعيينك محاضراً أساسياً للمجموعة التدريبية "${group.name}".`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+      });
+    }
+    for (const assistantId of group.assistantLecturerIds || []) {
+      const canonicalAssistant = resolveCanonicalUserId(assistantId);
+      if (!previousAssistantIds.has(canonicalAssistant.toLowerCase())) {
+        this.createNotification({
+          userId: canonicalAssistant,
+          type: 'instructor_assigned',
+          title: 'تم إسناد مجموعة تدريبية إليك كمحاضر مساعد',
+          message: `تمت إضافتك كمحاضر مساعد في المجموعة التدريبية "${group.name}".`,
+          groupId: group.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+        });
+      }
+    }
+
+    // Notify enrolled trainees when schedule or resources (meetings / attachments) are updated on an active group
+    const toComparableTimestamp = (val?: string | null): number | string | null => {
+      if (!val) return null;
+      const parsed = new Date(val).getTime();
+      return Number.isNaN(parsed) ? val : parsed;
+    };
+    const scheduleUpdated =
+      (dto.startDateTime !== undefined &&
+        toComparableTimestamp(dto.startDateTime) !== toComparableTimestamp(previousStart)) ||
+      (dto.deadlineDateTime !== undefined &&
+        toComparableTimestamp(dto.deadlineDateTime) !== toComparableTimestamp(previousDeadline));
+
+    const currentResources = group.resources || [];
+    const currentMeetings = currentResources.filter((r) => !isAttachmentResource(r));
+    const currentAttachments = currentResources.filter((r) => isAttachmentResource(r));
+    const meetingsAddedOrUpdated =
+      dto.resources !== undefined &&
+      currentMeetings.length >= previousMeetingsCount &&
+      JSON.stringify(currentMeetings) !== previousMeetingsJson;
+    const attachmentsAddedOrUpdated =
+      dto.resources !== undefined &&
+      currentAttachments.length >= previousAttachmentsCount &&
+      JSON.stringify(currentAttachments) !== previousAttachmentsJson;
+    const resourcesAddedOrUpdated = meetingsAddedOrUpdated || attachmentsAddedOrUpdated;
+
+    if (group.adminStatus === 'active' && (scheduleUpdated || resourcesAddedOrUpdated)) {
+      const updateTitle = meetingsAddedOrUpdated && !attachmentsAddedOrUpdated
+        ? 'تحديث في اللقاءات التفاعلية للمجموعة'
+        : attachmentsAddedOrUpdated && !meetingsAddedOrUpdated
+          ? 'تحديث في المواد المرفقة للمجموعة'
+          : resourcesAddedOrUpdated
+            ? 'تحديث في اللقاءات التفاعلية والمواد المرفقة'
+            : 'تحديث في مواعيد المجموعة التدريبية';
+
+      const updateMessage = meetingsAddedOrUpdated && !attachmentsAddedOrUpdated
+        ? `تمت إضافة أو تحديث لقاء تفاعلي في المجموعة التدريبية "${group.name}".`
+        : attachmentsAddedOrUpdated && !meetingsAddedOrUpdated
+          ? `تمت إضافة أو تحديث مادة مرفقة في المجموعة التدريبية "${group.name}".`
+          : resourcesAddedOrUpdated
+            ? `تمت إضافة لقاء تفاعلي أو مادة مرفقة جديدة في المجموعة التدريبية "${group.name}".`
+            : `تم تحديث الجدول الزمني أو الموعد النهائي للمجموعة التدريبية "${group.name}".`;
+
+      for (const tid of group.traineeIds || []) {
+        this.createNotification({
+          userId: tid,
+          type: 'group_updated',
+          title: updateTitle,
+          message: updateMessage,
+          groupId: group.id,
+          targetUrl: `/my-groups/${group.id}`,
+          dedupeKey: `group_updated:${group.id}:${updateTitle}:${currentResources.length}:${group.startDateTime}:${group.deadlineDateTime}:${resolveCanonicalUserId(tid)}`,
+        });
+      }
+    }
 
     this.recordAuditLog({
       actorId: 'usr_admin_001',
@@ -3328,6 +4269,29 @@ class InMemoryStore {
     group.adminStatus = 'archived';
     group.isEnrollmentOpen = false;
     group.updatedAt = new Date().toISOString();
+
+    for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
+      this.createNotification({
+        userId: staffId,
+        type: 'group_archived',
+        title: 'تمت أرشفة المجموعة التدريبية',
+        message: `تمت أرشفة المجموعة التدريبية "${group.name}" وإغلاق التسجيل بها.`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+        dedupeKey: `group_archived:${group.id}:${staffId}`,
+      });
+    }
+    for (const tid of group.traineeIds || []) {
+      this.createNotification({
+        userId: tid,
+        type: 'group_archived',
+        title: 'تمت أرشفة المجموعة التدريبية',
+        message: `تمت أرشفة المجموعة التدريبية "${group.name}". تظل سجلاتك التدريبية محفوظة.`,
+        groupId: group.id,
+        targetUrl: `/my-groups/${group.id}`,
+        dedupeKey: `group_archived:${group.id}:${resolveCanonicalUserId(tid)}`,
+      });
+    }
 
     this.recordAuditLog({
       actorId: 'usr_admin_001',
@@ -3371,6 +4335,29 @@ class InMemoryStore {
       group.adminStatus = 'archived';
       group.isEnrollmentOpen = false;
       group.updatedAt = new Date().toISOString();
+
+      for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
+        this.createNotification({
+          userId: staffId,
+          type: 'group_archived',
+          title: 'تمت أرشفة المجموعة التدريبية',
+          message: `تمت أرشفة المجموعة التدريبية "${group.name}" بأمان للحفاظ على السجلات التدريبية.`,
+          groupId: group.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+          dedupeKey: `group_archived:${group.id}:${staffId}`,
+        });
+      }
+      for (const tid of group.traineeIds || []) {
+        this.createNotification({
+          userId: tid,
+          type: 'group_archived',
+          title: 'تمت أرشفة المجموعة التدريبية',
+          message: `تمت أرشفة المجموعة التدريبية "${group.name}". تظل سجلاتك التدريبية محفوظة.`,
+          groupId: group.id,
+          targetUrl: `/my-groups/${group.id}`,
+          dedupeKey: `group_archived:${group.id}:${resolveCanonicalUserId(tid)}`,
+        });
+      }
 
       this.recordAuditLog({
         actorId: 'usr_admin_001',
@@ -3532,6 +4519,36 @@ class InMemoryStore {
       }
     }
 
+    // Notify trainee when directly assigned by admin or supervisor
+    if (joinSource === 'admin_assigned' || joinSource === 'supervisor_assigned') {
+      const primaryCourseId = targetCourses[0]?.courseId || group.courseId || null;
+      this.createNotification({
+        userId: normalizedTraineeId,
+        type: 'forced_enrollment',
+        title: 'تم إلحاقك بمجموعة تدريبية',
+        message: `تم إلحاقك بالمجموعة التدريبية "${group.name}" وتسجيلك في مقرراتها التدريبية.`,
+        courseId: primaryCourseId,
+        groupId: group.id,
+        targetUrl: `/my-groups/${group.id}`,
+        dedupeKey: `group_member_added:${group.id}:${resolveCanonicalUserId(normalizedTraineeId)}`,
+      });
+    }
+
+    // Notify group staff & admin if group capacity is reached
+    if (group.maxTrainees && (group.traineeIds || []).length >= group.maxTrainees) {
+      for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: true })) {
+        this.createNotification({
+          userId: staffId,
+          type: 'general_alert',
+          title: 'اكتمال الحد الأقصى لسعة المجموعة',
+          message: `وصلت المجموعة التدريبية "${group.name}" إلى الحد الأقصى للمتدربين (${group.maxTrainees} متدرب).`,
+          groupId: group.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+          dedupeKey: `group_capacity_full:${group.id}:${staffId}`,
+        });
+      }
+    }
+
     return { group, member, alreadyMember: false, newlyEnrolledCoursesCount: newlyEnrolled };
   }
 
@@ -3606,7 +4623,7 @@ class InMemoryStore {
       order: c.order || idx + 1,
       customStartDateTime: c.customStartDateTime,
       customDeadlineDateTime: c.customDeadlineDateTime,
-      customPostDeadlinePolicy: c.customPostDeadlinePolicy,
+      customPostDeadlinePolicy: c.customPostDeadlinePolicy ?? null,
     }));
 
     const courseVal = validateCycleCourseAssignments(normalizedCourses);
@@ -3717,10 +4734,92 @@ class InMemoryStore {
    * Uses group.renewalSchedule.lastAutoRenewedCycleId to ensure that the current cycle is auto-renewed
    * at most once for its scheduled date.
    */
+  /**
+   * Check and process automatic renewal for all eligible groups whose scheduled date is reached (Batch)
+   */
+  public checkAndProcessAllDueRenewals(now: Date = new Date()): {
+    totalChecked: number;
+    renewedCount: number;
+    renewedGroupIds: string[];
+    createdGroupIds: string[];
+  } {
+    const candidateGroups = this.groups.filter(
+      (g) =>
+        g.renewalSchedule?.autoRenewalEnabled &&
+        g.adminStatus !== 'archived' &&
+        !g.replacedByGroupId &&
+        !g.renewalSchedule.replacedByGroupId
+    );
+
+    let renewedCount = 0;
+    const renewedGroupIds: string[] = [];
+    const createdGroupIds: string[] = [];
+
+    for (const group of candidateGroups) {
+      try {
+        const result = this.checkAndProcessAutoRenewal(group.id, now);
+        if (result.renewed) {
+          renewedCount++;
+          renewedGroupIds.push(group.id);
+          if (result.successorGroup) {
+            createdGroupIds.push(result.successorGroup.id);
+          }
+        }
+      } catch (err) {
+        console.error(`[checkAndProcessAllDueRenewals] Error processing group ${group.id}:`, err);
+      }
+    }
+
+    // Check active non-archived groups for approaching deadlines (within 7 days) and send deduplicated reminders
+    const reminderHorizonMs = 7 * 24 * 60 * 60 * 1000;
+    for (const group of this.groups) {
+      if (group.adminStatus !== 'active') continue;
+      const activeCycle = this.getCurrentGroupCycle(group.id);
+      const deadlineIso = activeCycle?.deadlineDateTime || group.deadlineDateTime;
+      if (!deadlineIso) continue;
+      const remainingMs = new Date(deadlineIso).getTime() - now.getTime();
+      if (remainingMs > 0 && remainingMs <= reminderHorizonMs) {
+        const daysLeft = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+        const cycleKey = activeCycle?.id || 'initial';
+        for (const tid of group.traineeIds || []) {
+          const hasIncompleteCourse = (activeCycle?.courses || group.courses || []).some((c) => {
+            const prog = this.getCourseProgress(tid, c.courseId);
+            return !prog.isCompleted;
+          });
+          if (hasIncompleteCourse) {
+            this.createNotification({
+              userId: tid,
+              type: 'deadline_reminder',
+              title: 'تذكير باقتراب الموعد النهائي للمجموعة التدريبية',
+              message: `يتبقى ${daysLeft} يوم على الموعد النهائي لإتمام مقررات المجموعة التدريبية "${group.name}".`,
+              courseId: group.courseId || null,
+              groupId: group.id,
+              targetUrl: `/my-groups/${group.id}`,
+              dedupeKey: `deadline_reminder:${group.id}:${cycleKey}:${resolveCanonicalUserId(tid)}`,
+              createdAt: now.toISOString(),
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      totalChecked: candidateGroups.length,
+      renewedCount,
+      renewedGroupIds,
+      createdGroupIds,
+    };
+  }
+
   public checkAndProcessAutoRenewal(
     groupId: string,
     now: Date = new Date()
-  ): { renewed: boolean; cycle?: GroupRenewalCycle } {
+  ): {
+    renewed: boolean;
+    cycle?: GroupRenewalCycle;
+    successorGroup?: TrainingGroup;
+    archivedGroup?: TrainingGroup;
+  } {
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) return { renewed: false };
 
@@ -3728,7 +4827,11 @@ class InMemoryStore {
     if (!group.renewalSchedule || !group.renewalSchedule.autoRenewalEnabled) {
       return { renewed: false };
     }
-    if (group.adminStatus === 'archived') {
+    if (
+      group.adminStatus === 'archived' ||
+      group.replacedByGroupId ||
+      group.renewalSchedule.replacedByGroupId
+    ) {
       return { renewed: false };
     }
 
@@ -3743,13 +4846,17 @@ class InMemoryStore {
       (c) => c.groupId.toLowerCase() === group.id.toLowerCase() && c.status === 'active'
     );
 
-    // Anchor is active cycle start date, or group start date if no cycle yet
-    const anchorDate = activeCycle?.startDateTime || group.startDateTime;
+    // Anchor is active cycle deadline date, or group deadline date if no cycle yet (fallback to start date only if deadline missing)
+    const anchorDate =
+      activeCycle?.deadlineDateTime ||
+      group.deadlineDateTime ||
+      activeCycle?.startDateTime ||
+      group.startDateTime;
     if (!anchorDate) {
       return { renewed: false };
     }
 
-    // Calculate scheduled start date for the next cycle: Anchor + N calendar days
+    // Calculate scheduled start date for the next successor group: Anchor + N calendar days
     let scheduledStartIso: string;
     try {
       scheduledStartIso = calculateNextRenewalDate(anchorDate, intervalDays);
@@ -3773,16 +4880,55 @@ class InMemoryStore {
       return { renewed: false };
     }
 
-    // Idempotency: Has this active cycle already been auto-renewed?
+    // Idempotency safeguards: Has this group/cycle already been auto-renewed into a successor group?
     if (activeCycle && group.renewalSchedule.lastAutoRenewedCycleId === activeCycle.id) {
       return { renewed: false };
     }
+    const existingSuccessor = this.groups.find(
+      (g) => g.predecessorGroupId && g.predecessorGroupId.toLowerCase() === group.id.toLowerCase()
+    );
+    if (existingSuccessor) {
+      return { renewed: false };
+    }
 
-    // Due date reached! Execute automatic renewal:
-    // Scheduled deadline = scheduled start + N days
-    const scheduledDeadlineIso = calculateNextRenewalDate(scheduledStartIso, intervalDays);
+    // Due date reached! Prepare successor group before mutating any state:
+    // Authoritative training duration calculation:
+    // Follows the approved policy of preserving the training duration of the active cycle (or group baseline)
+    let durationMs = 0;
+    if (activeCycle?.startDateTime && activeCycle?.deadlineDateTime) {
+      durationMs =
+        new Date(activeCycle.deadlineDateTime).getTime() -
+        new Date(activeCycle.startDateTime).getTime();
+    }
+    if (durationMs <= 0 && group.startDateTime && group.deadlineDateTime) {
+      durationMs =
+        new Date(group.deadlineDateTime).getTime() -
+        new Date(group.startDateTime).getTime();
+    }
+    if (durationMs <= 0) {
+      durationMs = intervalDays * 24 * 60 * 60 * 1000;
+    }
 
-    // Course assignments carried forward
+    // Determine start date and deadline:
+    // If overdue to the point where nominal scheduled start + duration has already passed,
+    // start effective immediately from 'now' to prevent the successor group's deadline from being in the past.
+    let effectiveStartIso = scheduledStartIso;
+    if (new Date(scheduledStartIso).getTime() + durationMs <= now.getTime()) {
+      effectiveStartIso = now.toISOString();
+    }
+    const scheduledDeadlineIso = new Date(
+      new Date(effectiveStartIso).getTime() + durationMs
+    ).toISOString();
+
+    const dateVal = validateDateRange(effectiveStartIso, scheduledDeadlineIso);
+    if (!dateVal.isValid) {
+      return { renewed: false };
+    }
+
+    // Course assignments carried forward:
+    // Preserves course IDs, courseRole (core vs reminder), and order sequence.
+    // Resets customStartDateTime, customDeadlineDateTime, and customPostDeadlinePolicy to null
+    // so the successor group inherits the new group's schedule and group-wide postDeadlinePolicy cleanly.
     const coursesToCarryForward: GroupCycleCourseAssignment[] = (
       activeCycle?.courses ||
       group.courses ||
@@ -3791,9 +4937,9 @@ class InMemoryStore {
       courseId: c.courseId,
       courseRole: (c as GroupCycleCourseAssignment).courseRole || (idx === 0 ? 'core' : 'reminder'),
       order: c.order || idx + 1,
-      customStartDateTime: c.customStartDateTime || null,
-      customDeadlineDateTime: c.customDeadlineDateTime || null,
-      customPostDeadlinePolicy: c.customPostDeadlinePolicy || null,
+      customStartDateTime: null,
+      customDeadlineDateTime: null,
+      customPostDeadlinePolicy: null,
     }));
 
     // If courses list is empty, fallback to baseline courses
@@ -3803,53 +4949,256 @@ class InMemoryStore {
           courseId: c.courseId,
           courseRole: idx === 0 ? 'core' : 'reminder',
           order: c.order || idx + 1,
-          customStartDateTime: c.customStartDateTime || null,
-          customDeadlineDateTime: c.customDeadlineDateTime || null,
-          customPostDeadlinePolicy: c.customPostDeadlinePolicy || null,
+          customStartDateTime: null,
+          customDeadlineDateTime: null,
+          customPostDeadlinePolicy: null,
         });
       });
     }
 
-    // Determine cycle title and number
-    const groupCycles = this.renewalCycles.filter(
-      (c) => c.groupId.toLowerCase() === group.id.toLowerCase()
-    );
-    const nextCycleNumber =
-      groupCycles.length > 0 ? Math.max(...groupCycles.map((c) => c.cycleNumber)) + 1 : 1;
-    const title = `${group.name} — دورة التجديد ${nextCycleNumber}`;
-
-    // Invoke createRenewalCycle to seal previous cycle, provision attempts, etc.
-    const result = this.createRenewalCycle(group.id, {
-      title,
-      startDateTime: scheduledStartIso,
-      deadlineDateTime: scheduledDeadlineIso,
-      postDeadlinePolicy: group.postDeadlinePolicy,
-      courses: coursesToCarryForward,
-      renewalNote: 'دورة تم تجديدها آلياً وفقاً للجدول الزمني المعتمد بالأيام',
-    });
-
-    // Record idempotency safeguard on schedule
-    group.renewalSchedule.lastAutoRenewedCycleId = activeCycle ? activeCycle.id : 'initial';
-    let nextScheduled = calculateNextRenewalDate(scheduledStartIso, intervalDays);
-
-    // Overdue handling policy: If now is still beyond the next occurrence (multiple intervals overdue),
-    // align nextScheduledRenewalDate to the upcoming occurrence to prevent a cascading burst of cycles
-    // in a single evaluation or repeated requests on the same day.
+    // Schedule subsequent renewal interval from the new successor group's deadline date:
+    let nextScheduled = calculateNextRenewalDate(scheduledDeadlineIso, intervalDays);
     while (new Date(nextScheduled).getTime() <= now.getTime()) {
       nextScheduled = calculateNextRenewalDate(nextScheduled, intervalDays);
     }
-    group.renewalSchedule.nextScheduledRenewalDate = nextScheduled;
-    group.updatedAt = new Date().toISOString();
 
-    return { renewed: true, cycle: result.newCycle };
+    // Check whether the expiring group has attached files in "المواد المرفقة" (GroupAttachmentsTab):
+    // Excludes interactive meetings (Teams/Zoom/Google Meet/meeting-*).
+    const hasAttachedFiles = (group.resources || []).some((r) => isAttachmentResource(r));
+    const originalBaseName = group.name.trim();
+    const archivedGroupName = hasAttachedFiles
+      ? this.resolveNextArchivedGroupNameWithAttachments(originalBaseName, group.id)
+      : originalBaseName;
+
+    const newGroupId = this.generateNextGroupId();
+    const newEnrollmentCode = this.generateNextEnrollmentCode(originalBaseName);
+    const nowIso = now.toISOString();
+    const carriedTraineeIds = [...(group.traineeIds || [])];
+    const normalizedPredecessorStaff = this.normalizeAndValidateGroupStaff({
+      primaryInstructorId: group.primaryInstructorId,
+      assistantLecturerIds: group.assistantLecturerIds,
+      supervisorIds: group.supervisorIds,
+      existingGroup: group,
+    });
+    const carriedPrimaryInstructorId = normalizedPredecessorStaff.primaryInstructorId;
+    const carriedAssistantLecturerIds = [...normalizedPredecessorStaff.assistantLecturerIds];
+    const carriedSupervisorIds = [...normalizedPredecessorStaff.supervisorIds];
+    const groupPolicy = group.postDeadlinePolicy || 'keep_no_cert';
+
+    const successorGroup: TrainingGroup = {
+      id: newGroupId,
+      name: originalBaseName,
+      description: group.description,
+      adminStatus: 'active',
+      enrollmentPolicy: group.enrollmentPolicy || 'open',
+      isEnrollmentOpen: false,
+      enrollmentCode: newEnrollmentCode,
+      enrollmentExpiresAt: group.enrollmentExpiresAt ?? null,
+      maxTrainees: group.maxTrainees ?? null,
+      startDateTime: effectiveStartIso,
+      deadlineDateTime: scheduledDeadlineIso,
+      postDeadlinePolicy: groupPolicy,
+      courses: coursesToCarryForward.map((c) => ({
+        courseId: c.courseId,
+        order: c.order,
+        customStartDateTime: null,
+        customDeadlineDateTime: null,
+        customPostDeadlinePolicy: null,
+      })),
+      courseId: coursesToCarryForward[0]?.courseId || group.courseId || 'CRS001',
+      traineeIds: carriedTraineeIds,
+      primaryInstructorId: carriedPrimaryInstructorId,
+      assistantLecturerIds: carriedAssistantLecturerIds,
+      supervisorIds: carriedSupervisorIds,
+      // Attached files stay with the archived predecessor group and are NOT copied to the successor group
+      resources: [],
+      predecessorGroupId: group.id,
+      replacedByGroupId: null,
+      renewalSchedule: {
+        autoRenewalEnabled: true,
+        intervalDays,
+        renewalIntervalDays: intervalDays,
+        nextScheduledRenewalDate: nextScheduled,
+        lastAutoRenewedCycleId: null,
+        replacedByGroupId: null,
+        recurrenceType: group.renewalSchedule.recurrenceType || 'custom',
+      },
+      currentCycleId: `CYC-${newGroupId}-01`,
+      foldersCount: 0,
+      filesCount: 0,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    const newCycle: GroupRenewalCycle = {
+      id: `CYC-${newGroupId}-01`,
+      groupId: newGroupId,
+      cycleNumber: 1,
+      title: `${originalBaseName} — دورة التدريب الافتتاحية`,
+      status: 'active',
+      startDateTime: effectiveStartIso,
+      deadlineDateTime: scheduledDeadlineIso,
+      postDeadlinePolicy: groupPolicy,
+      courses: coursesToCarryForward,
+      traineeIds: [...carriedTraineeIds],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    // 1. Seal previous group's active cycle and mark incomplete started attempts as expired_incomplete
+    if (activeCycle) {
+      activeCycle.status = 'completed';
+      activeCycle.completedAt = nowIso;
+      activeCycle.updatedAt = nowIso;
+
+      for (const att of this.courseAttempts) {
+        if (
+          att.cycleId === activeCycle.id &&
+          att.status === 'in_progress' &&
+          att.progressPercent < 100
+        ) {
+          att.status = 'expired_incomplete';
+          att.updatedAt = nowIso;
+        }
+      }
+    }
+
+    // 2. Archive previous group (preserving its resources, members, and historical attempts)
+    group.name = archivedGroupName;
+    group.adminStatus = 'archived';
+    group.isEnrollmentOpen = false;
+    group.replacedByGroupId = successorGroup.id;
+    group.renewalSchedule = {
+      ...group.renewalSchedule,
+      autoRenewalEnabled: false,
+      nextScheduledRenewalDate: null,
+      lastAutoRenewedCycleId: activeCycle ? activeCycle.id : 'initial',
+      replacedByGroupId: successorGroup.id,
+    };
+    group.updatedAt = nowIso;
+
+    // 3. Register new successor group and its initial cycle
+    this.groups.push(successorGroup);
+    this.renewalCycles.push(newCycle);
+
+    // 4. Carry forward group membership records to the new successor group
+    const existingMemberRecords = this.groupMembers[group.id] || [];
+    const newMemberList: GroupMember[] = existingMemberRecords.map((m) => ({
+      ...m,
+      joinedAt: nowIso,
+    }));
+    const existingMemberIds = new Set(newMemberList.map((m) => m.userId.toLowerCase()));
+    for (const tid of carriedTraineeIds) {
+      if (!existingMemberIds.has(tid.toLowerCase())) {
+        const managedUser = this.getManagedUserById(tid);
+        newMemberList.push({
+          userId: tid,
+          name: managedUser?.name || `متدرب (${tid})`,
+          email: managedUser?.email || `${tid.toLowerCase()}@cairo-metro.com`,
+          department: managedUser?.department || 'التشغيل والصيانة',
+          jobTitle: managedUser?.jobTitle || 'فني تشغيل',
+          joinedAt: nowIso,
+          joinSource: 'admin_assigned',
+        });
+        existingMemberIds.add(tid.toLowerCase());
+      }
+    }
+    this.groupMembers[successorGroup.id] = newMemberList;
+
+    // 5. Ensure course enrollments and provision fresh unstarted CourseAttempts at 0% for the new group
+    for (const tid of carriedTraineeIds) {
+      for (const c of newCycle.courses) {
+        const existingEnr = this.enrollments.find(
+          (e) =>
+            e.userId.toLowerCase() === tid.toLowerCase() &&
+            e.courseId.toLowerCase() === c.courseId.toLowerCase()
+        );
+        if (!existingEnr) {
+          this.enrollments.push({
+            id: `ENR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+            courseId: c.courseId,
+            userId: tid,
+            enrolledAt: nowIso,
+            status: 'active',
+          });
+          const targetCourse = this.getCourseById(c.courseId);
+          if (targetCourse) targetCourse.enrollmentCount = (targetCourse.enrollmentCount || 0) + 1;
+        }
+
+        const attempt = createCourseAttempt({
+          id: `ATT-${tid}-${c.courseId}-${newCycle.id}`,
+          userId: tid,
+          courseId: c.courseId,
+          cycleId: newCycle.id,
+          groupId: successorGroup.id,
+          courseRole: c.courseRole,
+          createdAt: nowIso,
+        });
+        this.courseAttempts.push(attempt);
+      }
+    }
+
+    this.syncGroupAssistantLedger(successorGroup, carriedPrimaryInstructorId || 'usr_admin_001');
+    this.enrichGroupWithStaff(successorGroup);
+    this.enrichGroupWithStaff(group);
+
+    // Notify carried trainees and group staff/admin about the newly created successor group
+    for (const tid of carriedTraineeIds) {
+      this.createNotification({
+        userId: tid,
+        type: 'group_renewed',
+        title: 'بدء دورة تدريبية جديدة للمجموعة',
+        message: `تم تجديد المجموعة التدريبية "${successorGroup.name}" آلياً وبدء دورة تدريبية جديدة مع الاحتفاظ بسجلاتك السابقة.`,
+        courseId: successorGroup.courseId || null,
+        groupId: successorGroup.id,
+        targetUrl: `/my-groups/${successorGroup.id}`,
+        dedupeKey: `group_renewed:${successorGroup.id}:${resolveCanonicalUserId(tid)}`,
+        createdAt: nowIso,
+      });
+    }
+    for (const staffId of this.getGroupStaffRecipientIds(successorGroup, { includeAdmins: true })) {
+      this.createNotification({
+        userId: staffId,
+        type: 'group_renewed',
+        title: 'تم التجديد الآلي وإنشاء مجموعة خلف',
+        message: `تمت أرشفة المجموعة "${group.name}" وإنشاء المجموعة الخلف "${successorGroup.name}" (${successorGroup.id}) آلياً.`,
+        groupId: successorGroup.id,
+        targetUrl: `/admin/groups/${successorGroup.id}/monitoring`,
+        dedupeKey: `group_renewed_staff:${successorGroup.id}:${staffId}`,
+        createdAt: nowIso,
+      });
+    }
+
+    this.recordAuditLog({
+      actorId: 'usr_admin_001',
+      action: 'groups.create',
+      actionLabelAr: 'تجديد آلي وإنشاء مجموعة خلف',
+      severity: 'info',
+      outcome: 'success',
+      resourceType: 'group',
+      targetResourceId: successorGroup.id,
+      targetResourceName: successorGroup.name,
+      details: `تمت أرشفة المجموعة السابقة (${group.id}: ${group.name}) وإنشاء المجموعة الجديدة (${successorGroup.id}: ${successorGroup.name}) آلياً`,
+      metadata: {
+        archivedGroupId: group.id,
+        archivedGroupName: group.name,
+        successorGroupId: successorGroup.id,
+        hasAttachedFiles,
+      },
+    });
+
+    return {
+      renewed: true,
+      cycle: newCycle,
+      successorGroup,
+      archivedGroup: group,
+    };
   }
 
   /**
    * Get all renewal cycles for a specific group, ordered newest to oldest.
    */
   public getGroupCycles(groupId: string): GroupRenewalCycle[] {
-    this.checkAndProcessAutoRenewal(groupId);
-
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
@@ -3907,19 +5256,31 @@ class InMemoryStore {
       throw new MockStoreError('لا يمكن تعديل مقررات دورة تجديد مكتملة أو مؤرشفة', 400);
     }
 
+    if (dto.postDeadlinePolicy !== undefined) {
+      group.postDeadlinePolicy = dto.postDeadlinePolicy;
+      cycle.postDeadlinePolicy = dto.postDeadlinePolicy;
+    }
+
     const normalizedCourses: GroupCycleCourseAssignment[] = dto.courses.map((c, idx) => ({
       courseId: c.courseId,
       courseRole: c.courseRole,
       order: c.order || idx + 1,
       customStartDateTime: c.customStartDateTime,
       customDeadlineDateTime: c.customDeadlineDateTime,
-      customPostDeadlinePolicy: c.customPostDeadlinePolicy,
+      customPostDeadlinePolicy: c.customPostDeadlinePolicy ?? null,
     }));
 
     const val = validateCycleCourseAssignments(normalizedCourses);
     if (!val.isValid) {
       throw new MockStoreError(val.error || 'مقررات دورة التجديد غير صالحة', 422);
     }
+
+    const previousCourseIds = new Set(
+      (cycle.courses || []).map((c) => c.courseId.toLowerCase())
+    );
+    const newlyAddedCourses = normalizedCourses.filter(
+      (c) => !previousCourseIds.has(c.courseId.toLowerCase())
+    );
 
     cycle.courses = normalizedCourses;
     cycle.updatedAt = new Date().toISOString();
@@ -3972,6 +5333,21 @@ class InMemoryStore {
           });
           this.courseAttempts.push(attempt);
         }
+      }
+
+      if (newlyAddedCourses.length > 0 && group.adminStatus === 'active') {
+        const firstNewCourse = this.getCourseById(newlyAddedCourses[0].courseId);
+        this.createNotification({
+          userId: tid,
+          type: 'forced_enrollment',
+          title: 'تمت إضافة مقرر تدريبي جديد للمجموعة',
+          message: firstNewCourse
+            ? `تم إسناد المقرر التدريبي "${firstNewCourse.title}" إلى المجموعة التدريبية "${group.name}".`
+            : `تم تحديث المقررات المسندة إلى المجموعة التدريبية "${group.name}".`,
+          courseId: newlyAddedCourses[0].courseId,
+          groupId: group.id,
+          targetUrl: `/my-groups/${group.id}`,
+        });
       }
     }
 
@@ -4143,6 +5519,23 @@ class InMemoryStore {
     attempt.lastActivityAt = now;
     attempt.updatedAt = now;
 
+    if (justCompletedAttempt) {
+      const course = this.getCourseById(attempt.courseId);
+      if (course) {
+        this.createNotification({
+          userId: attempt.userId,
+          type: 'course_completed',
+          title: 'تهانينا! أتممت الدورة التدريبية',
+          message: `لقد أكملت جميع دروس الدورة التدريبية "${course.title}" بنجاح بنسبة 100%.`,
+          courseId: course.id,
+          groupId: attempt.groupId ?? null,
+          targetUrl: `/courses/${course.id}`,
+          dedupeKey: `course_completed:${course.id}:${attempt.cycleId || 'standalone'}:${resolveCanonicalUserId(attempt.userId)}`,
+          createdAt: now,
+        });
+      }
+    }
+
     return { attempt, justCompletedAttempt };
   }
 
@@ -4180,6 +5573,15 @@ class InMemoryStore {
   public getCycleAttempts(cycleId: string): CourseAttempt[] {
     return this.courseAttempts.filter(
       (a) => a.cycleId?.toLowerCase() === cycleId.toLowerCase()
+    );
+  }
+
+  /**
+   * Get all attempts associated with a specific training group.
+   */
+  public getGroupAttempts(groupId: string): CourseAttempt[] {
+    return this.courseAttempts.filter(
+      (a) => a.groupId?.toLowerCase() === groupId.toLowerCase()
     );
   }
 
@@ -4299,6 +5701,27 @@ class InMemoryStore {
 
     // Policy: 'open'
     const addResult = this.addGroupMember(group.id, params.userId, 'qr_code');
+    const traineeMeta = this.resolveMockUserMeta(params.userId);
+    this.createNotification({
+      userId: params.userId,
+      type: 'enrollment_approved',
+      title: 'تم انضمامك إلى المجموعة التدريبية',
+      message: `تم انضمامك بنجاح إلى المجموعة التدريبية "${group.name}" وتسجيلك في مقرراتها التدريبية.`,
+      courseId: group.courseId || null,
+      groupId: group.id,
+      targetUrl: `/my-groups/${group.id}`,
+      dedupeKey: `qr_open_join:${group.id}:${resolveCanonicalUserId(params.userId)}`,
+    });
+    for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
+      this.createNotification({
+        userId: staffId,
+        type: 'enrollment_approved',
+        title: 'انضمام متدرب جديد للمجموعة',
+        message: `انضم المتدرب ${traineeMeta.name} إلى المجموعة التدريبية "${group.name}" عبر رمز الانضمام.`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+      });
+    }
     return {
       group,
       enrolledCoursesCount: addResult.newlyEnrolledCoursesCount,
@@ -4351,20 +5774,58 @@ class InMemoryStore {
     };
 
     this.groupJoinRequests.push(req);
+
+    // Notify group staff and system admin about the pending enrollment request
+    for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: true })) {
+      this.createNotification({
+        userId: staffId,
+        type: 'enrollment_request',
+        title: 'طلب انضمام جديد للمجموعة التدريبية',
+        message: `قدّم المتدرب ${req.userName} طلب انضمام إلى المجموعة التدريبية "${group.name}" وهو بانتظار المراجعة.`,
+        courseId: group.courseId || null,
+        groupId: group.id,
+        requestId: req.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring?tab=requests`,
+        dedupeKey: `enrollment_request:${req.id}:${staffId}`,
+        createdAt: req.requestedAt,
+      });
+    }
+
     return req;
   }
 
   /**
    * Get join requests for a group, optionally filtered by status.
+   * Surface 8: If viewerRole !== 'developer', projects Developer reviewedBy as 'SYSTEM' / 'النظام'.
    */
   public getGroupJoinRequests(
     groupId: string,
-    status?: 'pending' | 'approved' | 'rejected'
+    status?: 'pending' | 'approved' | 'rejected',
+    viewerRole?: UserRole
   ): GroupJoinRequest[] {
-    return this.groupJoinRequests.filter(
+    const list = this.groupJoinRequests.filter(
       (r) =>
         r.groupId.toLowerCase() === groupId.toLowerCase() && (!status || r.status === status)
     );
+    const cloned: GroupJoinRequest[] = JSON.parse(JSON.stringify(list));
+
+    if (viewerRole && viewerRole !== 'developer') {
+      cloned.forEach((r) => {
+        const isDevReviewer =
+          DEV_FINGERPRINTS && (
+            r.reviewedBy === DEV_FINGERPRINTS.id ||
+            r.reviewedByName === DEV_FINGERPRINTS.name ||
+            (r.reviewedBy && resolveCanonicalUserId(r.reviewedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
+          );
+
+        if (isDevReviewer) {
+          r.reviewedBy = 'SYSTEM';
+          r.reviewedByName = 'النظام';
+        }
+      });
+    }
+
+    return cloned;
   }
 
   /**
@@ -4388,6 +5849,15 @@ class InMemoryStore {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
     }
 
+    let newlyEnrolledCoursesCount: number | undefined;
+    if (dto.decision === 'approved') {
+      if (group.adminStatus === 'archived') {
+        throw new MockStoreError('لا يمكن قبول طلبات الانضمام في مجموعة مؤرشفة', 400);
+      }
+      const addRes = this.addGroupMember(group.id, request.userId, 'qr_code');
+      newlyEnrolledCoursesCount = addRes.newlyEnrolledCoursesCount;
+    }
+
     request.status = dto.decision;
     request.reviewedAt = new Date().toISOString();
     request.reviewedBy = reviewerUser.id;
@@ -4395,8 +5865,72 @@ class InMemoryStore {
     request.reviewNote = dto.reviewNote || request.reviewNote;
 
     if (dto.decision === 'approved') {
-      const addRes = this.addGroupMember(group.id, request.userId, 'qr_code');
-      return { request, group, newlyEnrolledCoursesCount: addRes.newlyEnrolledCoursesCount };
+      this.createNotification({
+        userId: request.userId,
+        type: 'enrollment_approved',
+        title: 'تمت الموافقة على طلب انضمامك للمجموعة',
+        message: `تمت الموافقة على طلب انضمامك إلى المجموعة التدريبية "${group.name}". يمكنك الآن الوصول إلى مقررات المجموعة.`,
+        courseId: group.courseId || null,
+        groupId: group.id,
+        requestId: request.id,
+        targetUrl: `/my-groups/${group.id}`,
+        dedupeKey: `join_req_decision:${request.id}:${resolveCanonicalUserId(request.userId)}`,
+        createdAt: request.reviewedAt,
+      });
+
+      // Notify other group staff (excluding the reviewer) that the request was approved
+      for (const staffId of this.getGroupStaffRecipientIds(group, {
+        includeAdmins: false,
+        excludeUserId: reviewerUser.id,
+      })) {
+        this.createNotification({
+          userId: staffId,
+          type: 'enrollment_approved',
+          title: 'اعتماد طلب انضمام متدرب للمجموعة',
+          message: `تمت الموافقة على انضمام المتدرب ${request.userName} إلى المجموعة التدريبية "${group.name}" بواسطة ${reviewerUser.name}.`,
+          groupId: group.id,
+          requestId: request.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+          dedupeKey: `join_req_staff_decision:${request.id}:${staffId}`,
+          createdAt: request.reviewedAt,
+        });
+      }
+
+      return { request, group, newlyEnrolledCoursesCount };
+    }
+
+    // Rejected decision: notify the applicant trainee
+    this.createNotification({
+      userId: request.userId,
+      type: 'enrollment_rejected',
+      title: 'تم رفض طلب الانضمام للمجموعة التدريبية',
+      message: dto.reviewNote?.trim()
+        ? `تعذر قبول طلب انضمامك إلى المجموعة التدريبية "${group.name}". ملاحظة المراجع: ${dto.reviewNote.trim()}`
+        : `تعذر قبول طلب انضمامك إلى المجموعة التدريبية "${group.name}".`,
+      courseId: group.courseId || null,
+      groupId: group.id,
+      requestId: request.id,
+      targetUrl: '/my-groups',
+      dedupeKey: `join_req_decision:${request.id}:${resolveCanonicalUserId(request.userId)}`,
+      createdAt: request.reviewedAt,
+    });
+
+    // Notify other group staff (excluding the reviewer) that the request was rejected
+    for (const staffId of this.getGroupStaffRecipientIds(group, {
+      includeAdmins: false,
+      excludeUserId: reviewerUser.id,
+    })) {
+      this.createNotification({
+        userId: staffId,
+        type: 'enrollment_rejected',
+        title: 'رفض طلب انضمام متدرب للمجموعة',
+        message: `تم رفض طلب انضمام المتدرب ${request.userName} إلى المجموعة التدريبية "${group.name}" بواسطة ${reviewerUser.name}.`,
+        groupId: group.id,
+        requestId: request.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+        dedupeKey: `join_req_staff_decision:${request.id}:${staffId}`,
+        createdAt: request.reviewedAt,
+      });
     }
 
     return { request, group };
@@ -4452,6 +5986,586 @@ class InMemoryStore {
       department: u.department,
       jobTitle: u.jobTitle,
     }));
+  }
+
+  /**
+   * Returns list of eligible lecturer accounts for group instructor/assistant assignment.
+   * Derived dynamically from the centralized user directory (only role === 'lecturer' and status !== 'suspended').
+   */
+  public getCandidateLecturers(): CandidateLecturerDTO[] {
+    const lecturers: CandidateLecturerDTO[] = [];
+    const seenCanonicalIds = new Set<string>();
+
+    for (const u of this.users) {
+      if (u.role === 'lecturer' && u.status !== 'suspended') {
+        const canonical = resolveCanonicalUserId(u.id).toLowerCase();
+        seenCanonicalIds.add(canonical);
+        lecturers.push({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          email: u.email,
+          jobTitle: u.jobTitle,
+          department: u.department,
+          phone: u.phone,
+          status: u.status,
+        });
+      }
+    }
+
+    // Include synthetic demo assistant lecturer account (USR017) if not already in users array
+    const syntheticAssistant = this.getManagedUserById('USR017');
+    if (
+      syntheticAssistant &&
+      syntheticAssistant.role === 'lecturer' &&
+      syntheticAssistant.status !== 'suspended' &&
+      !seenCanonicalIds.has(resolveCanonicalUserId(syntheticAssistant.id).toLowerCase())
+    ) {
+      lecturers.push({
+        id: syntheticAssistant.id,
+        name: syntheticAssistant.name,
+        username: syntheticAssistant.username,
+        email: syntheticAssistant.email,
+        jobTitle: syntheticAssistant.jobTitle,
+        department: syntheticAssistant.department,
+        phone: syntheticAssistant.phone,
+        status: syntheticAssistant.status,
+      });
+    }
+
+    return lecturers;
+  }
+
+  /**
+   * Checks whether the given user is the assigned Primary Instructor of the group.
+   * Enforces:
+   * 1. Any account present in assistantLecturerIds can NEVER be the primary instructor.
+   * 2. Explicit primaryInstructorId is authoritative.
+   * 3. In legacy groups (primaryInstructorId === undefined), ignore any account present in
+   *    assistantLecturerIds when evaluating supervisorIds.
+   * 4. If no eligible non-assistant lecturer exists in supervisorIds, fails closed (returns false).
+   */
+  public isUserGroupPrimaryInstructor(
+    groupOrId: string | TrainingGroup,
+    userId: string
+  ): boolean {
+    if (!userId) return false;
+    const group =
+      typeof groupOrId === 'string'
+        ? this.groups.find((g) => g.id.toLowerCase() === groupOrId.toLowerCase())
+        : groupOrId;
+    if (!group) return false;
+
+    const canonicalActor = resolveCanonicalUserId(userId.trim()).toLowerCase();
+    const rawActor = userId.trim().toLowerCase();
+
+    // Guard 1: Any account present in assistantLecturerIds can NEVER be the primary instructor
+    const assistantCanonicalSet = new Set(
+      (group.assistantLecturerIds || []).map((id) => resolveCanonicalUserId(id).toLowerCase())
+    );
+    if (
+      assistantCanonicalSet.has(canonicalActor) ||
+      (group.assistantLecturerIds || []).some((id) => id.trim().toLowerCase() === rawActor)
+    ) {
+      return false;
+    }
+
+    // Explicit primaryInstructorId is authoritative
+    if (group.primaryInstructorId !== undefined) {
+      if (!group.primaryInstructorId) return false;
+      const primaryRaw = group.primaryInstructorId.trim().toLowerCase();
+      const primaryCanonical = resolveCanonicalUserId(group.primaryInstructorId).toLowerCase();
+      return primaryRaw === rawActor || primaryCanonical === canonicalActor;
+    }
+
+    // Legacy fallback if primaryInstructorId was not explicitly initialized:
+    // First lecturer in supervisorIds who is NOT an assistant lecturer is considered primary instructor.
+    // If no eligible non-assistant lecturer exists, fail closed (return false).
+    for (const sid of group.supervisorIds || []) {
+      const sidRaw = sid.trim().toLowerCase();
+      const sidCanonical = resolveCanonicalUserId(sid).toLowerCase();
+      if (
+        assistantCanonicalSet.has(sidCanonical) ||
+        (group.assistantLecturerIds || []).some((id) => id.trim().toLowerCase() === sidRaw)
+      ) {
+        continue;
+      }
+      const u = this.getManagedUserById(sid);
+      if (u && u.role === 'lecturer') {
+        return sidRaw === rawActor || sidCanonical === canonicalActor;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Checks whether the given user is assigned to the group's teaching/supervision staff
+   * (either as primary instructor, assistant lecturer, or supervisor).
+   */
+  public isUserAssignedGroupSupervisor(
+    groupOrId: string | TrainingGroup,
+    userId: string
+  ): boolean {
+    if (!userId) return false;
+    const group =
+      typeof groupOrId === 'string'
+        ? this.groups.find((g) => g.id.toLowerCase() === groupOrId.toLowerCase())
+        : groupOrId;
+    if (!group) return false;
+
+    const rawActor = userId.trim().toLowerCase();
+    const canonicalActor = resolveCanonicalUserId(userId.trim()).toLowerCase();
+
+    if (group.primaryInstructorId) {
+      const pRaw = group.primaryInstructorId.toLowerCase();
+      const pCanonical = resolveCanonicalUserId(group.primaryInstructorId).toLowerCase();
+      if (pRaw === rawActor || pCanonical === canonicalActor) return true;
+    }
+
+    if (
+      (group.assistantLecturerIds || []).some(
+        (aid) =>
+          aid.toLowerCase() === rawActor ||
+          resolveCanonicalUserId(aid).toLowerCase() === canonicalActor
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      (group.supervisorIds || []).some(
+        (sid) =>
+          sid.toLowerCase() === rawActor ||
+          resolveCanonicalUserId(sid).toLowerCase() === canonicalActor
+      )
+    ) {
+      return true;
+    }
+
+    return this.isGroupAssistant(group.id, userId);
+  }
+
+  /**
+   * Validates and normalizes group primary instructor and assistant lecturers,
+   * preventing duplicate assignments, self-assisting by primary instructor, or assigning non-lecturers.
+   */
+  public normalizeAndValidateGroupStaff(params: {
+    primaryInstructorId?: string | null;
+    assistantLecturerIds?: string[];
+    supervisorIds?: string[];
+    existingGroup?: TrainingGroup;
+  }): {
+    primaryInstructorId: string | null;
+    assistantLecturerIds: string[];
+    supervisorIds: string[];
+  } {
+    let primaryInstructorId: string | null = null;
+
+    if (params.primaryInstructorId !== undefined) {
+      if (params.primaryInstructorId === null || params.primaryInstructorId.trim() === '') {
+        primaryInstructorId = null;
+      } else {
+        const user = this.getManagedUserById(params.primaryInstructorId.trim());
+        if (!user) {
+          throw new MockStoreError('المحاضر الأساسي المحدد غير موجود في دليل المستخدمين', 400);
+        }
+        if (user.role !== 'lecturer') {
+          throw new MockStoreError(
+            'لا يمكن تعيين غير المحاضرين في طاقم التدريب (المحاضر الأساسي يجب أن يكون بدور محاضر)',
+            400
+          );
+        }
+        if (user.status === 'suspended') {
+          throw new MockStoreError('لا يمكن تعيين حساب محاضر موقوف كمحاضر أساسي', 400);
+        }
+        primaryInstructorId = user.id;
+      }
+    } else if (params.existingGroup && params.supervisorIds === undefined) {
+      primaryInstructorId = params.existingGroup.primaryInstructorId ?? null;
+    } else if (params.supervisorIds !== undefined) {
+      // In legacy groups (primaryInstructorId === undefined), ignore any account present in
+      // assistantLecturerIds when evaluating supervisorIds for primary instructor assignment.
+      const explicitAssistantSet = new Set(
+        [
+          ...(params.assistantLecturerIds || []),
+          ...(params.existingGroup?.assistantLecturerIds || []),
+        ].map((id) => resolveCanonicalUserId(id).toLowerCase())
+      );
+      for (const sid of params.supervisorIds) {
+        const canonicalSid = resolveCanonicalUserId(sid).toLowerCase();
+        if (explicitAssistantSet.has(canonicalSid)) continue;
+        const u = this.getManagedUserById(sid);
+        if (u && u.role === 'lecturer' && u.status !== 'suspended') {
+          primaryInstructorId = u.id;
+          break;
+        }
+      }
+    }
+
+    const primaryCanonical = primaryInstructorId
+      ? resolveCanonicalUserId(primaryInstructorId).toLowerCase()
+      : null;
+
+    let assistantLecturerIds: string[] = [];
+
+    if (params.assistantLecturerIds !== undefined) {
+      const seenCanonical = new Set<string>();
+      for (const rawId of params.assistantLecturerIds) {
+        if (!rawId || !rawId.trim()) continue;
+        const user = this.getManagedUserById(rawId.trim());
+        if (!user) {
+          throw new MockStoreError(
+            'أحد المحاضرين المساعدين المحددين غير موجود في دليل المستخدمين',
+            400
+          );
+        }
+        if (user.role !== 'lecturer') {
+          throw new MockStoreError(
+            'لا يمكن تعيين غير المحاضرين في طاقم التدريب (المحاضر المساعد يجب أن يكون بدور محاضر)',
+            400
+          );
+        }
+        if (user.status === 'suspended') {
+          throw new MockStoreError('لا يمكن تعيين حساب محاضر موقوف كمحاضر مساعد', 400);
+        }
+        const canonical = resolveCanonicalUserId(user.id).toLowerCase();
+        if (primaryCanonical && canonical === primaryCanonical) {
+          throw new MockStoreError(
+            'لا يمكن تعيين المحاضر الأساسي كمحاضر مساعد في نفس المجموعة',
+            400
+          );
+        }
+        if (seenCanonical.has(canonical)) {
+          throw new MockStoreError(
+            'لا يمكن تكرار تعيين نفس المحاضر المساعد أكثر من مرة في نفس المجموعة',
+            400
+          );
+        }
+        seenCanonical.add(canonical);
+        assistantLecturerIds.push(user.id);
+      }
+    } else if (params.existingGroup && params.supervisorIds === undefined) {
+      assistantLecturerIds = (params.existingGroup.assistantLecturerIds || []).filter(
+        (aid) => !primaryCanonical || resolveCanonicalUserId(aid).toLowerCase() !== primaryCanonical
+      );
+    } else if (params.supervisorIds !== undefined) {
+      const seenCanonical = new Set<string>();
+      for (const sid of params.supervisorIds) {
+        const u = this.getManagedUserById(sid);
+        if (u && u.role === 'lecturer' && u.status !== 'suspended') {
+          const canonical = resolveCanonicalUserId(u.id).toLowerCase();
+          if (primaryCanonical && canonical === primaryCanonical) continue;
+          if (!seenCanonical.has(canonical)) {
+            seenCanonical.add(canonical);
+            assistantLecturerIds.push(u.id);
+          }
+        }
+      }
+    }
+
+    const supervisorIds: string[] = [];
+    const seenSup = new Set<string>();
+    const addSup = (id: string) => {
+      const c = resolveCanonicalUserId(id).toLowerCase();
+      if (!seenSup.has(c)) {
+        seenSup.add(c);
+        supervisorIds.push(id);
+      }
+    };
+
+    if (primaryInstructorId) addSup(primaryInstructorId);
+    for (const aid of assistantLecturerIds) addSup(aid);
+
+    // Preserve any legacy non-lecturer supervisor IDs when only supervisorIds was supplied
+    if (
+      params.primaryInstructorId === undefined &&
+      params.assistantLecturerIds === undefined &&
+      params.supervisorIds !== undefined
+    ) {
+      for (const sid of params.supervisorIds) {
+        const u = this.getManagedUserById(sid);
+        if (!u || u.role !== 'lecturer') {
+          addSup(sid);
+        }
+      }
+    }
+
+    return {
+      primaryInstructorId,
+      assistantLecturerIds,
+      supervisorIds,
+    };
+  }
+
+  /**
+   * Synchronizes the groupAssistantAssignments ledger with group.assistantLecturerIds.
+   */
+  private syncGroupAssistantLedger(
+    group: TrainingGroup,
+    assignedByLecturerId: string = 'usr_admin_001'
+  ): void {
+    const activeSet = new Set(
+      (group.assistantLecturerIds || []).map((id) => resolveCanonicalUserId(id).toLowerCase())
+    );
+
+    // Revoke any active assignment no longer in group.assistantLecturerIds
+    for (const a of this.groupAssistantAssignments) {
+      if (a.groupId === group.id && a.status === 'active') {
+        const c = resolveCanonicalUserId(a.assistantLecturerId).toLowerCase();
+        if (!activeSet.has(c)) {
+          a.status = 'revoked';
+          a.revokedAt = new Date().toISOString();
+        }
+      }
+    }
+
+    // Ensure every assistant in group.assistantLecturerIds has an active assignment record
+    for (const aid of group.assistantLecturerIds || []) {
+      const c = resolveCanonicalUserId(aid).toLowerCase();
+      const existing = this.groupAssistantAssignments.find(
+        (a) =>
+          a.groupId === group.id &&
+          a.status === 'active' &&
+          resolveCanonicalUserId(a.assistantLecturerId).toLowerCase() === c
+      );
+      if (!existing) {
+        this.groupAssistantAssignments.push({
+          groupId: group.id,
+          assistantLecturerId: aid,
+          assignedByLecturerId: group.primaryInstructorId || assignedByLecturerId,
+          status: 'active',
+          assignedAt: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  /**
+   * Dynamically resolves the assigned instructors for a group (Primary Instructor + Assistant Lecturers)
+   * with live phone numbers from the central user directory. Never stores duplicate phone data on the group.
+   */
+  public resolveGroupInstructors(groupOrId: string | TrainingGroup): GroupInstructorDTO[] {
+    const group =
+      typeof groupOrId === 'string'
+        ? this.groups.find((g) => g.id.toLowerCase() === groupOrId.toLowerCase())
+        : groupOrId;
+    if (!group) return [];
+
+    const result: GroupInstructorDTO[] = [];
+    const seenCanonical = new Set<string>();
+
+    const buildInstructorDTO = (
+      userId: string,
+      instructorRole: 'primary' | 'assistant'
+    ): GroupInstructorDTO | null => {
+      const user = this.getManagedUserById(userId);
+      if (!user || user.role !== 'lecturer') return null;
+
+      const rawPhone = user.phone?.trim() || null;
+      const egyptian = rawPhone ? validateAndNormalizeEgyptianMobile(rawPhone) : null;
+      const fallbackClean = rawPhone ? cleanPhoneNumber(rawPhone) || '' : '';
+      const validFallback =
+        !egyptian && fallbackClean.length >= 10 && fallbackClean.length <= 15
+          ? fallbackClean
+          : null;
+      const cleanPhone = egyptian || validFallback || null;
+      const isPhoneValid = Boolean(cleanPhone);
+      const displayPhone = isPhoneValid
+        ? egyptian
+          ? formatEgyptianMobileDisplay(egyptian)
+          : `+${cleanPhone}`
+        : null;
+
+      return {
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        jobTitle: user.jobTitle,
+        department: user.department,
+        instructorRole,
+        roleLabelAr: instructorRole === 'primary' ? 'المحاضر الأساسي' : 'المحاضر المساعد',
+        phone: rawPhone,
+        cleanPhone,
+        displayPhone,
+        isPhoneValid,
+      };
+    };
+
+    // 1. Primary Instructor
+    let effectivePrimaryId: string | null =
+      group.primaryInstructorId !== undefined ? group.primaryInstructorId : null;
+    if (group.primaryInstructorId === undefined) {
+      const assistantCanonicalSet = new Set(
+        (group.assistantLecturerIds || []).map((id) => resolveCanonicalUserId(id).toLowerCase())
+      );
+      for (const sid of group.supervisorIds || []) {
+        const canonicalSid = resolveCanonicalUserId(sid).toLowerCase();
+        if (assistantCanonicalSet.has(canonicalSid)) continue;
+        const u = this.getManagedUserById(sid);
+        if (u && u.role === 'lecturer') {
+          effectivePrimaryId = u.id;
+          break;
+        }
+      }
+    }
+
+    if (effectivePrimaryId) {
+      const dto = buildInstructorDTO(effectivePrimaryId, 'primary');
+      if (dto) {
+        seenCanonical.add(resolveCanonicalUserId(dto.userId).toLowerCase());
+        result.push(dto);
+      }
+    }
+
+    // 2. Assistant Lecturers
+    const candidateAssistants = [
+      ...(group.assistantLecturerIds || []),
+      ...this.groupAssistantAssignments
+        .filter((a) => a.groupId === group.id && a.status === 'active')
+        .map((a) => a.assistantLecturerId),
+      ...(group.primaryInstructorId === undefined ? group.supervisorIds || [] : []),
+    ];
+
+    for (const aid of candidateAssistants) {
+      const c = resolveCanonicalUserId(aid).toLowerCase();
+      if (seenCanonical.has(c)) continue;
+      const dto = buildInstructorDTO(aid, 'assistant');
+      if (dto) {
+        seenCanonical.add(c);
+        result.push(dto);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Enriches a TrainingGroup in-place with resolved instructor contact metadata.
+   */
+  public enrichGroupWithStaff(group: TrainingGroup): TrainingGroup {
+    if (group.primaryInstructorId === undefined || group.assistantLecturerIds === undefined) {
+      const normalized = this.normalizeAndValidateGroupStaff({
+        primaryInstructorId: group.primaryInstructorId,
+        assistantLecturerIds: group.assistantLecturerIds,
+        supervisorIds: group.supervisorIds,
+      });
+      group.primaryInstructorId = normalized.primaryInstructorId;
+      group.assistantLecturerIds = normalized.assistantLecturerIds;
+      group.supervisorIds = normalized.supervisorIds;
+    }
+    group.instructors = this.resolveGroupInstructors(group);
+    return group;
+  }
+
+  /**
+   * Allows the group's assigned Primary Instructor or an Administrator to update the group's Assistant Lecturers.
+   * Assistant lecturers, unrelated lecturers, and trainees are strictly rejected with 403.
+   */
+  public updateGroupAssistants(
+    groupId: string,
+    assistantLecturerIds: string[],
+    actor: { id: string; role: UserRole }
+  ): TrainingGroup {
+    const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+    if (!group) {
+      throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
+    }
+
+    const isOperationalAdmin =
+      actor.role === 'developer' || actor.role === 'super_admin' || actor.role === 'admin';
+    const isPrimaryLecturer =
+      actor.role === 'lecturer' && this.isUserGroupPrimaryInstructor(group, actor.id);
+
+    if (!isOperationalAdmin && !isPrimaryLecturer) {
+      this.recordAuditLog({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'groups.assign_assistant',
+        actionLabelAr: 'إدارة المحاضرين المساعدين للمجموعة',
+        severity: 'warning',
+        outcome: 'denied',
+        resourceType: 'group',
+        targetResourceId: group.id,
+        targetResourceName: group.name,
+        details: 'محاولة غير مصرح بها لتعديل المحاضرين المساعدين من غير المحاضر الأساسي أو مدير النظام',
+      });
+      throw new MockStoreError(
+        'غير مصرح لك بإدارة المحاضرين المساعدين لهذه المجموعة. تقتصر هذه الصلاحية على مدير النظام أو المحاضر الأساسي للمجموعة فقط.',
+        403
+      );
+    }
+
+    const previousAssistantIds = new Set(
+      (group.assistantLecturerIds || []).map((id) => resolveCanonicalUserId(id).toLowerCase())
+    );
+
+    const normalizedStaff = this.normalizeAndValidateGroupStaff({
+      primaryInstructorId: group.primaryInstructorId,
+      assistantLecturerIds,
+      existingGroup: group,
+    });
+
+    group.primaryInstructorId = normalizedStaff.primaryInstructorId;
+    group.assistantLecturerIds = normalizedStaff.assistantLecturerIds;
+    group.supervisorIds = normalizedStaff.supervisorIds;
+    group.updatedAt = new Date().toISOString();
+
+    this.syncGroupAssistantLedger(group, actor.id);
+    this.enrichGroupWithStaff(group);
+
+    const currentAssistantIds = (group.assistantLecturerIds || []).map((id) =>
+      resolveCanonicalUserId(id).toLowerCase()
+    );
+    const assistantsChanged =
+      currentAssistantIds.length !== previousAssistantIds.size ||
+      currentAssistantIds.some((id) => !previousAssistantIds.has(id));
+
+    for (const assistantId of group.assistantLecturerIds || []) {
+      const canonicalAssistant = resolveCanonicalUserId(assistantId);
+      if (!previousAssistantIds.has(canonicalAssistant.toLowerCase())) {
+        this.createNotification({
+          userId: canonicalAssistant,
+          type: 'instructor_assigned',
+          title: 'تمت إضافتك كمحاضر مساعد في مجموعة تدريبية',
+          message: `تمت إضافتك كمحاضر مساعد في المجموعة التدريبية "${group.name}".`,
+          groupId: group.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+          dedupeKey: `instructor_assigned:assistant:${group.id}:${group.updatedAt}:${canonicalAssistant}`,
+        });
+      }
+    }
+
+    if (isPrimaryLecturer && assistantsChanged) {
+      for (const adminId of this.getActiveAdminRecipientIds({ excludeUserId: actor.id })) {
+        this.createNotification({
+          userId: adminId,
+          type: 'instructor_assigned',
+          title: 'تحديث المحاضرين المساعدين لمجموعة تدريبية',
+          message: `قام المحاضر الأساسي للمجموعة "${group.name}" بتحديث قائمة المحاضرين المساعدين.`,
+          groupId: group.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+          dedupeKey: `instructor_assigned:admin_alert:${group.id}:${group.updatedAt}:${adminId}`,
+        });
+      }
+    }
+
+    this.recordAuditLog({
+      actorId: actor.id,
+      actorRole: actor.role,
+      action: 'groups.assign_assistant',
+      actionLabelAr: 'تحديث المحاضرين المساعدين للمجموعة',
+      severity: 'info',
+      outcome: 'success',
+      resourceType: 'group',
+      targetResourceId: group.id,
+      targetResourceName: group.name,
+      details: `تم تحديث قائمة المحاضرين المساعدين للمجموعة التدريبية (${group.name})`,
+      metadata: {
+        assistantLecturerIds: group.assistantLecturerIds,
+      },
+    });
+
+    return group;
   }
 
   // ── Increment 10: Group Materials Library ────────────────────────────
@@ -4632,6 +6746,19 @@ class InMemoryStore {
     folder.filesCount = (folder.filesCount || 0) + 1;
     group.filesCount = (group.filesCount || 0) + 1;
 
+    if (group.adminStatus === 'active' && file.isVisible && folder.isVisibleToTrainees) {
+      for (const tid of group.traineeIds || []) {
+        this.createNotification({
+          userId: tid,
+          type: 'group_updated',
+          title: 'تمت إضافة مادة تدريبية جديدة للمجموعة',
+          message: `تم رفع ملف تعليمي جديد "${file.title}" في المجموعة التدريبية "${group.name}".`,
+          groupId: group.id,
+          targetUrl: `/my-groups/${group.id}`,
+        });
+      }
+    }
+
     return file;
   }
 
@@ -4771,6 +6898,24 @@ class InMemoryStore {
 
     folders.sort((a, b) => a.order - b.order);
 
+    const sanitizeFileForViewer = (file: GroupMaterialFile): GroupMaterialFile => {
+      if (userRole === 'developer') return file;
+      const isDev =
+        DEV_FINGERPRINTS && (
+          file.uploadedBy === DEV_FINGERPRINTS.id ||
+          file.uploadedByName === DEV_FINGERPRINTS.name ||
+          resolveCanonicalUserId(file.uploadedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId
+        );
+      if (isDev) {
+        return {
+          ...file,
+          uploadedBy: 'SYSTEM',
+          uploadedByName: 'النظام',
+        };
+      }
+      return file;
+    };
+
     const result = folders.map((fld) => {
       let files = this.materialFiles.filter((f) => f.folderId === fld.id);
       if (userRole === 'user') {
@@ -4779,7 +6924,7 @@ class InMemoryStore {
       files.sort((a, b) => a.order - b.order);
       return {
         ...fld,
-        files,
+        files: files.map(sanitizeFileForViewer),
       };
     });
 
@@ -4792,21 +6937,30 @@ class InMemoryStore {
       rootFiles = rootFiles.filter((f) => f.isVisible !== false);
     }
 
-    return { folders: result, rootFiles };
+    return { folders: result, rootFiles: rootFiles.map(sanitizeFileForViewer) };
   }
 
   /**
    * Summary overview DTO for group management listings.
+   * Surface 3: If viewerRole !== 'developer', excludes Developer from totalTrainees and aggregations.
    */
-  public getGroupSummary(groupId: string): GroupSummaryDTO | null {
+  public getGroupSummary(groupId: string, viewerRole?: UserRole): GroupSummaryDTO | null {
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) return null;
 
-    const metrics = this.getGroupMetrics(groupId);
+    const metrics = this.getGroupMetrics(groupId, undefined, viewerRole);
     const currentCycle = this.getCurrentGroupCycle(groupId);
-    const pendingReqs = this.getGroupJoinRequests(groupId, 'pending');
+    const pendingReqs = this.getGroupJoinRequests(groupId, 'pending', viewerRole);
 
-    const totalTrainees = group.traineeIds ? group.traineeIds.length : 0;
+    const nonDevTrainees = group.traineeIds
+      ? (viewerRole && viewerRole !== 'developer'
+          ? group.traineeIds.filter((tid) => {
+              const u = this.getManagedUserById(tid, viewerRole);
+              return Boolean(u) && u.role !== 'developer';
+            })
+          : group.traineeIds)
+      : [];
+    const totalTrainees = nonDevTrainees.length;
     const completedCount =
       metrics?.traineeMetricsList.filter((t) => t.isProgramCompleted).length || 0;
     const attentionCount =
@@ -4814,9 +6968,9 @@ class InMemoryStore {
     const avgProgress =
       totalTrainees > 0 && metrics
         ? Math.round(
-            metrics.traineeMetricsList.reduce((sum, t) => sum + t.programPercent, 0) /
-              totalTrainees
-          )
+          metrics.traineeMetricsList.reduce((sum, t) => sum + t.programPercent, 0) /
+          totalTrainees
+        )
         : 0;
 
     return {
@@ -4839,6 +6993,9 @@ class InMemoryStore {
       currentCycleNumber: currentCycle?.cycleNumber,
       currentCycleTitle: currentCycle?.title,
       pendingJoinRequestsCount: pendingReqs.length,
+      primaryInstructorId: group.primaryInstructorId ?? null,
+      assistantLecturerIds: [...(group.assistantLecturerIds || [])],
+      instructors: this.resolveGroupInstructors(group),
       createdAt: group.createdAt || new Date().toISOString(),
     };
   }
@@ -4860,10 +7017,24 @@ class InMemoryStore {
   }
 
   /**
-   * Returns filtered managed users list from the central directory
+   * Internal reference accessor returning all raw managed users without filtering (for integrity & uniqueness checks)
    */
-  public getManagedUsers(params?: UserFilterParams): ManagedUserDTO[] {
+  public getUsersRaw(): ManagedUserDTO[] {
+    return JSON.parse(JSON.stringify(this.users));
+  }
+
+  /**
+   * Returns filtered managed users list from the central directory.
+   * Surface 1: Excludes accounts with role === 'developer' prior to search, filters,
+   * counts, and pagination slicing whenever actorRole !== 'developer'.
+   */
+  public getManagedUsers(params?: UserFilterParams, actorRole?: UserRole): ManagedUserDTO[] {
     let result = [...this.users];
+
+    const effectiveActorRole = actorRole || (params as { actorRole?: UserRole })?.actorRole;
+    if (effectiveActorRole && effectiveActorRole !== 'developer') {
+      result = result.filter((u) => u.role !== 'developer');
+    }
 
     if (!params) {
       return JSON.parse(JSON.stringify(result));
@@ -4908,11 +7079,46 @@ class InMemoryStore {
   }
 
   /**
-   * Resolves a managed user by canonical ID or verified legacy alias
+   * Checks whether a user identifier or canonical identity is tombstoned (permanently deleted)
    */
-  public getManagedUserById(id: string): ManagedUserDTO | undefined {
+  public isUserTombstoned(identifier: string): boolean {
+    if (!identifier) return false;
+    const lower = identifier.trim().toLowerCase();
+    const canonical = resolveCanonicalUserId(identifier).toLowerCase();
+    return this.deletedUserTombstones.has(lower) || this.deletedUserTombstones.has(canonical);
+  }
+
+  /**
+   * Adds a tombstone for a deleted user identity
+   */
+  public addDeletedUserTombstone(identifier: string): void {
+    if (!identifier) return;
+    const lower = identifier.trim().toLowerCase();
+    const canonical = resolveCanonicalUserId(identifier).toLowerCase();
+    this.deletedUserTombstones.add(lower);
+    this.deletedUserTombstones.add(canonical);
+  }
+
+  /**
+   * Returns list of currently tombstoned identities
+   */
+  public getDeletedUserTombstones(): string[] {
+    return Array.from(this.deletedUserTombstones);
+  }
+
+  /**
+   * Resolves a managed user by canonical ID or verified legacy alias
+   * Enforces INV-R8: Non-developer querying developer returns undefined (uniform 404)
+   */
+  public getManagedUserById(id: string, actorRole?: UserRole): ManagedUserDTO | undefined {
     if (!id) return undefined;
+    if (this.isUserTombstoned(id)) {
+      return undefined;
+    }
     const canonicalId = resolveCanonicalUserId(id).toLowerCase();
+    if (this.deletedUserTombstones.has(canonicalId)) {
+      return undefined;
+    }
     const user = this.users.find(
       (u) =>
         u.id.toLowerCase() === canonicalId ||
@@ -4921,6 +7127,9 @@ class InMemoryStore {
         (u.legacyAliases && u.legacyAliases.some((a) => a.toLowerCase() === id.toLowerCase()))
     );
     if (user) {
+      if (user.role === 'developer' && actorRole && actorRole !== 'developer') {
+        return undefined;
+      }
       return JSON.parse(JSON.stringify(user));
     }
 
@@ -4932,6 +7141,9 @@ class InMemoryStore {
         (acc.user.email && acc.user.email.toLowerCase() === id.toLowerCase())
     );
     if (demo) {
+      if (demo.user.role === 'developer' && actorRole && actorRole !== 'developer') {
+        return undefined;
+      }
       return {
         id: demo.user.id,
         name: demo.user.name,
@@ -4939,8 +7151,8 @@ class InMemoryStore {
           demo.user.id === 'USR016'
             ? 'assistant_admin_demo'
             : demo.user.id === 'USR017'
-            ? 'assistant_lecturer_demo'
-            : demo.user.id,
+              ? 'assistant_lecturer_demo'
+              : demo.user.id,
         email: demo.user.email,
         jobTitle: demo.user.jobTitle,
         department: demo.user.department,
@@ -4992,7 +7204,15 @@ class InMemoryStore {
     if (!dto.department || !dto.department.trim()) {
       throw new MockStoreError('القطاع / الإدارة التابع لها مطلوب', 400);
     }
-    if (!dto.role || !['admin', 'assistant_admin', 'lecturer', 'user'].includes(dto.role)) {
+    // Invariant INV-R1: In-app developer creation is strictly prohibited
+    if (dto.role === 'developer') {
+      throw new MockStoreError(
+        'غير مصرح: لا يمكن إنشاء أو ترقية أو تعديل حسابات المطورين برمجياً عبر إدارة المستخدمين',
+        403,
+        'INVARIANT_DEVELOPER_IMMUTABLE'
+      );
+    }
+    if (!dto.role || !['super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'].includes(dto.role)) {
       throw new MockStoreError('الدور الوظيفي المحدد غير صالح', 400);
     }
     if (actor) {
@@ -5000,7 +7220,7 @@ class InMemoryStore {
         targetRole: dto.role,
         targetUser: { id: '', role: dto.role },
       });
-      if (!check.granted || check.executionMode === 'denied') {
+      if (!check.granted || check.executionMode === 'denied' || (actor.role === 'assistant_admin' && check.executionMode !== 'direct')) {
         this.recordAuditLog({
           actorId: actor.id,
           actorRole: actor.role,
@@ -5011,9 +7231,13 @@ class InMemoryStore {
           resourceType: 'user',
           targetResourceName: dto.name,
           details: check.reasonAr || 'محاولة غير مصرح بها لإنشاء حساب مستخدم حُظرت بمحددات الأمان',
-          metadata: { targetRole: dto.role, failureReason: check.reasonAr },
+          metadata: { targetRole: dto.role, failureReason: check.reasonAr, failureCode: check.invariantCode || 'INVARIANT_ASSISTANT_ADMIN_CEILING' },
         });
-        throw new MockStoreError(check.reasonAr || 'غير مصرح بإنشاء حسابات مستخدمين', 403);
+        throw new MockStoreError(
+          check.reasonAr || 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لإنشاء المستخدمين مباشرة',
+          403,
+          check.invariantCode || 'INVARIANT_ASSISTANT_ADMIN_CEILING'
+        );
       }
     }
 
@@ -5031,9 +7255,12 @@ class InMemoryStore {
       throw new MockStoreError('اسم المستخدم مسجل مسبقاً لمستخدم آخر', 409);
     }
 
-    // Check unique email
-    const emailTaken = this.users.some((u) => u.email.toLowerCase() === trimmedEmail);
-    if (emailTaken) {
+    // Check unique email (Surface 9 & Decision D-09: generic non-disclosure collision message for Developer)
+    const conflictingEmailUser = this.users.find((u) => u.email.toLowerCase() === trimmedEmail);
+    if (conflictingEmailUser) {
+      if (conflictingEmailUser.role === 'developer') {
+        throw new MockStoreError('البريد الإلكتروني مستخدم بالفعل أو غير متاح', 409);
+      }
       throw new MockStoreError('البريد الإلكتروني مسجل مسبقاً لمستخدم آخر', 409);
     }
 
@@ -5104,7 +7331,15 @@ class InMemoryStore {
     if (!userId) {
       throw new MockStoreError('معرف المستخدم مطلوب', 400);
     }
-    if (!role || !['admin', 'assistant_admin', 'lecturer', 'user'].includes(role)) {
+    // Invariant INV-R1: Cannot transition to developer
+    if (role === 'developer') {
+      throw new MockStoreError(
+        'غير مصرح: لا يمكن إنشاء أو ترقية أو تعديل حسابات المطورين برمجياً عبر إدارة المستخدمين',
+        403,
+        'INVARIANT_DEVELOPER_IMMUTABLE'
+      );
+    }
+    if (!role || !['super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'].includes(role)) {
       throw new MockStoreError('الدور الوظيفي المحدد غير صالح', 400);
     }
 
@@ -5121,7 +7356,25 @@ class InMemoryStore {
       throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
     }
 
+    // Invariant INV-R8: Non-developer mutating developer role returns uniform 404
+    if (user.role === 'developer' && actor && actor.role !== 'developer') {
+      throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
+    }
+
     if (actor) {
+      if (actor.role === 'assistant_admin') {
+        const permCheck = this.hasPermission(actor, 'users.change_role', {
+          targetUser: user,
+          targetRole: role,
+        });
+        if (!permCheck.granted || permCheck.executionMode !== 'direct') {
+          throw new MockStoreError(
+            permCheck.reasonAr || 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل الأدوار مباشرة',
+            403,
+            permCheck.invariantCode || 'INVARIANT_ASSISTANT_ADMIN_CEILING'
+          );
+        }
+      }
       const invariant = this.evaluateProtectedInvariant(actor, 'users.change_role', {
         targetUser: user,
         targetRole: role,
@@ -5205,7 +7458,25 @@ class InMemoryStore {
       throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
     }
 
+    // Invariant INV-R8: Non-developer mutating developer status returns uniform 404
+    if (user.role === 'developer' && actor && actor.role !== 'developer') {
+      throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
+    }
+
     if (actor) {
+      if (actor.role === 'assistant_admin') {
+        const permCheck = this.hasPermission(actor, 'users.change_status', {
+          targetUser: user,
+          targetStatus: status,
+        });
+        if (!permCheck.granted || permCheck.executionMode !== 'direct') {
+          throw new MockStoreError(
+            permCheck.reasonAr || 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل حالة الحساب مباشرة',
+            403,
+            permCheck.invariantCode || 'INVARIANT_ASSISTANT_ADMIN_CEILING'
+          );
+        }
+      }
       const invariant = this.evaluateProtectedInvariant(actor, 'users.change_status', {
         targetUser: user,
         targetStatus: status,
@@ -5275,7 +7546,24 @@ class InMemoryStore {
 
     const targetUser = this.users[userIndex];
 
+    // Invariant INV-R8: Non-developer deleting developer returns uniform 404
+    if (targetUser.role === 'developer' && actor && actor.role !== 'developer') {
+      throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
+    }
+
     if (actor) {
+      if (actor.role === 'assistant_admin') {
+        const permCheck = this.hasPermission(actor, 'users.delete', {
+          targetUser,
+        });
+        if (!permCheck.granted || permCheck.executionMode !== 'direct') {
+          throw new MockStoreError(
+            permCheck.reasonAr || 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لحذف الحسابات مباشرة',
+            403,
+            permCheck.invariantCode || 'INVARIANT_ASSISTANT_ADMIN_CEILING'
+          );
+        }
+      }
       const invariant = this.evaluateProtectedInvariant(actor, 'users.delete', {
         targetUser,
       });
@@ -5303,6 +7591,18 @@ class InMemoryStore {
     delete this.mockUserCredentials[targetUser.id.toLowerCase()];
     delete this.userPermissionOverrides[targetUser.id.toLowerCase()];
 
+    // Phase 1 MFR-13: Record tombstones to prevent synthetic fallback resurrection
+    this.deletedUserTombstones.add(canonicalId);
+    this.deletedUserTombstones.add(userId.trim().toLowerCase());
+    if (targetUser.id) this.deletedUserTombstones.add(targetUser.id.trim().toLowerCase());
+    if (targetUser.username) this.deletedUserTombstones.add(targetUser.username.trim().toLowerCase());
+    if (targetUser.email) this.deletedUserTombstones.add(targetUser.email.trim().toLowerCase());
+    if (targetUser.legacyAliases) {
+      for (const alias of targetUser.legacyAliases) {
+        this.deletedUserTombstones.add(alias.trim().toLowerCase());
+      }
+    }
+
     this.recordAuditLog({
       actorId: actor?.id || 'usr_admin_001',
       actorRole: actor?.role || 'admin',
@@ -5323,11 +7623,12 @@ class InMemoryStore {
   /**
    * Generates comprehensive learning transcript for a managed user (Phase 3)
    * Resolves canonical ID, verified legacy aliases, enrollments, and attempts.
+   * Enforces INV-R8: Returns null (404) if non-developer queries developer transcript.
    */
-  public getUserTranscript(userId: string): UserTranscriptDTO | null {
+  public getUserTranscript(userId: string, actorRole?: UserRole): UserTranscriptDTO | null {
     if (!userId) return null;
 
-    const user = this.getManagedUserById(userId);
+    const user = this.getManagedUserById(userId, actorRole);
     if (!user) return null;
 
     const canonicalId = resolveCanonicalUserId(user.id).toLowerCase();
@@ -5681,20 +7982,66 @@ class InMemoryStore {
    */
   public evaluateProtectedInvariant(
     actor: { id: string; role: UserRole },
-    action: SystemCapability | 'users.change_role' | 'users.change_status' | 'users.delete',
+    action: SystemCapability | 'users.change_role' | 'users.change_status' | 'users.delete' | AccountManagementAction,
     context?: {
       targetUser?: ManagedUserDTO;
       targetRole?: UserRole;
       targetStatus?: UserStatus;
+      isDelegation?: boolean;
+      isTranscript?: boolean;
+      subsystem?: 'permissions' | 'delegation';
+      scope?: 'directory' | 'transcript';
     }
   ): { allowed: boolean; code?: string; messageAr?: string } {
+    if (action === 'edit') {
+      const actorCanon = resolveCanonicalUserId(actor.id).toLowerCase();
+      const targetCanon = context?.targetUser ? resolveCanonicalUserId(context.targetUser.id).toLowerCase() : undefined;
+      const isSelf = Boolean(actorCanon && targetCanon && actorCanon === targetCanon);
+      const targetRole = context?.targetRole || context?.targetUser?.role;
+      if (targetRole) {
+        return canActorManageTargetAccount(actor.role, targetRole, 'edit', { isSelf });
+      }
+      if (isSelf) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        code: 'INVARIANT_CONTEXT_MISSING',
+        messageAr: 'غير مصرح: لا يمكن تنفيذ تعديل الحساب دون تمرير سياق المستخدم المستهدف',
+      };
+    }
+
+    const actorCanon = resolveCanonicalUserId(actor.id).toLowerCase();
+    const canonicalCap = mapActionToSystemCapability(action, {
+      isDelegation: context?.isDelegation,
+      isTranscript: context?.isTranscript,
+      subsystem: context?.subsystem,
+      scope: context?.scope,
+    });
+    if (!canonicalCap) {
+      return {
+        allowed: false,
+        code: 'INVARIANT_UNKNOWN_CAPABILITY',
+        messageAr: 'غير مصرح: العملية أو الصلاحية المطلوبة غير معرفة في النظام',
+      };
+    }
+    const hasDelegationBypass = this.hasDelegatedCapability(
+      actor.id,
+      canonicalCap,
+      context as unknown as EvaluationContext
+    );
     return evaluateProtectedInvariant(
       actor,
-      action as SystemCapability,
+      canonicalCap,
       {
         targetUser: context?.targetUser,
         targetRole: context?.targetRole,
         targetStatus: context?.targetStatus,
+        hasDelegationBypass,
+        isDelegation: context?.isDelegation,
+        isTranscript: context?.isTranscript,
+        subsystem: context?.subsystem,
+        scope: context?.scope,
       },
       this.users,
       {
@@ -5738,8 +8085,9 @@ class InMemoryStore {
     }
 
     const canonicalId = resolveCanonicalUserId(actorObj.id).toLowerCase();
-    const hasDelegationBypass =
-      context?.hasDelegationBypass ?? Boolean(this.delegatedOperationalAuthority[canonicalId]);
+    // Trust Boundary Enforcement: hasDelegationBypass is strictly computed internally
+    // from the authoritative delegation ledger via exact-capability evaluation.
+    const hasDelegationBypass = this.hasDelegatedCapability(actorObj.id, capability, context);
 
     const effectiveContext: EvaluationContext = {
       ...context,
@@ -5768,12 +8116,14 @@ class InMemoryStore {
   }
 
   /**
-   * Retrieves effective default capabilities across all four canonical roles,
+   * Retrieves effective default capabilities across all six canonical roles,
    * merging any admin-configured defaults over the code baseline.
    */
   public getEffectiveRoleDefaults(): Record<UserRole, Partial<Record<SystemCapability, boolean>>> {
-    const roles: UserRole[] = ['admin', 'assistant_admin', 'lecturer', 'user'];
+    const roles: UserRole[] = ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'];
     const result: Record<UserRole, Partial<Record<SystemCapability, boolean>>> = {
+      developer: {},
+      super_admin: {},
       admin: {},
       assistant_admin: {},
       lecturer: {},
@@ -5981,13 +8331,29 @@ class InMemoryStore {
   }
 
   /**
-   * Retrieves permission override for a user
+   * Retrieves permission override for a user.
+   * Surface 8: If viewerRole !== 'developer', projects Developer updatedBy as 'SYSTEM'.
    */
-  public getUserPermissionOverride(userId: string): UserPermissionOverride | null {
+  public getUserPermissionOverride(userId: string, viewerRole?: UserRole): UserPermissionOverride | null {
     if (!userId) return null;
     const canonicalId = resolveCanonicalUserId(userId).toLowerCase();
     const override = this.userPermissionOverrides[canonicalId];
-    return override ? JSON.parse(JSON.stringify(override)) : null;
+    if (!override) return null;
+
+    const cloned: UserPermissionOverride = JSON.parse(JSON.stringify(override));
+    if (viewerRole && viewerRole !== 'developer') {
+      const isDevUpdater =
+        DEV_FINGERPRINTS && (
+          cloned.updatedBy === DEV_FINGERPRINTS.id ||
+          (cloned.updatedBy && resolveCanonicalUserId(cloned.updatedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
+        );
+
+      if (isDevUpdater) {
+        cloned.updatedBy = 'SYSTEM';
+      }
+    }
+
+    return cloned;
   }
 
   /**
@@ -6000,13 +8366,40 @@ class InMemoryStore {
       throw new MockStoreError('معرف المستخدم مطلوب', 400);
     }
     const canonicalId = resolveCanonicalUserId(override.userId).toLowerCase();
-    const user = this.getManagedUserById(override.userId);
+    const actorUser = override.updatedBy ? this.getManagedUserById(override.updatedBy) : undefined;
+    const user = this.getManagedUserById(override.userId, actorUser?.role);
     if (!user) {
-      throw new MockStoreError('المستخدم المطلوب غير موجود', 404);
+      throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
     }
 
     const granted = override.grantedPermissions || override.granted || [];
     const revoked = override.revokedPermissions || override.revoked || [];
+
+    // Centralized Domain Guardrail: Enforce Account Management Matrix for Managing Permissions
+    if (override.updatedBy) {
+      const actorUser = this.getManagedUserById(override.updatedBy);
+      if (actorUser) {
+        const isSelf = resolveCanonicalUserId(actorUser.id).toLowerCase() === canonicalId;
+        // Invariant INV-R6: No user may grant themselves permissions
+        if (isSelf && granted.length > 0) {
+          throw new MockStoreError(
+            'غير مصرح: لا يمكن للمستخدم منح نفسه صلاحيات إضافية',
+            403,
+            'INVARIANT_SELF_MUTATION_PROHIBITED'
+          );
+        }
+        if (!isSelf) {
+          const manageCheck = canActorManageTargetAccount(actorUser.role, user.role, 'manage_permissions');
+          if (!manageCheck.allowed) {
+            throw new MockStoreError(
+              manageCheck.messageAr || 'غير مصرح بتعديل صلاحيات هذا المستخدم',
+              403,
+              manageCheck.code
+            );
+          }
+        }
+      }
+    }
 
     // Centralized Domain Guardrail: Enforce Role Capability Ceiling
     for (const cap of granted) {
@@ -6113,7 +8506,6 @@ class InMemoryStore {
       throw new MockStoreError('المحاضر المساعد يجب أن يكون مستخدماً مسجلاً بدور محاضر معتمد', 400);
     }
 
-    // Revoke any existing active assignment for this user in this group
     const existing = this.groupAssistantAssignments.find(
       (a) =>
         a.groupId === groupId &&
@@ -6121,6 +8513,14 @@ class InMemoryStore {
           resolveCanonicalUserId(a.assistantLecturerId) === resolveCanonicalUserId(assistantUser.id)) &&
         a.status === 'active'
     );
+    const cId = resolveCanonicalUserId(assistantUser.id).toLowerCase();
+    const wasAlreadyAssigned =
+      Boolean(existing) ||
+      (group.assistantLecturerIds || []).some(
+        (id) => resolveCanonicalUserId(id).toLowerCase() === cId
+      );
+
+    // Revoke any existing active assignment for this user in this group
     if (existing) {
       existing.status = 'revoked';
       existing.revokedAt = new Date().toISOString();
@@ -6135,6 +8535,35 @@ class InMemoryStore {
     };
 
     this.groupAssistantAssignments.push(assignment);
+    if (!group.assistantLecturerIds) group.assistantLecturerIds = [];
+    if (
+      !group.assistantLecturerIds.some(
+        (id) => resolveCanonicalUserId(id).toLowerCase() === cId
+      )
+    ) {
+      group.assistantLecturerIds.push(assistantUser.id);
+    }
+    if (
+      !group.supervisorIds.some(
+        (id) => resolveCanonicalUserId(id).toLowerCase() === cId
+      )
+    ) {
+      group.supervisorIds.push(assistantUser.id);
+    }
+    this.enrichGroupWithStaff(group);
+
+    if (!wasAlreadyAssigned) {
+      this.createNotification({
+        userId: assistantUser.id,
+        type: 'instructor_assigned',
+        title: 'تمت إضافتك كمحاضر مساعد في مجموعة تدريبية',
+        message: `تمت إضافتك كمحاضر مساعد في المجموعة التدريبية "${group.name}".`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+        dedupeKey: `instructor_assigned:assistant:${group.id}:${assignment.assignedAt}:${resolveCanonicalUserId(assistantUser.id)}`,
+      });
+    }
+
     return JSON.parse(JSON.stringify(assignment));
   }
 
@@ -6150,13 +8579,43 @@ class InMemoryStore {
     if (!assignment) return false;
     assignment.status = 'revoked';
     assignment.revokedAt = new Date().toISOString();
+    const targetGroup = this.groups.find((g) => g.id === groupId);
+    if (targetGroup) {
+      targetGroup.assistantLecturerIds = (targetGroup.assistantLecturerIds || []).filter(
+        (id) => resolveCanonicalUserId(id) !== canonicalId && id !== assistantLecturerId
+      );
+      if (
+        !targetGroup.primaryInstructorId ||
+        resolveCanonicalUserId(targetGroup.primaryInstructorId) !== canonicalId
+      ) {
+        targetGroup.supervisorIds = (targetGroup.supervisorIds || []).filter(
+          (id) => resolveCanonicalUserId(id) !== canonicalId && id !== assistantLecturerId
+        );
+      }
+      this.enrichGroupWithStaff(targetGroup);
+    }
     return true;
   }
 
-  public getGroupAssistants(groupId: string): GroupAssistantAssignment[] {
-    return this.groupAssistantAssignments
-      .filter((a) => a.groupId === groupId && a.status === 'active')
-      .map((a) => JSON.parse(JSON.stringify(a)));
+  public getGroupAssistants(groupId: string, actorRole?: UserRole): GroupAssistantAssignment[] {
+    const assignments = this.groupAssistantAssignments.filter(
+      (a) => a.groupId === groupId && a.status === 'active'
+    );
+
+    return assignments.map((a) => {
+      const copy: GroupAssistantAssignment = JSON.parse(JSON.stringify(a));
+      if (actorRole && actorRole !== 'developer') {
+        const devCanonicalId = resolveCanonicalUserId('USR_DEV_001').toLowerCase();
+        if (
+          copy.assignedByLecturerId &&
+          (copy.assignedByLecturerId.toLowerCase() === 'usr_dev_001' ||
+            resolveCanonicalUserId(copy.assignedByLecturerId).toLowerCase() === devCanonicalId)
+        ) {
+          copy.assignedByLecturerId = 'SYSTEM';
+        }
+      }
+      return copy;
+    });
   }
 
   public isGroupAssistant(groupId: string, userId: string): boolean {
@@ -6172,15 +8631,29 @@ class InMemoryStore {
   /**
    * Removes permission override for a user
    */
-  public deleteUserPermissionOverride(userId: string): boolean {
+  public deleteUserPermissionOverride(
+    userId: string,
+    actor?: { id: string; role: UserRole }
+  ): boolean {
     if (!userId) return false;
+    const targetUser = this.getManagedUserById(userId, actor?.role);
+    if (actor && !targetUser) {
+      throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
+    }
     const canonicalId = resolveCanonicalUserId(userId).toLowerCase();
+    if (actor && targetUser) {
+      const isSelf = resolveCanonicalUserId(actor.id).toLowerCase() === canonicalId;
+      const check = canActorManageTargetAccount(actor.role, targetUser.role, 'manage_permissions', { isSelf });
+      if (!check.allowed) {
+        throw new MockStoreError(check.messageAr || 'غير مصرح بإدارة صلاحيات هذا المستخدم', 403, check.code);
+      }
+    }
     if (this.userPermissionOverrides[canonicalId]) {
-      const targetUser = this.getManagedUserById(userId);
       delete this.userPermissionOverrides[canonicalId];
 
       this.recordAuditLog({
-        actorId: 'usr_admin_001',
+        actorId: actor?.id || 'usr_admin_001',
+        actorRole: actor?.role || 'admin',
         action: 'permissions.configure_users',
         actionLabelAr: 'إلغاء استثناءات الصلاحيات',
         severity: 'info',
@@ -6199,13 +8672,13 @@ class InMemoryStore {
   /**
    * Computes effective permissions for a user considering role baseline, overrides, and delegation
    */
-  public getEffectiveUserPermissions(userId: string): {
+  public getEffectiveUserPermissions(userId: string, actorRole?: UserRole): {
     permissions: PermissionKey[];
     role: UserRole;
     hasDelegatedAuthority: boolean;
     override: UserPermissionOverride | null;
   } {
-    const user = this.getManagedUserById(userId);
+    const user = this.getManagedUserById(userId, actorRole);
     if (!user) {
       return {
         permissions: [],
@@ -6245,17 +8718,110 @@ class InMemoryStore {
   /**
    * Sets delegated operational authority for assistant roles
    */
-  public setDelegatedAuthority(userId: string, enabled: boolean): void {
+  public setDelegatedAuthority(
+    userId: string,
+    grantOrEnabled: boolean | Partial<DelegationGrant>,
+    actor?: { id: string; role: UserRole }
+  ): void {
     const canonicalId = resolveCanonicalUserId(userId).toLowerCase();
-    const targetUser = this.getManagedUserById(userId);
-    if (enabled) {
-      this.delegatedOperationalAuthority[canonicalId] = true;
-    } else {
-      delete this.delegatedOperationalAuthority[canonicalId];
+    const targetUser = this.getManagedUserById(userId, actor?.role);
+
+    if (actor) {
+      if (!targetUser) {
+        throw new MockStoreError('المستخدم المطلوب غير موجود في دليل النظام', 404);
+      }
+      const isSelf = resolveCanonicalUserId(actor.id).toLowerCase() === canonicalId;
+      if (isSelf) {
+        throw new MockStoreError(
+          'غير مصرح: لا يمكن للمستخدم منح نفسه تفويضاً تشغيلياً',
+          403,
+          'INVARIANT_SELF_MUTATION_PROHIBITED'
+        );
+      }
+      const check = canActorManageTargetAccount(actor.role, targetUser.role, 'manage_permissions', {
+        isSelf,
+      });
+      if (!check.allowed) {
+        throw new MockStoreError(
+          check.messageAr || 'غير مصرح بإدارة التفويض التشغيلي لهذا المستخدم',
+          403,
+          check.code
+        );
+      }
     }
 
+    if (typeof grantOrEnabled === 'boolean') {
+      if (grantOrEnabled) {
+        const approvedCaps = Array.from(ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES);
+        const grant: DelegationGrant = {
+          id: `DEL_${Date.now()}`,
+          userId: canonicalId,
+          capabilities: approvedCaps,
+          active: true,
+          grantedBy: actor?.id || 'usr_admin_001',
+          grantedAt: new Date().toISOString(),
+        };
+        this.delegatedOperationalAuthority[canonicalId] = grant;
+        this.delegatedGrants[canonicalId] = [grant];
+      } else {
+        delete this.delegatedOperationalAuthority[canonicalId];
+        delete this.delegatedGrants[canonicalId];
+      }
+    } else if (typeof grantOrEnabled === 'object') {
+      const isActive = grantOrEnabled.active !== undefined ? grantOrEnabled.active : true;
+      const rawCapabilities = grantOrEnabled.capabilities || [];
+
+      // Validate externally supplied capabilities against canonical definitions & Assistant Admin ceiling
+      const validatedCapabilities: SystemCapability[] = [];
+      for (const cap of rawCapabilities) {
+        // 1. Verify existence in authoritative SystemCapability catalog
+        if (!ROLE_CAPABILITY_CEILINGS.developer.has(cap as SystemCapability)) {
+          throw new MockStoreError(
+            `الصلاحية المطلوبة غير معرفة في النظام: ${cap}`,
+            400,
+            'INVARIANT_UNKNOWN_CAPABILITY'
+          );
+        }
+
+        const canonicalCap = cap as SystemCapability;
+
+        // 2. Preserve sovereign capability boundaries: Assistant Admin can NEVER receive sovereign capabilities
+        const isTargetAssistantAdmin = targetUser?.role === 'assistant_admin' || !targetUser;
+        if (isTargetAssistantAdmin) {
+          if (
+            IMMUTABLE_BLOCKED_FOR_ASSISTANT_ADMIN.has(canonicalCap) ||
+            !ROLE_CAPABILITY_CEILINGS.assistant_admin.has(canonicalCap)
+          ) {
+            throw new MockStoreError(
+              `غير مصرح: لا يمكن تفويض صلاحيات سيادية أو خارج السقف لمساعد مدير النظام (${canonicalCap})`,
+              403,
+              'INVARIANT_ASSISTANT_ADMIN_CEILING'
+            );
+          }
+        }
+
+        validatedCapabilities.push(canonicalCap);
+      }
+
+      const grant: DelegationGrant = {
+        id: grantOrEnabled.id || `DEL_${Date.now()}`,
+        userId: canonicalId,
+        capabilities: validatedCapabilities,
+        active: isActive,
+        expiresAt: grantOrEnabled.expiresAt ?? null,
+        resourceScope: grantOrEnabled.resourceScope,
+        grantedBy: actor?.id || 'usr_admin_001',
+        grantedAt: new Date().toISOString(),
+      };
+      this.delegatedOperationalAuthority[canonicalId] = grant;
+      this.delegatedGrants[canonicalId] = [grant];
+    }
+
+    const isEnabled = typeof grantOrEnabled === 'boolean' ? grantOrEnabled : !!grantOrEnabled.active;
+
     this.recordAuditLog({
-      actorId: 'usr_admin_001',
+      actorId: actor?.id || 'usr_admin_001',
+      actorRole: actor?.role || 'admin',
       action: 'governance.delegation',
       actionLabelAr: 'إدارة التفويض التشغيلي',
       severity: 'warning',
@@ -6263,16 +8829,115 @@ class InMemoryStore {
       resourceType: 'user',
       targetResourceId: targetUser?.id || userId,
       targetResourceName: targetUser?.name,
-      details: enabled
+      details: isEnabled
         ? `تم تفعيل التفويض التشغيلي للمساعد (${targetUser?.name || userId})`
         : `تم إلغاء التفويض التشغيلي للمساعد (${targetUser?.name || userId})`,
-      metadata: { delegationState: enabled },
+      metadata: { delegationState: isEnabled },
     });
+  }
+
+  /**
+   * Evaluates whether an actor has an active, unexpired delegation grant
+   * covering the exact requested capability and optional resource scope.
+   */
+  public hasDelegatedCapability(
+    actorId: string,
+    capability: SystemCapability | AccountManagementAction | string,
+    context?: EvaluationContext
+  ): boolean {
+    if (!actorId) return false;
+    const canonicalId = resolveCanonicalUserId(actorId).toLowerCase();
+    const targetCapability = mapActionToSystemCapability(capability, {
+      isDelegation: context?.isDelegation,
+      isTranscript: context?.isTranscript,
+      subsystem: context?.subsystem,
+      scope: context?.scope,
+    });
+
+    if (!targetCapability) {
+      return false; // Fails closed for unknown or invalid capability
+    }
+
+    // Sovereign capabilities are NEVER delegable to assistant administrators
+    if (IMMUTABLE_BLOCKED_FOR_ASSISTANT_ADMIN.has(targetCapability)) {
+      return false;
+    }
+
+    // 1. Check structured grants
+    const grants = this.delegatedGrants[canonicalId];
+    if (grants && grants.length > 0) {
+      const now = Date.now();
+      return grants.some((grant) => {
+        if (!grant.active) return false;
+
+        if (grant.expiresAt) {
+          const exp = typeof grant.expiresAt === 'number'
+            ? grant.expiresAt
+            : new Date(grant.expiresAt).getTime();
+          if (now > exp) return false;
+        }
+
+        if (!grant.capabilities || !grant.capabilities.includes(targetCapability)) {
+          return false;
+        }
+
+        if (grant.resourceScope) {
+          if (grant.resourceScope.groupId && context?.targetGroupId) {
+            if (context.targetGroupId !== grant.resourceScope.groupId) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+      });
+    }
+
+    // 2. Legacy fallback - NEVER acts as a wildcard bypass! Only authorizes explicit approved delegable set
+    const legacy = this.delegatedOperationalAuthority[canonicalId];
+    if (typeof legacy === 'boolean') {
+      if (!legacy) return false;
+      return ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES.has(targetCapability);
+    }
+    if (typeof legacy === 'object' && legacy !== null) {
+      if (!legacy.active) return false;
+      if (legacy.expiresAt) {
+        const exp = typeof legacy.expiresAt === 'number'
+          ? legacy.expiresAt
+          : new Date(legacy.expiresAt).getTime();
+        if (Date.now() > exp) return false;
+      }
+      return !!legacy.capabilities?.includes(targetCapability);
+    }
+
+    return false;
   }
 
   public getDelegatedAuthority(userId: string): boolean {
     const canonicalId = resolveCanonicalUserId(userId).toLowerCase();
-    return !!this.delegatedOperationalAuthority[canonicalId];
+    const grants = this.delegatedGrants[canonicalId];
+    if (grants && grants.length > 0) {
+      const now = Date.now();
+      return grants.some((g) => {
+        if (!g.active) return false;
+        if (g.expiresAt) {
+          const exp = typeof g.expiresAt === 'number' ? g.expiresAt : new Date(g.expiresAt).getTime();
+          if (now > exp) return false;
+        }
+        return true;
+      });
+    }
+    const legacy = this.delegatedOperationalAuthority[canonicalId];
+    if (typeof legacy === 'boolean') return legacy;
+    if (typeof legacy === 'object' && legacy !== null) {
+      if (!legacy.active) return false;
+      if (legacy.expiresAt) {
+        const exp = typeof legacy.expiresAt === 'number' ? legacy.expiresAt : new Date(legacy.expiresAt).getTime();
+        if (Date.now() > exp) return false;
+      }
+      return true;
+    }
+    return false;
   }
 
   public isDelegatedAuthority(userId: string): boolean {
@@ -6281,9 +8946,44 @@ class InMemoryStore {
 
   /**
    * Governance Approval Requests (Dual Control)
+   * Surface 8: If viewerRole !== 'developer', projects Developer references as 'SYSTEM' / 'النظام'.
    */
-  public getApprovalRequests(): ApprovalRequest[] {
-    return JSON.parse(JSON.stringify(this.approvalRequests));
+  public getApprovalRequests(viewerRole?: UserRole): ApprovalRequest[] {
+    const requests = JSON.parse(JSON.stringify(this.approvalRequests)) as ApprovalRequest[];
+    if (viewerRole && viewerRole !== 'developer') {
+      return requests.map((r) => {
+        const isDevRequester =
+          DEV_FINGERPRINTS && (
+            r.requestedBy === DEV_FINGERPRINTS.id ||
+            r.requesterId === DEV_FINGERPRINTS.id ||
+            r.requesterName === DEV_FINGERPRINTS.name ||
+            (r.requestedBy && resolveCanonicalUserId(r.requestedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId) ||
+            (r.requesterId && resolveCanonicalUserId(r.requesterId).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
+          );
+        if (isDevRequester) {
+          r.requestedBy = 'SYSTEM';
+          if (r.requesterId) r.requesterId = 'SYSTEM';
+          r.requesterName = 'النظام';
+        }
+        const isDevReviewer =
+          DEV_FINGERPRINTS && (
+            r.reviewedBy === DEV_FINGERPRINTS.id ||
+            r.decidedBy === DEV_FINGERPRINTS.id ||
+            r.reviewedByName === DEV_FINGERPRINTS.name ||
+            r.decidedByName === DEV_FINGERPRINTS.name ||
+            (r.reviewedBy && resolveCanonicalUserId(r.reviewedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId) ||
+            (r.decidedBy && resolveCanonicalUserId(r.decidedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
+          );
+        if (isDevReviewer) {
+          r.reviewedBy = 'SYSTEM';
+          if (r.decidedBy) r.decidedBy = 'SYSTEM';
+          r.reviewedByName = 'النظام';
+          if (r.decidedByName) r.decidedByName = 'النظام';
+        }
+        return r;
+      });
+    }
+    return requests;
   }
 
   public createApprovalRequest(
@@ -6336,6 +9036,26 @@ class InMemoryStore {
         justification: newReq.justification,
       },
     });
+
+    const requesterId = newReq.requestedBy || newReq.requesterId;
+    const isUserCreateRequest =
+      newReq.actionType === 'users.create' || newReq.actionType === 'USER_CREATE';
+    for (const adminId of this.getActiveAdminRecipientIds({ excludeUserId: requesterId })) {
+      this.createNotification({
+        userId: adminId,
+        type: isUserCreateRequest ? 'new_registration_request' : 'general_alert',
+        title: isUserCreateRequest
+          ? 'طلب اعتماد إنشاء حساب مستخدم جديد'
+          : 'طلب اعتماد عملية إدارية بانتظار المراجعة',
+        message:
+          newReq.titleAr ||
+          `تم تقديم طلب اعتماد لعملية (${newReq.actionType}) بانتظار قرار مدير النظام.`,
+        requestId: newReq.id,
+        targetUrl: '/admin/users',
+        dedupeKey: `approval_req_created:${newReq.id}:${adminId}`,
+        createdAt: newReq.createdAt,
+      });
+    }
 
     return JSON.parse(JSON.stringify(newReq));
   }
@@ -6598,6 +9318,19 @@ class InMemoryStore {
       metadata: { actionType: req.actionType, notes },
     });
 
+    if (requesterCanonical && requesterCanonical.toLowerCase() !== approverCanonical.toLowerCase()) {
+      this.createNotification({
+        userId: requesterCanonical,
+        type: 'general_alert',
+        title: 'تم اعتماد طلب الحوكمة الإداري',
+        message: `تمت الموافقة وتنفيذ طلب الاعتماد (${req.titleAr || req.actionType}) بنجاح.`,
+        requestId: req.id,
+        targetUrl: '/admin/users',
+        dedupeKey: `approval_req_decision:${req.id}:${requesterCanonical}`,
+        createdAt: req.reviewedAt,
+      });
+    }
+
     return JSON.parse(JSON.stringify(req));
   }
 
@@ -6654,6 +9387,23 @@ class InMemoryStore {
       details: `تم رفض طلب الاعتماد: ${req.titleAr || req.actionType}`,
       metadata: { actionType: req.actionType, notes },
     });
+
+    const requesterCanonical = resolveCanonicalUserId(req.requestedBy || req.requesterId || '');
+    const rejecterCanonical = resolveCanonicalUserId(reviewedBy);
+    if (requesterCanonical && requesterCanonical.toLowerCase() !== rejecterCanonical.toLowerCase()) {
+      this.createNotification({
+        userId: requesterCanonical,
+        type: 'general_alert',
+        title: 'تم رفض طلب الحوكمة الإداري',
+        message: notes?.trim()
+          ? `تم رفض طلب الاعتماد (${req.titleAr || req.actionType}). سبب الرفض: ${notes.trim()}`
+          : `تم رفض طلب الاعتماد (${req.titleAr || req.actionType}).`,
+        requestId: req.id,
+        targetUrl: '/admin/users',
+        dedupeKey: `approval_req_decision:${req.id}:${requesterCanonical}`,
+        createdAt: req.reviewedAt,
+      });
+    }
 
     return JSON.parse(JSON.stringify(req));
   }
@@ -6739,11 +9489,54 @@ class InMemoryStore {
   }
 
   /**
+   * Surface 7 & Decision D-14: Projects security audit log entries for viewer.
+   * If viewerRole !== 'developer', Developer actor identity is projected as 'SYSTEM' / 'النظام',
+   * while preserving true immutable audit records in the in-memory store.
+   */
+  public serializeAuditLogForViewer(
+    entry: SystemAuditLogEntryDTO,
+    viewerRole?: UserRole
+  ): SystemAuditLogEntryDTO {
+    if (viewerRole === 'developer') {
+      return JSON.parse(JSON.stringify(entry));
+    }
+
+    const isDeveloperActor =
+      entry.actorRole === 'developer' ||
+      (DEV_FINGERPRINTS && (
+        resolveCanonicalUserId(entry.actorId).toLowerCase() === DEV_FINGERPRINTS.canonicalId ||
+        entry.actorName === DEV_FINGERPRINTS.name ||
+        entry.actorId.toLowerCase() === DEV_FINGERPRINTS.canonicalId
+      ));
+
+    if (isDeveloperActor) {
+      let sanitizedDetails = entry.details;
+      if (sanitizedDetails && DEV_FINGERPRINTS) {
+        sanitizedDetails = sanitizedDetails
+          .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
+          .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
+          .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local');
+      }
+
+      return {
+        ...JSON.parse(JSON.stringify(entry)),
+        actorId: 'SYSTEM',
+        actorRole: 'system' as unknown as UserRole,
+        actorName: 'النظام',
+        details: sanitizedDetails,
+      };
+    }
+
+    return JSON.parse(JSON.stringify(entry));
+  }
+
+  /**
    * Retrieves security audit logs with flexible filtering, search, sorting (descending by timestamp),
    * and pagination. Returns a paginated DTO with deep clones to prevent internal state mutation.
+   * Surface 7 & Decision D-14: Masks Developer identity as 'SYSTEM' / 'النظام' for non-developer viewers.
    */
-  public getSystemAuditLogs(params?: AuditFilterParams): AuditLogResponseDTO {
-    let filtered = [...this.systemAuditLogs];
+  public getSystemAuditLogs(params?: AuditFilterParams, viewerRole?: UserRole): AuditLogResponseDTO {
+    let filtered = this.systemAuditLogs.map((entry) => this.serializeAuditLogForViewer(entry, viewerRole));
 
     if (params) {
       if (params.search && params.search.trim()) {
@@ -6824,10 +9617,12 @@ class InMemoryStore {
 
   /**
    * Retrieves a single security audit log entry by ID.
+   * Surface 7 & Decision D-14: Masks Developer identity as 'SYSTEM' / 'النظام' for non-developer viewers.
    */
-  public getSystemAuditLogById(id: string): SystemAuditLogEntryDTO | undefined {
+  public getSystemAuditLogById(id: string, viewerRole?: UserRole): SystemAuditLogEntryDTO | undefined {
     const entry = this.systemAuditLogs.find((e) => e.id.toLowerCase() === id.toLowerCase().trim());
-    return entry ? JSON.parse(JSON.stringify(entry)) : undefined;
+    if (!entry) return undefined;
+    return this.serializeAuditLogForViewer(entry, viewerRole);
   }
 
   // ── Increment 11 Phase 4E: Department Course-Track Configuration ────
@@ -6848,20 +9643,49 @@ class InMemoryStore {
 
   /**
    * Retrieves all department-track configuration records.
-   * Returns deep cloned array to prevent external mutation of store state.
+   * Surface 8: If viewerRole !== 'developer', projects Developer updatedBy as 'SYSTEM'.
    */
-  public getAllDepartmentTracks(): DepartmentPermissionDTO[] {
-    return Object.values(this.departmentTracks).map((d) => JSON.parse(JSON.stringify(d)));
+  public getAllDepartmentTracks(viewerRole?: UserRole): DepartmentPermissionDTO[] {
+    const list: DepartmentPermissionDTO[] = Object.values(this.departmentTracks).map((d) =>
+      JSON.parse(JSON.stringify(d))
+    );
+    if (viewerRole && viewerRole !== 'developer') {
+      list.forEach((d) => {
+        const isDev =
+          DEV_FINGERPRINTS && (
+            d.updatedBy === DEV_FINGERPRINTS.id ||
+            (d.updatedBy && resolveCanonicalUserId(d.updatedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
+          );
+        if (isDev) {
+          d.updatedBy = 'SYSTEM';
+        }
+      });
+    }
+    return list;
   }
 
   /**
    * Retrieves a single department's course-track configuration by department ID or Arabic name.
+   * Surface 8: If viewerRole !== 'developer', projects Developer updatedBy as 'SYSTEM'.
    */
-  public getDepartmentTracksById(departmentId: string): DepartmentPermissionDTO | null {
+  public getDepartmentTracksById(departmentId: string, viewerRole?: UserRole): DepartmentPermissionDTO | null {
     const canonical = resolveCanonicalDepartment(departmentId);
     if (!canonical) return null;
     const config = this.departmentTracks[canonical.id];
-    return config ? JSON.parse(JSON.stringify(config)) : null;
+    if (!config) return null;
+
+    const cloned: DepartmentPermissionDTO = JSON.parse(JSON.stringify(config));
+    if (viewerRole && viewerRole !== 'developer') {
+      const isDev =
+        DEV_FINGERPRINTS && (
+          cloned.updatedBy === DEV_FINGERPRINTS.id ||
+          (cloned.updatedBy && resolveCanonicalUserId(cloned.updatedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
+        );
+      if (isDev) {
+        cloned.updatedBy = 'SYSTEM';
+      }
+    }
+    return cloned;
   }
 
   /**
@@ -6953,6 +9777,42 @@ class InMemoryStore {
   // ── Increment 11 Phase 5A: Comment Moderation & Discussion Management ────
 
   /**
+   * Surface 8: Projects Developer references in CourseComment entities as SYSTEM / النظام
+   * while maintaining immutable stored records.
+   */
+  private projectCommentForViewer(comment: CourseComment, viewerRole?: UserRole): CourseComment {
+    if (viewerRole === 'developer') {
+      return JSON.parse(JSON.stringify(comment));
+    }
+    const cloned: CourseComment = JSON.parse(JSON.stringify(comment));
+    const isDevAuthor =
+      cloned.userRole === 'developer' ||
+      (DEV_FINGERPRINTS && (
+        cloned.userId === DEV_FINGERPRINTS.id ||
+        resolveCanonicalUserId(cloned.userId).toLowerCase() === DEV_FINGERPRINTS.canonicalId
+      ));
+
+    if (isDevAuthor) {
+      cloned.userId = 'SYSTEM';
+      cloned.userName = 'النظام';
+      cloned.userRole = 'system' as unknown as UserRole;
+    }
+
+    const isDevReporter =
+      DEV_FINGERPRINTS && (
+        cloned.reportedBy === DEV_FINGERPRINTS.id ||
+        (cloned.reportedBy && resolveCanonicalUserId(cloned.reportedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
+      );
+
+    if (isDevReporter) {
+      cloned.reportedBy = 'SYSTEM';
+      cloned.reportedByName = 'النظام';
+    }
+
+    return cloned;
+  }
+
+  /**
    * Retrieves all reported comments across courses.
    * Restricted to admin and assistant_admin. Lecturers and trainees are forbidden.
    */
@@ -6969,8 +9829,9 @@ class InMemoryStore {
       .filter((c) => c.reported === true)
       .map((c) => {
         const course = this.courses.find((crs) => crs.id.toLowerCase() === c.courseId.toLowerCase());
+        const projected = this.projectCommentForViewer(c, actor?.role);
         return {
-          ...c,
+          ...projected,
           commentsEnabled: course ? course.commentsEnabled !== false : true,
         };
       });
@@ -6995,7 +9856,7 @@ class InMemoryStore {
           throw new MockStoreError('غير مصرح: استعراض الدليل الشامل لتعليقات المنظومة مخصص لمديري النظام فقط', 403);
         }
         const course = this.courses.find((c) => c.id.toLowerCase() === params.courseId!.toLowerCase());
-        if (!course || (course.lecturerId !== actor.id && !course.coLecturers?.includes(actor.id))) {
+        if (!course || !isUserAuthorizedCourseInstructor(course, actor.id)) {
           throw new MockStoreError('غير مصرح: لا يمتلك المحاضر صلاحية استعراض تعليقات مقرر غير مسند إليه', 403);
         }
       }
@@ -7024,12 +9885,13 @@ class InMemoryStore {
 
     // Sort descending by createdAt
     filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    // Enrich with current course commentsEnabled status
+
+    // Enrich with current course commentsEnabled status & project for viewer
     const enriched = filtered.map((c) => {
       const course = this.courses.find((crs) => crs.id.toLowerCase() === c.courseId.toLowerCase());
+      const projected = this.projectCommentForViewer(c, actor?.role);
       return {
-        ...c,
+        ...projected,
         commentsEnabled: course ? course.commentsEnabled !== false : true,
       };
     });
@@ -7041,7 +9903,7 @@ class InMemoryStore {
    * Retrieves active comments for a specific course.
    * Accessible to all authenticated users.
    */
-  public getCourseComments(courseId: string): CourseComment[] {
+  public getCourseComments(courseId: string, viewerRole?: UserRole): CourseComment[] {
     const course = this.courses.find((c) => c.id.toLowerCase() === courseId.toLowerCase().trim());
     if (!course) {
       throw new MockStoreError('المقرر المطلوب غير موجود', 404);
@@ -7049,10 +9911,13 @@ class InMemoryStore {
 
     const comments = this.courseComments
       .filter((c) => c.courseId.toLowerCase() === course.id.toLowerCase())
-      .map((c) => ({
-        ...c,
-        commentsEnabled: course.commentsEnabled !== false,
-      }));
+      .map((c) => {
+        const projected = this.projectCommentForViewer(c, viewerRole);
+        return {
+          ...projected,
+          commentsEnabled: course.commentsEnabled !== false,
+        };
+      });
     comments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return JSON.parse(JSON.stringify(comments));
   }
@@ -7060,14 +9925,15 @@ class InMemoryStore {
   /**
    * Retrieves a single comment by ID.
    */
-  public getCommentById(commentId: string): CourseComment | undefined {
+  public getCommentById(commentId: string, viewerRole?: UserRole): CourseComment | undefined {
     const comment = this.courseComments.find(
       (c) => c.id.toLowerCase() === commentId.toLowerCase().trim()
     );
     if (!comment) return undefined;
     const course = this.courses.find((crs) => crs.id.toLowerCase() === comment.courseId.toLowerCase());
+    const projected = this.projectCommentForViewer(comment, viewerRole);
     return {
-      ...JSON.parse(JSON.stringify(comment)),
+      ...projected,
       commentsEnabled: course ? course.commentsEnabled !== false : true,
     };
   }
@@ -7164,6 +10030,24 @@ class InMemoryStore {
     };
 
     this.courseComments.unshift(newComment);
+
+    // Notify course lecturer and co-lecturers when a trainee posts a comment
+    if (actor.role === 'user') {
+      for (const recipientId of this.getCourseInstructorRecipientIds(course, {
+        excludeUserId: actor.id,
+      })) {
+        this.createNotification({
+          userId: recipientId,
+          type: 'new_comment',
+          title: 'تعليق جديد في نقاش المقرر التدريبي',
+          message: `أضاف المتدرب ${authorName} تعليقاً جديداً على المقرر "${course.title}".`,
+          courseId: course.id,
+          targetUrl: `/courses/${course.id}`,
+          createdAt: newComment.createdAt,
+        });
+      }
+    }
+
     return JSON.parse(JSON.stringify(newComment));
   }
 
@@ -7251,6 +10135,34 @@ class InMemoryStore {
       },
     });
 
+    // Notify system administrators and course instructors about the reported comment
+    for (const adminId of this.getActiveAdminRecipientIds({ excludeUserId: actor.id })) {
+      this.createNotification({
+        userId: adminId,
+        type: 'general_alert',
+        title: 'بلاغ جديد عن تعليق للمراجعة',
+        message: `تم الإبلاغ عن تعليق في المقرر "${course.title}" بسبب (${comment.reportReasonLabelAr}) بواسطة ${reporterName}.`,
+        courseId: course.id,
+        targetUrl: '/admin/comment-moderation',
+        dedupeKey: `comment_report:${comment.id}:${adminId}`,
+        createdAt: comment.reportedAt,
+      });
+    }
+    for (const recipientId of this.getCourseInstructorRecipientIds(course, {
+      excludeUserId: actor.id,
+    })) {
+      this.createNotification({
+        userId: recipientId,
+        type: 'general_alert',
+        title: 'تم الإبلاغ عن تعليق في مقررك التدريبي',
+        message: `تم الإبلاغ عن تعليق في المقرر "${course.title}" بسبب (${comment.reportReasonLabelAr}).`,
+        courseId: course.id,
+        targetUrl: `/courses/${course.id}`,
+        dedupeKey: `comment_report:${comment.id}:${resolveCanonicalUserId(recipientId)}`,
+        createdAt: comment.reportedAt,
+      });
+    }
+
     return JSON.parse(JSON.stringify(comment));
   }
 
@@ -7276,7 +10188,7 @@ class InMemoryStore {
 
     if (actor.role === 'lecturer') {
       const course = this.courses.find((c) => c.id.toLowerCase() === comment.courseId.toLowerCase());
-      if (!course || (course.lecturerId !== actor.id && !course.coLecturers?.includes(actor.id))) {
+      if (!course || !isUserAuthorizedCourseInstructor(course, actor.id)) {
         throw new MockStoreError('غير مصرح: لا يمتلك المحاضر صلاحية إدارة بلاغات مقرر غير مسند إليه', 403);
       }
     }
@@ -7331,7 +10243,7 @@ class InMemoryStore {
 
     if (actor.role === 'lecturer') {
       const course = this.courses.find((c) => c.id.toLowerCase() === comment.courseId.toLowerCase());
-      if (!course || (course.lecturerId !== actor.id && !course.coLecturers?.includes(actor.id))) {
+      if (!course || !isUserAuthorizedCourseInstructor(course, actor.id)) {
         throw new MockStoreError('غير مصرح: لا يمتلك المحاضر صلاحية حذف تعليقات مقرر غير مسند إليه', 403);
       }
     }
@@ -7391,7 +10303,7 @@ class InMemoryStore {
         throw new MockStoreError('غير مصرح: تعديل حالة النقاشات مخصص للإدارة والمحاضر فقط', 403);
       }
       if (actor.role === 'lecturer') {
-        if (course.lecturerId !== actor.id && !course.coLecturers?.includes(actor.id)) {
+        if (!isUserAuthorizedCourseInstructor(course, actor.id)) {
           throw new MockStoreError('غير مصرح: لا يمتلك المحاضر صلاحية تعديل إعدادات مقرر غير مسند إليه', 403);
         }
       }
@@ -7483,11 +10395,14 @@ class InMemoryStore {
     const trainees: TraineePerformanceDTO[] = [];
 
     candidateTraineeIds.forEach((traineeId) => {
-      const managedUser = this.getManagedUserById(traineeId);
-      const name = managedUser?.name || 'متدرب';
-      const jobTitle = managedUser?.jobTitle || 'متدرب';
-      const department = managedUser?.department || 'التشغيل والصيانة';
-      const rawPhone = managedUser?.phone || null;
+      // Surface 3: Exclude developer accounts from report rows and aggregations for non-developer viewers
+      const managedUser = this.getManagedUserById(traineeId, actor.role);
+      if (!managedUser) return;
+      if (actor.role !== 'developer' && managedUser.role === 'developer') return;
+      const name = managedUser.name || 'متدرب';
+      const jobTitle = managedUser.jobTitle || 'متدرب';
+      const department = managedUser.department || 'التشغيل والصيانة';
+      const rawPhone = managedUser.phone || null;
       const cleanPhone = cleanPhoneNumber(rawPhone);
 
       // Find course attempt(s) for this user and course
@@ -7668,6 +10583,13 @@ class InMemoryStore {
       throw new MockStoreError('المحاضر الرئيسي المحدد غير صالح أو ليس لديه صفة محاضر', 400);
     }
 
+    const previousPrimaryId = course.lecturerId
+      ? resolveCanonicalUserId(course.lecturerId).toLowerCase()
+      : null;
+    const previousCoLecturerIds = new Set(
+      (course.coLecturers || []).map((id) => resolveCanonicalUserId(id).toLowerCase())
+    );
+
     course.lecturerId = primaryLecturer.id;
     course.lecturerName = primaryLecturer.name;
 
@@ -7690,6 +10612,29 @@ class InMemoryStore {
       this.courseDrafts[course.id].lecturerId = course.lecturerId;
       this.courseDrafts[course.id].lecturerName = course.lecturerName;
       this.courseDrafts[course.id].coLecturers = [...course.coLecturers];
+    }
+
+    if (resolveCanonicalUserId(primaryLecturer.id).toLowerCase() !== previousPrimaryId) {
+      this.createNotification({
+        userId: primaryLecturer.id,
+        type: 'instructor_assigned',
+        title: 'تم إسناد مقرر تدريبي إليك كمحاضر رئيسي',
+        message: `تم تعيينك محاضراً رئيسياً للمقرر التدريبي "${course.title}".`,
+        courseId: course.id,
+        targetUrl: `/courses/${course.id}`,
+      });
+    }
+    for (const coId of course.coLecturers || []) {
+      if (!previousCoLecturerIds.has(resolveCanonicalUserId(coId).toLowerCase())) {
+        this.createNotification({
+          userId: coId,
+          type: 'instructor_assigned',
+          title: 'تم إسناد مقرر تدريبي إليك كمحاضر مشارك',
+          message: `تمت إضافتك كمحاضر مشارك في المقرر التدريبي "${course.title}".`,
+          courseId: course.id,
+          targetUrl: `/courses/${course.id}`,
+        });
+      }
     }
 
     return JSON.parse(JSON.stringify(course));
@@ -7753,9 +10698,12 @@ class InMemoryStore {
    * Retrieves WhatsApp visibility and scenario assignments for a specific user.
    * Derives clean and display phone numbers strictly from users.phone at query time.
    */
-  public getUserWhatsAppVisibility(userId: string): UserWhatsAppVisibilityConfigDTO {
-    const user = this.getManagedUserById(userId);
+  public getUserWhatsAppVisibility(userId: string, actorRole?: UserRole): UserWhatsAppVisibilityConfigDTO {
+    const user = this.getManagedUserById(userId, actorRole);
     if (!user) {
+      throw new MockStoreError('المستخدم المطلوب غير موجود', 404);
+    }
+    if (user.role === 'developer') {
       throw new MockStoreError('المستخدم المطلوب غير موجود', 404);
     }
 
@@ -7802,10 +10750,14 @@ class InMemoryStore {
   public setUserWhatsAppVisibility(
     userId: string,
     assignments: Array<{ scenario: WhatsAppSupportScenario; isActive: boolean; orderIndex?: number }>,
-    actorId: string = 'admin'
+    actorId: string = 'admin',
+    actorRole?: UserRole
   ): UserWhatsAppVisibilityConfigDTO {
-    const user = this.getManagedUserById(userId);
+    const user = this.getManagedUserById(userId, actorRole);
     if (!user) {
+      throw new MockStoreError('المستخدم المطلوب غير موجود', 404);
+    }
+    if (user.role === 'developer') {
       throw new MockStoreError('المستخدم المطلوب غير موجود', 404);
     }
 
@@ -7907,9 +10859,9 @@ class InMemoryStore {
     const eligible: ResolvedSupportContactDTO[] = [];
 
     for (const assignment of activeAssignments) {
-      // Gate 1: Check user existence and non-suspension
+      // Gate 1: Check user existence and non-suspension (Surface 10: Never include Developer account)
       const user = this.getManagedUserById(assignment.user_id);
-      if (!user || user.status === 'suspended') {
+      if (!user || user.status === 'suspended' || user.role === 'developer') {
         continue;
       }
 

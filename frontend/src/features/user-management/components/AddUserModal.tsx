@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { canActorManageTargetAccount } from '@/core/permissions/policy';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { Alert } from '@/shared/ui/Alert';
@@ -62,7 +64,16 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   onUserCreated,
 }) => {
   const toast = useToast();
+  const { user: currentUser } = useAuth();
   const [formData, setFormData] = useState<FormState>(INITIAL_FORM_STATE);
+
+  const availableRoleOptions = useMemo<UserRole[]>(() => {
+    const candidateRoles: UserRole[] = ['super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'];
+    const actorRole = currentUser?.role || 'admin';
+    return candidateRoles.filter((role) =>
+      canActorManageTargetAccount(actorRole, role, 'create').allowed
+    );
+  }, [currentUser]);
   const [errors, setErrors] = useState<FormErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -364,10 +375,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               }
               className="w-full bg-bg text-text text-sm rounded-lg border border-border py-2 px-3 transition-colors outline-none focus:border-primary"
             >
-              <option value="user">{USER_ROLE_LABELS_AR.user} (متدرب)</option>
-              <option value="lecturer">{USER_ROLE_LABELS_AR.lecturer} (محاضر)</option>
-              <option value="assistant_admin">{USER_ROLE_LABELS_AR.assistant_admin} (مساعد مدير)</option>
-              <option value="admin">{USER_ROLE_LABELS_AR.admin} (مدير النظام)</option>
+              {availableRoleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {USER_ROLE_LABELS_AR[role]} ({role === 'user' ? 'متدرب' : role === 'lecturer' ? 'محاضر' : role === 'assistant_admin' ? 'مساعد مدير' : role === 'admin' ? 'مدير النظام' : 'المسؤول الأعلى'})
+                </option>
+              ))}
             </select>
           </div>
 

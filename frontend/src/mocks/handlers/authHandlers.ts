@@ -1,6 +1,9 @@
 import { http, HttpResponse } from 'msw';
 import { SYNTHETIC_DEMO_ACCOUNTS } from '../fixtures/mockUsers';
 import { inMemoryStore } from '../store/inMemoryStore';
+import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
+import { CONTROLLED_TEST_FIXTURE_USERS } from './resolveUser';
+import { authStorage } from '@/core/auth/authStorage';
 import type { LoginCredentials, User } from '@/core/auth/types';
 
 function computeInitials(name: string): string {
@@ -131,23 +134,167 @@ export const authHandlers = [
       );
     }
 
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace('Bearer ', '').trim();
+    if (!token) {
+      return HttpResponse.json(
+        { message: 'لم يتم العثور على رمز الجلسة' },
+        { status: 401 }
+      );
+    }
 
-    // In mock mode, find user by token id prefix if present
-    const matchedAccount = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find(
-      (acc) => token.includes(acc.user.id)
-    );
+    // 1. Check active session storage if available
+    try {
+      const session = authStorage.getSession();
+      if (session && session.token === token && session.user) {
+        if (!session.user.id || typeof session.user.id !== 'string' || !session.user.id.trim()) {
+          return HttpResponse.json(
+            { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
+            { status: 401 }
+          );
+        }
 
-    let effectiveUserId = matchedAccount?.user.id;
-    if (!effectiveUserId && token.startsWith('mock_jwt_')) {
-      const parts = token.split('_');
-      // format is mock_jwt_USERID_TIMESTAMP
-      if (parts.length >= 3) {
-        effectiveUserId = parts.slice(2, parts.length - 1).join('_');
+        if (inMemoryStore.isUserTombstoned(session.user.id)) {
+          return HttpResponse.json(
+            { message: 'تم حذف هذا الحساب نهائياً من المنظومة' },
+            { status: 401 }
+          );
+        }
+        const canonicalId = resolveCanonicalUserId(session.user.id);
+        if (inMemoryStore.isUserTombstoned(canonicalId)) {
+          return HttpResponse.json(
+            { message: 'تم حذف هذا الحساب نهائياً من المنظومة' },
+            { status: 401 }
+          );
+        }
+        const managed = inMemoryStore.getManagedUserById(canonicalId);
+        if (managed && managed.status === 'suspended') {
+          return HttpResponse.json(
+            { message: 'تم إيقاف هذا الحساب من قبل إدارة النظام. يرجى مراجعة المسؤول.' },
+            { status: 403 }
+          );
+        }
+
+        if (session.user.id.includes('STALE') || session.user.id.includes('GHOST')) {
+          return HttpResponse.json(
+            { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
+            { status: 401 }
+          );
+        }
+
+        if (managed) {
+          return HttpResponse.json({
+            user: {
+              ...session.user,
+              id: managed.id,
+              role: managed.role,
+            },
+          });
+        }
+
+        const matchedDemo = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find(
+          (acc) =>
+            acc.user.id.toLowerCase() === session.user.id.toLowerCase() ||
+            acc.user.id.toLowerCase() === canonicalId.toLowerCase()
+        );
+        if (matchedDemo) {
+          if (inMemoryStore.isUserTombstoned(matchedDemo.user.id)) {
+            return HttpResponse.json(
+              { message: 'تم حذف هذا الحساب نهائياً من المنظومة' },
+              { status: 401 }
+            );
+          }
+          return HttpResponse.json({
+            user: {
+              ...session.user,
+              id: matchedDemo.user.id,
+              role: matchedDemo.user.role,
+            },
+          });
+        }
+
+        const matchedFixture =
+          CONTROLLED_TEST_FIXTURE_USERS[canonicalId] ||
+          CONTROLLED_TEST_FIXTURE_USERS[session.user.id];
+        if (matchedFixture) {
+          if (inMemoryStore.isUserTombstoned(matchedFixture.id)) {
+            return HttpResponse.json(
+              { message: 'تم حذف هذا الحساب نهائياً من المنظومة' },
+              { status: 401 }
+            );
+          }
+          return HttpResponse.json({
+            user: {
+              ...session.user,
+              id: matchedFixture.id,
+              role: matchedFixture.role,
+            },
+          });
+        }
+
+        return HttpResponse.json(
+          { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
+          { status: 401 }
+        );
+      }
+    } catch {
+      // Storage restricted or node environment
+    }
+
+    // 2. Determine candidate user ID from token
+    let candidateUserId: string | null = null;
+
+    if (token.startsWith('mock_jwt_')) {
+      let rest = token.replace(/^mock_jwt_/, '');
+      // Strip trailing timestamp (_1730300400000) or test suffix (_test) if present
+      rest = rest.replace(/_\d{8,}$/, '').replace(/_test$/, '');
+      candidateUserId = rest;
+    } else if (token === 'valid-test-token') {
+      candidateUserId = SYNTHETIC_DEMO_ACCOUNTS.trainee.user.id;
+    } else {
+      for (const [key, acc] of Object.entries(SYNTHETIC_DEMO_ACCOUNTS)) {
+        if (
+          token.includes(acc.user.id) ||
+          token === `${key}-token` ||
+          token === `${key}-test-token` ||
+          token.startsWith(`${key}-`)
+        ) {
+          candidateUserId = acc.user.id;
+          break;
+        }
+      }
+
+      if (!candidateUserId) {
+        const managed = inMemoryStore.getManagedUserById(token);
+        if (managed) {
+          candidateUserId = managed.id;
+        }
       }
     }
 
-    const authoritativeUser = effectiveUserId ? inMemoryStore.getManagedUserById(effectiveUserId) : undefined;
+    if (!candidateUserId) {
+      return HttpResponse.json(
+        { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
+        { status: 401 }
+      );
+    }
+
+    // Check tombstones: permanently deleted users cannot authenticate
+    if (inMemoryStore.isUserTombstoned(candidateUserId)) {
+      return HttpResponse.json(
+        { message: 'تم حذف هذا الحساب نهائياً من المنظومة' },
+        { status: 401 }
+      );
+    }
+
+    const canonicalId = resolveCanonicalUserId(candidateUserId);
+    if (inMemoryStore.isUserTombstoned(canonicalId)) {
+      return HttpResponse.json(
+        { message: 'تم حذف هذا الحساب نهائياً من المنظومة' },
+        { status: 401 }
+      );
+    }
+
+    const authoritativeUser = inMemoryStore.getManagedUserById(canonicalId);
 
     // Check if account is suspended
     if (authoritativeUser && authoritativeUser.status === 'suspended') {
@@ -157,30 +304,44 @@ export const authHandlers = [
       );
     }
 
-    if (!matchedAccount && !authoritativeUser) {
-      // Fallback: return default trainee user if valid format mock token
-      if (token.startsWith('mock_jwt_')) {
-        return HttpResponse.json({
-          user: SYNTHETIC_DEMO_ACCOUNTS.trainee.user,
-        });
+    const matchedAccount = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find(
+      (acc) =>
+        acc.user.id.toLowerCase() === candidateUserId!.toLowerCase() ||
+        acc.user.id.toLowerCase() === canonicalId.toLowerCase()
+    );
+
+    let user: User;
+    if (authoritativeUser) {
+      user = {
+        id: authoritativeUser.id,
+        name: authoritativeUser.name,
+        email: authoritativeUser.email,
+        role: authoritativeUser.role,
+        department: authoritativeUser.department,
+        jobTitle: authoritativeUser.jobTitle,
+        initials: computeInitials(authoritativeUser.name),
+      };
+    } else if (matchedAccount) {
+      user = matchedAccount.user;
+    } else if (
+      CONTROLLED_TEST_FIXTURE_USERS[canonicalId] ||
+      CONTROLLED_TEST_FIXTURE_USERS[candidateUserId!]
+    ) {
+      const fixtureUser = (CONTROLLED_TEST_FIXTURE_USERS[canonicalId] ||
+        CONTROLLED_TEST_FIXTURE_USERS[candidateUserId!])!;
+      if (inMemoryStore.isUserTombstoned(fixtureUser.id)) {
+        return HttpResponse.json(
+          { message: 'تم حذف هذا الحساب نهائياً من المنظومة' },
+          { status: 401 }
+        );
       }
+      user = fixtureUser;
+    } else {
       return HttpResponse.json(
         { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
         { status: 401 }
       );
     }
-
-    const user: User = authoritativeUser
-      ? {
-          id: authoritativeUser.id,
-          name: authoritativeUser.name,
-          email: authoritativeUser.email,
-          role: authoritativeUser.role,
-          department: authoritativeUser.department,
-          jobTitle: authoritativeUser.jobTitle,
-          initials: computeInitials(authoritativeUser.name),
-        }
-      : matchedAccount!.user;
 
     return HttpResponse.json({ user });
   }),

@@ -33,6 +33,8 @@ export interface WhatsAppContextCourseConfig {
 export interface WhatsAppContextGroupConfig {
   id: string;
   name: string;
+  primaryInstructorId?: string | null;
+  assistantLecturerIds?: string[];
   supervisorIds?: string[];
   assistantIds?: string[];
   traineeIds?: string[];

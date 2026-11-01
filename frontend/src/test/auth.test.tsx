@@ -161,7 +161,7 @@ describe('Increment 3: Login Interface & Mock Sessions Verification', () => {
   });
 
   describe('Session Storage Lifecycle & Plaintext Password Protection', () => {
-    it('restores session from authStorage on initial load without re-entering password', () => {
+    it('restores session from authStorage on initial load without re-entering password', async () => {
       const mockSession = {
         user: SYNTHETIC_DEMO_ACCOUNTS.lecturer.user,
         token: 'mock_jwt_test_restore',
@@ -182,8 +182,10 @@ describe('Increment 3: Login Interface & Mock Sessions Verification', () => {
       );
 
       // Verify navbar reflects restored lecturer user
-      expect(screen.getAllByText(SYNTHETIC_DEMO_ACCOUNTS.lecturer.user.name).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(/محاضر معتمد/i).length).toBeGreaterThan(0);
+      await waitFor(() => {
+        expect(screen.getAllByText(SYNTHETIC_DEMO_ACCOUNTS.lecturer.user.name).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/محاضر معتمد/i).length).toBeGreaterThan(0);
+      });
 
       // Verify storage contains no password property
       const rawStored = window.sessionStorage.getItem('metro_lms_auth_session');
@@ -213,6 +215,9 @@ describe('Increment 3: Login Interface & Mock Sessions Verification', () => {
       );
 
       // Click logout in navbar
+      await waitFor(() => {
+        expect(screen.getByLabelText(/تسجيل الخروج من المنظومة/i)).toBeInTheDocument();
+      });
       const logoutBtn = screen.getByLabelText(/تسجيل الخروج من المنظومة/i);
       fireEvent.click(logoutBtn);
 

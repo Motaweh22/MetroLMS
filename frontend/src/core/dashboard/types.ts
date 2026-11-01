@@ -105,7 +105,7 @@ export interface AdminGroupOverviewMetric {
 }
 
 export interface AdminDashboardData {
-  role: 'admin';
+  role: 'admin' | 'assistant_admin' | 'super_admin' | 'developer';
   welcome: {
     name: string;
     roleTitle: string;

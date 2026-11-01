@@ -42,15 +42,17 @@ describe('Increment 10 — Phase 5: Course Assignment, Renewal Schedules & Date 
         { timeout: 5000 }
       );
 
-      // Header and active cycle banner
-      expect(screen.getByText('دورات التجديد التدريبي والمقررات')).toBeInTheDocument();
-      expect(screen.getByTestId('selected-cycle-status-badge')).toHaveTextContent(
-        'الدورة النشطة الحالية'
-      );
-      expect(screen.getByTestId('start-renew-cycle-btn')).toBeInTheDocument();
+      // Header and group-wide post-deadline policy control
+      expect(
+        screen.getByText('المقررات التدريبية وسياسة ما بعد انتهاء الموعد')
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('group-post-deadline-policy-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('post-deadline-keep_no_cert')).toBeInTheDocument();
+      expect(screen.getByTestId('post-deadline-hide')).toBeInTheDocument();
 
-      // Cycle tabs contain Cycle 1
-      expect(screen.getByTestId('cycle-tab-CYC-GRP-101-01')).toBeInTheDocument();
+      // Manual renewal button and multi-cycle tabs are removed
+      expect(screen.queryByTestId('start-renew-cycle-btn')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('cycle-selector-tabs')).not.toBeInTheDocument();
 
       // Assigned courses panel & table
       expect(screen.getByTestId('assigned-courses-panel')).toBeInTheDocument();
@@ -135,10 +137,13 @@ describe('Increment 10 — Phase 5: Course Assignment, Renewal Schedules & Date 
         expect(screen.getByTestId('course-override-modal')).toBeInTheDocument();
       });
 
-      expect(screen.getByText('تخصيص مواعيد وسياسة المقرر التدريبي')).toBeInTheDocument();
+      expect(screen.getByText('تخصيص مواعيد المقرر التدريبي')).toBeInTheDocument();
+
+      // Per-course post-deadline policy selector is removed
+      expect(screen.queryByTestId('custom-policy-select')).not.toBeInTheDocument();
 
       // Initially start date badge is inherited
-      expect(screen.getByTestId('start-inheritance-badge')).toHaveTextContent('موروث من دورة التدريب');
+      expect(screen.getByTestId('start-inheritance-badge')).toHaveTextContent('موروث من المجموعة');
 
       // Enter custom start date (within valid bounds)
       const startInput = screen.getByTestId('custom-start-input');
@@ -147,7 +152,7 @@ describe('Increment 10 — Phase 5: Course Assignment, Renewal Schedules & Date 
       // Badge changes to custom
       expect(screen.getByTestId('start-inheritance-badge')).toHaveTextContent('مخصص لهذا المقرر');
       // Deadline remains inherited
-      expect(screen.getByTestId('deadline-inheritance-badge')).toHaveTextContent('موروث من دورة التدريب');
+      expect(screen.getByTestId('deadline-inheritance-badge')).toHaveTextContent('موروث من المجموعة');
 
       // Apply overrides
       const applyBtn = screen.getByTestId('apply-override-modal-btn');
@@ -298,64 +303,34 @@ describe('Increment 10 — Phase 5: Course Assignment, Renewal Schedules & Date 
     });
   });
 
-  // ── 5. Renewal Cycle Creation & Historical Preservation ───────────────
+  // ── 5. Group-Wide Post-Deadline Policy & Archived Group Lock ──────────
 
-  describe('5. Renewal Cycle Creation & Historical Isolation', () => {
-    it('creates a new renewal cycle, seals Cycle 1 as completed, and preserves prior attempts', async () => {
+  describe('5. Group-Wide Post-Deadline Policy & Archived Read-Only State', () => {
+    it('updates the single group-wide post-deadline policy in the courses tab and persists to store', async () => {
       renderWithApp('/admin/groups/GRP-101/edit?tab=courses', adminUser);
 
       await waitFor(() => {
-        expect(screen.getByTestId('start-renew-cycle-btn')).toBeInTheDocument();
+        expect(screen.getByTestId('post-deadline-hide')).toBeInTheDocument();
       });
 
-      // Click Start Renewal Cycle
-      fireEvent.click(screen.getByTestId('start-renew-cycle-btn'));
+      // Initially GRP-101 has keep_no_cert
+      expect(inMemoryStore.getGroupById('GRP-101')?.postDeadlinePolicy).toBe('keep_no_cert');
 
-      // Modal appears
-      await waitFor(() => {
-        expect(screen.getByTestId('start-renewal-cycle-modal')).toBeInTheDocument();
-        expect(screen.getByText('بدء دورة تجديد تدريبي جديدة للمجموعة')).toBeInTheDocument();
-      });
-
-      // Check default title
-      const titleInput = screen.getByTestId('cycle-title-input') as HTMLInputElement;
-      expect(titleInput.value).toContain('دورة التجديد 2');
-
-      // Check pre-populated courses in modal
-      expect(screen.getByTestId('cycle-course-item-CRS001')).toBeInTheDocument();
-      expect(screen.getByTestId('cycle-course-item-CRS002')).toBeInTheDocument();
-
-      // Submit renewal
-      const confirmBtn = screen.getByTestId('confirm-renew-btn');
-      fireEvent.click(confirmBtn);
-
-      // Wait for modal to close and new cycle to be active
-      await waitFor(() => {
-        expect(screen.queryByTestId('start-renewal-cycle-modal')).not.toBeInTheDocument();
-      });
-
-      // New cycle tab appears and is selected
-      await waitFor(() => {
-        expect(screen.getByTestId('cycle-tab-CYC-GRP-101-02')).toBeInTheDocument();
-      });
-
-      // Cycle 1 is now marked completed in store
-      const cycles = inMemoryStore.getGroupCycles('GRP-101');
-      const cycle1 = cycles.find((c) => c.cycleNumber === 1);
-      const cycle2 = cycles.find((c) => c.cycleNumber === 2);
-
-      expect(cycle1?.status).toBe('completed');
-      expect(cycle2?.status).toBe('active');
-
-      // Click on Cycle 1 tab to view historical completed cycle
-      fireEvent.click(screen.getByTestId('cycle-tab-CYC-GRP-101-01'));
+      // Switch to hide
+      fireEvent.click(screen.getByTestId('post-deadline-hide'));
 
       await waitFor(() => {
-        expect(screen.getByText(/دورة سابقة مكتملة ومحمية من التعديل/i)).toBeInTheDocument();
+        expect(inMemoryStore.getGroupById('GRP-101')?.postDeadlinePolicy).toBe('hide');
       });
 
-      // Controls are disabled / closed on historical cycle
-      expect(screen.queryByTestId('add-course-panel')).not.toBeInTheDocument();
+      // Verify schedule tab does NOT render duplicate post-deadline policy controls
+      fireEvent.click(screen.getByTestId('tab-schedule'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('group-start-input')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('post-deadline-keep_no_cert')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('post-deadline-hide')).not.toBeInTheDocument();
     });
   });
 });

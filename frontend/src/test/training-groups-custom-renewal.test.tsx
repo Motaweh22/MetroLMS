@@ -250,40 +250,166 @@ describe('Custom Day-Based Automatic Group Renewal', () => {
       expect(result.cycle).toBeUndefined();
     });
 
-    it('triggers automatic renewal when the scheduled renewal date is reached', () => {
-      // Group start is 2026-11-01. 45 days later = 2026-12-16.
-      // Call checkAndProcessAutoRenewal on 2026-12-17 (due)
-      const dueDate = new Date('2026-12-17T10:00:00.000Z');
+    it('triggers automatic renewal when the scheduled renewal date is reached by creating a successor group', () => {
+      // Group deadline is 2026-12-16. 45 days later = 2027-01-30.
+      // Call checkAndProcessAutoRenewal on 2027-01-31 (due)
+      const dueDate = new Date('2027-01-31T10:00:00.000Z');
       const result = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, dueDate);
 
       expect(result.renewed).toBe(true);
+      expect(result.successorGroup).toBeDefined();
+      expect(result.archivedGroup).toBeDefined();
       expect(result.cycle).toBeDefined();
-      expect(result.cycle?.cycleNumber).toBe(2);
+      expect(result.cycle?.cycleNumber).toBe(1);
+      expect(result.cycle?.groupId).toBe(result.successorGroup?.id);
 
-      // Verify scheduled start date is Nov 1 + 45 days = Dec 16
-      const cycleStart = new Date(result.cycle!.startDateTime);
-      expect(cycleStart.getUTCMonth()).toBe(11); // Dec (0-indexed 11)
-      expect(cycleStart.getUTCDate()).toBe(16);
+      // Verify scheduled start date is Dec 16 + 45 days = Jan 30, 2027
+      const groupStart = new Date(result.successorGroup!.startDateTime);
+      expect(groupStart.getUTCFullYear()).toBe(2027);
+      expect(groupStart.getUTCMonth()).toBe(0); // Jan (0-indexed 0)
+      expect(groupStart.getUTCDate()).toBe(30);
 
-      // Verify cycle deadline is Dec 16 + 45 days = Jan 30, 2027
-      const cycleDeadline = new Date(result.cycle!.deadlineDateTime);
-      expect(cycleDeadline.getUTCFullYear()).toBe(2027);
-      expect(cycleDeadline.getUTCMonth()).toBe(0); // Jan
-      expect(cycleDeadline.getUTCDate()).toBe(30);
+      // Verify deadline preserves original training duration (45 days and 10 hours) = March 17, 2027
+      const groupDeadline = new Date(result.successorGroup!.deadlineDateTime);
+      expect(groupDeadline.getUTCFullYear()).toBe(2027);
+      expect(groupDeadline.getUTCMonth()).toBe(2); // Mar (0-indexed 2)
+      expect(groupDeadline.getUTCDate()).toBe(17);
 
-      // Previous active cycle should be sealed as completed
-      const allCycles = inMemoryStore.getGroupCycles(testGroup.id);
-      const cycle1 = allCycles.find((c) => c.cycleNumber === 1);
-      expect(cycle1?.status).toBe('completed');
-      expect(cycle1?.completedAt).toBeDefined();
+      // Previous group should be archived and its cycle sealed as completed
+      expect(result.archivedGroup?.adminStatus).toBe('archived');
+      expect(result.archivedGroup?.isEnrollmentOpen).toBe(false);
+      expect(result.archivedGroup?.replacedByGroupId).toBe(result.successorGroup?.id);
+      const oldCycles = inMemoryStore.getGroupCycles(testGroup.id);
+      expect(oldCycles[0]?.status).toBe('completed');
+      expect(oldCycles[0]?.completedAt).toBeDefined();
 
-      // New cycle should be active
-      const cycle2 = allCycles.find((c) => c.cycleNumber === 2);
-      expect(cycle2?.status).toBe('active');
+      // New successor group should be active with original unsuffixed name, existing trainees carried over,
+      // and closed to new enrollments by default while preserving enrollment settings
+      expect(result.successorGroup?.adminStatus).toBe('active');
+      expect(result.successorGroup?.name).toBe(testGroup.name);
+      expect(result.successorGroup?.traineeIds).toContain('usr_trainee_001');
+      expect(result.successorGroup?.isEnrollmentOpen).toBe(false);
+      expect(result.successorGroup?.enrollmentPolicy).toBe(testGroup.enrollmentPolicy);
+      expect(result.successorGroup?.enrollmentCode).toBeTruthy();
+      expect(result.successorGroup?.enrollmentCode).not.toBe(testGroup.enrollmentCode);
+
+      // Existing trainees should have fresh unstarted attempts on the successor group
+      const successorAttempts = inMemoryStore.getGroupAttempts(result.successorGroup!.id);
+      expect(successorAttempts.some((a) => a.userId === 'usr_trainee_001' && a.status === 'not_started')).toBe(true);
+
+      // Self-service enrollment via QR / join token must be blocked while isEnrollmentOpen is false
+      const tokenCheck = inMemoryStore.validateGroupEnrollmentToken(
+        result.successorGroup!.enrollmentCode!
+      );
+      expect(tokenCheck.isValid).toBe(false);
+      expect(tokenCheck.status).toBe(403);
+
+      expect(() =>
+        inMemoryStore.joinGroupByQRCode({
+          code: result.successorGroup!.enrollmentCode!,
+          userId: 'usr_trainee_002',
+        })
+      ).toThrow();
+
+      // Administrator can still directly assign trainees or explicitly open enrollment later
+      inMemoryStore.toggleGroupEnrollment(result.successorGroup!.id, true);
+      const tokenCheckAfterEnable = inMemoryStore.validateGroupEnrollmentToken(
+        result.successorGroup!.enrollmentCode!
+      );
+      expect(tokenCheckAfterEnable.isValid).toBe(true);
     });
 
-    it('preserves course roles (core vs reminder) and synchronization on renewed cycle', () => {
-      const dueDate = new Date('2026-12-17T10:00:00.000Z');
+    it('numbers archived groups sequentially when attached files exist and keeps attachments on the archived group', () => {
+      const baseName = 'برنامج السلامة المهنية';
+      const grp1 = inMemoryStore.createGroup({
+        name: baseName,
+        description: 'برنامج السلامة',
+        startDateTime: '2026-11-01T08:00:00.000Z',
+        deadlineDateTime: '2026-11-30T18:00:00.000Z',
+        postDeadlinePolicy: 'keep_no_cert',
+        courseAssignments: [{ courseId: 'CRS001', courseRole: 'core', order: 1 }],
+        resources: [
+          {
+            id: 'att-101',
+            title: 'دليل السلامة الأول.pdf',
+            description: 'ملف مرفق',
+            order: 1,
+            type: 'pdf',
+            url: 'https://example.com/safety-v1.pdf',
+          },
+        ],
+        renewalSchedule: {
+          autoRenewalEnabled: true,
+          intervalDays: 30,
+          renewalIntervalDays: 30,
+        },
+      });
+
+      // 1st renewal due after Dec 30, 2026
+      const res1 = inMemoryStore.checkAndProcessAutoRenewal(
+        grp1.id,
+        new Date('2027-01-02T10:00:00.000Z')
+      );
+      expect(res1.renewed).toBe(true);
+      expect(res1.archivedGroup?.name).toBe(`${baseName} 1`);
+      expect(res1.archivedGroup?.resources.length).toBe(1);
+      expect(res1.archivedGroup?.resources[0].id).toBe('att-101');
+      expect(res1.successorGroup?.name).toBe(baseName);
+      expect(res1.successorGroup?.resources).toEqual([]);
+
+      // Attach a file to the 2nd group (successorGroup) and renew it
+      const grp2 = res1.successorGroup!;
+      inMemoryStore.updateGroup(grp2.id, {
+        resources: [
+          {
+            id: 'att-202',
+            title: 'دليل السلامة الثاني.pdf',
+            description: 'ملف مرفق',
+            order: 1,
+            type: 'pdf',
+            url: 'https://example.com/safety-v2.pdf',
+          },
+        ],
+      });
+
+      const res2 = inMemoryStore.checkAndProcessAutoRenewal(
+        grp2.id,
+        new Date('2027-03-05T10:00:00.000Z')
+      );
+      expect(res2.renewed).toBe(true);
+      expect(res2.archivedGroup?.name).toBe(`${baseName} 2`);
+      expect(res2.archivedGroup?.resources[0].id).toBe('att-202');
+      expect(res2.successorGroup?.name).toBe(baseName);
+      expect(res2.successorGroup?.resources).toEqual([]);
+    });
+
+    it('does not add a numeric suffix to the archived group when no attached files exist', () => {
+      const originalName = testGroup.name;
+      // Add only an interactive meeting resource (not an attached file)
+      inMemoryStore.updateGroup(testGroup.id, {
+        resources: [
+          {
+            id: 'meeting-999',
+            title: 'جلسة Teams مباشرة',
+            description: 'جلسة تفاعلية',
+            order: 1,
+            type: 'teams',
+            url: 'https://teams.microsoft.com/l/meetup-join/123',
+          },
+        ],
+      });
+
+      const dueDate = new Date('2027-01-31T10:00:00.000Z');
+      const result = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, dueDate);
+
+      expect(result.renewed).toBe(true);
+      expect(result.archivedGroup?.adminStatus).toBe('archived');
+      expect(result.archivedGroup?.name).toBe(originalName);
+      expect(result.successorGroup?.name).toBe(originalName);
+    });
+
+    it('preserves course roles (core vs reminder) and synchronization on renewed successor group', () => {
+      const dueDate = new Date('2027-01-31T10:00:00.000Z');
       const result = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, dueDate);
       expect(result.renewed).toBe(true);
 
@@ -298,7 +424,7 @@ describe('Custom Day-Based Automatic Group Renewal', () => {
     });
 
     it('provisions fresh unstarted CourseAttempts with attemptNumber null and 0% progress', () => {
-      const dueDate = new Date('2026-12-17T10:00:00.000Z');
+      const dueDate = new Date('2027-01-31T10:00:00.000Z');
       const result = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, dueDate);
       expect(result.renewed).toBe(true);
 
@@ -313,44 +439,162 @@ describe('Custom Day-Based Automatic Group Renewal', () => {
       expect(stats.currentAttempt?.startedAt).toBeNull();
     });
 
-    it('guarantees idempotency: repeated processing of a due interval creates exactly one cycle', () => {
-      const dueDate = new Date('2026-12-17T10:00:00.000Z');
+    it('guarantees idempotency: repeated processing of a due group creates at most one successor group', () => {
+      const dueDate = new Date('2027-01-31T10:00:00.000Z');
+      const groupsCountBefore = inMemoryStore.getGroups().length;
 
-      // First run: renews
+      // First run: renews and creates one successor group
       const firstRun = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, dueDate);
       expect(firstRun.renewed).toBe(true);
+      expect(inMemoryStore.getGroups().length).toBe(groupsCountBefore + 1);
 
-      // Second run immediately or on repeated page visit: NO duplicate cycle!
+      // Second run immediately or on repeated page visit: NO duplicate group!
       const secondRun = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, dueDate);
       expect(secondRun.renewed).toBe(false);
-      expect(secondRun.cycle).toBeUndefined();
+      expect(secondRun.successorGroup).toBeUndefined();
 
-      // Third run hours later on same day: still NO duplicate cycle!
-      const laterSameDay = new Date('2026-12-17T18:00:00.000Z');
+      // Third run hours later on same day: still NO duplicate group!
+      const laterSameDay = new Date('2027-01-31T18:00:00.000Z');
       const thirdRun = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, laterSameDay);
       expect(thirdRun.renewed).toBe(false);
-
-      // Total cycles must remain exactly 2 (Cycle 1 + Cycle 2)
-      const allCycles = inMemoryStore.getGroupCycles(testGroup.id);
-      expect(allCycles.length).toBe(2);
+      expect(inMemoryStore.getGroups().length).toBe(groupsCountBefore + 1);
     });
 
-    it('handles overdue periods deterministically without flooding store with multiple cycles', () => {
+    it('handles overdue periods deterministically without flooding store with multiple groups', () => {
       // Fast forward to far future (several intervals overdue)
       const farFutureDate = new Date('2027-06-01T00:00:00.000Z');
       const result = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, farFutureDate);
       expect(result.renewed).toBe(true);
+      expect(result.successorGroup).toBeDefined();
 
-      // Calling again on the same far-future date does not spawn further cycles
-      const followUp = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, farFutureDate);
-      expect(followUp.renewed).toBe(false);
+      // Calling again on the original or successor group on the same far-future date does not spawn further groups
+      const followUpOld = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, farFutureDate);
+      expect(followUpOld.renewed).toBe(false);
+      const followUpNew = inMemoryStore.checkAndProcessAutoRenewal(
+        result.successorGroup!.id,
+        farFutureDate
+      );
+      expect(followUpNew.renewed).toBe(false);
 
-      // Verify the updated nextScheduledRenewalDate is safely set beyond farFutureDate
-      const updatedGroup = inMemoryStore.getGroupById(testGroup.id);
-      expect(updatedGroup?.renewalSchedule?.nextScheduledRenewalDate).toBeDefined();
+      // Verify the successor group's nextScheduledRenewalDate is safely set beyond farFutureDate
+      const successorInStore = inMemoryStore.getGroupById(result.successorGroup!.id);
+      expect(successorInStore?.renewalSchedule?.nextScheduledRenewalDate).toBeDefined();
       expect(
-        new Date(updatedGroup!.renewalSchedule!.nextScheduledRenewalDate!).getTime()
+        new Date(successorInStore!.renewalSchedule!.nextScheduledRenewalDate!).getTime()
       ).toBeGreaterThan(farFutureDate.getTime());
+    });
+
+    it('anchors renewal strictly to group deadline (ignoring individual course custom deadlines), resets course date overrides on successor without mutating predecessor, and clones instructor arrays safely', () => {
+      // Configure custom course deadline and instructor staff on testGroup
+      inMemoryStore.updateGroup(testGroup.id, {
+        primaryInstructorId: 'usr_lect_002',
+        assistantLecturerIds: ['USR017'],
+        resources: [
+          {
+            id: 'meeting-type-item',
+            title: 'لقاء تفاعلي عبر Zoom',
+            description: 'جلسة نقاش',
+            order: 1,
+            type: 'zoom',
+            url: 'https://zoom.us/j/123456789',
+          },
+        ],
+      });
+
+      const activeCycle = inMemoryStore.getCurrentGroupCycle(testGroup.id)!;
+      inMemoryStore.assignCoursesToCycle(testGroup.id, activeCycle.id, {
+        courses: [
+          {
+            courseId: 'CRS001',
+            courseRole: 'core',
+            order: 1,
+            customStartDateTime: '2026-11-05T08:00:00.000Z',
+            customDeadlineDateTime: '2026-11-20T18:00:00.000Z',
+            customPostDeadlinePolicy: 'hide',
+          },
+          {
+            courseId: 'CRS002',
+            courseRole: 'reminder',
+            order: 2,
+          },
+        ],
+      });
+
+      // Complete Cycle 1 attempt for usr_trainee_001 on testGroup before renewal
+      const oldAttempt = inMemoryStore.getOrCreateCurrentAttempt({
+        userId: 'usr_trainee_001',
+        courseId: 'CRS001',
+        cycleId: activeCycle.id,
+      });
+      inMemoryStore.startAttempt(oldAttempt.id);
+      for (const item of inMemoryStore.getCourseItems('CRS001')) {
+        inMemoryStore.completeAttemptLessonItem({
+          attemptId: oldAttempt.id,
+          itemId: item.id,
+        });
+      }
+      expect(
+        inMemoryStore.getOrCreateCurrentAttempt({
+          userId: 'usr_trainee_001',
+          courseId: 'CRS001',
+          cycleId: activeCycle.id,
+        }).status
+      ).toBe('completed');
+
+      // Group deadline is 2026-12-16 (+ 45 days = 2027-01-30). Course customDeadline (2026-11-20) must NOT trigger early renewal on 2027-01-10
+      const beforeGroupDue = new Date('2027-01-10T10:00:00.000Z');
+      expect(inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, beforeGroupDue).renewed).toBe(
+        false
+      );
+
+      // Renew on 2027-01-31 (briefly after scheduled renewal date)
+      const dueDate = new Date('2027-01-31T10:00:00.000Z');
+      const result = inMemoryStore.checkAndProcessAutoRenewal(testGroup.id, dueDate);
+      expect(result.renewed).toBe(true);
+
+      const archived = result.archivedGroup!;
+      const successor = result.successorGroup!;
+
+      // Interactive meeting (type: 'meeting') is NOT treated as an attached material during archival numbering
+      expect(archived.name).toBe(testGroup.name);
+
+      // Predecessor course overrides remain intact while successor course overrides are reset to null
+      const archivedCrs1 = archived.courses.find((c) => c.courseId === 'CRS001');
+      const successorCrs1 = successor.courses.find((c) => c.courseId === 'CRS001');
+      expect(archivedCrs1?.customDeadlineDateTime).toBe('2026-11-20T18:00:00.000Z');
+      expect(archivedCrs1?.customPostDeadlinePolicy).toBe('hide');
+      expect(successorCrs1?.customStartDateTime).toBeNull();
+      expect(successorCrs1?.customDeadlineDateTime).toBeNull();
+      expect(successorCrs1?.customPostDeadlinePolicy).toBeNull();
+
+      // Historical completed attempt remains 100% completed while successor attempt starts at 0% not_started
+      const preservedAttempt = inMemoryStore.getOrCreateCurrentAttempt({
+        userId: 'usr_trainee_001',
+        courseId: 'CRS001',
+        cycleId: activeCycle.id,
+      });
+      expect(preservedAttempt.status).toBe('completed');
+      expect(preservedAttempt.progressPercent).toBe(100);
+
+      const newAttempt = inMemoryStore.getOrCreateCurrentAttempt({
+        userId: 'usr_trainee_001',
+        courseId: 'CRS001',
+        cycleId: result.cycle!.id,
+      });
+      expect(newAttempt.status).toBe('not_started');
+      expect(newAttempt.progressPercent).toBe(0);
+
+      // Existing trainee retains access to the successor group even while self-service enrollment is closed
+      const traineeView = inMemoryStore.getGroupById(successor.id, 'usr_trainee_001', 'user');
+      expect(traineeView).not.toBeNull();
+      expect(traineeView?.id).toBe(successor.id);
+
+      // Instructor assignments are inherited without sharing mutable arrays
+      expect(successor.primaryInstructorId).toBe('usr_lect_002');
+      expect(successor.assistantLecturerIds).toEqual(['USR017']);
+      successor.assistantLecturerIds?.push('USR002');
+      const archivedFromStore = inMemoryStore.getGroupById(archived.id);
+      expect(archivedFromStore?.assistantLecturerIds).toEqual(['USR017']);
     });
   });
 
@@ -374,7 +618,7 @@ describe('Custom Day-Based Automatic Group Renewal', () => {
     });
 
     it('renders auto-renewal toggle and toggles interval controls', async () => {
-      render(<AppRouter initialEntries={['/admin/groups/new']} />);
+      render(<AppRouter initialEntries={['/admin/groups/new?tab=schedule']} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('auto-renewal-toggle')).toBeInTheDocument();
@@ -398,7 +642,7 @@ describe('Custom Day-Based Automatic Group Renewal', () => {
     });
 
     it('preset buttons update the same numeric input field', async () => {
-      render(<AppRouter initialEntries={['/admin/groups/new']} />);
+      render(<AppRouter initialEntries={['/admin/groups/new?tab=schedule']} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('auto-renewal-toggle')).toBeInTheDocument();
@@ -423,7 +667,7 @@ describe('Custom Day-Based Automatic Group Renewal', () => {
     });
 
     it('custom input updates numeric field and recalculates live preview', async () => {
-      render(<AppRouter initialEntries={['/admin/groups/new']} />);
+      render(<AppRouter initialEntries={['/admin/groups/new?tab=schedule']} />);
 
       await waitFor(() => {
         expect(screen.getByTestId('auto-renewal-toggle')).toBeInTheDocument();
@@ -457,6 +701,13 @@ describe('Custom Day-Based Automatic Group Renewal', () => {
       });
       fireEvent.change(screen.getByTestId('group-desc-input'), {
         target: { value: 'وصف المجموعة التدريبية المعتمد للاختبار' },
+      });
+
+      // Switch to schedule tab
+      fireEvent.click(screen.getByTestId('tab-schedule'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('auto-renewal-toggle')).toBeInTheDocument();
       });
 
       // Enable auto renewal and clear interval

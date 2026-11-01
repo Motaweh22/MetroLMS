@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { inMemoryStore, MockStoreError } from '../store/inMemoryStore';
 import { resolveAuthenticatedUser } from './resolveUser';
 import { resolveCanonicalDepartment } from '../fixtures/departmentTracksFixtures';
+import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import type {
   UserRole,
   PermissionKey,
@@ -32,7 +33,11 @@ export const permissionsHandlers = [
       );
     }
 
-    const hasAccess = user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'permissions.view');
+    const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'permissions.view_matrix').granted;
     if (!hasAccess) {
       return HttpResponse.json(
         { message: 'غير مصرح: هذه العملية تتطلب صلاحية عرض جدول الصلاحيات' },
@@ -54,9 +59,9 @@ export const permissionsHandlers = [
       );
     }
 
-    // Only system administrator (admin) can configure role defaults.
+    // Operational administrators (developer, super_admin, admin) can configure role defaults.
     // Assistant administrator cannot modify role defaults even under delegation.
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'developer') {
       return HttpResponse.json(
         { message: 'غير مصرح: تعديل الصلاحيات الافتراضية للأدوار مخصص لمدير النظام فقط' },
         { status: 403 }
@@ -93,7 +98,20 @@ export const permissionsHandlers = [
       );
     }
 
-    const hasAccess = user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'permissions.view');
+    const userId = params.userId as string;
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
+        { status: 404 }
+      );
+    }
+
+    const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'permissions.view_matrix').granted;
     if (!hasAccess) {
       return HttpResponse.json(
         { message: 'غير مصرح: هذه العملية تتطلب صلاحية عرض الصلاحيات' },
@@ -101,8 +119,7 @@ export const permissionsHandlers = [
       );
     }
 
-    const userId = params.userId as string;
-    const override = inMemoryStore.getUserPermissionOverride(userId);
+    const override = inMemoryStore.getUserPermissionOverride(userId, user.role);
     return HttpResponse.json({ override }, { status: 200 });
   }),
 
@@ -116,7 +133,20 @@ export const permissionsHandlers = [
       );
     }
 
-    const hasAccess = user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'permissions.manage');
+    const userId = params.userId as string;
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
+        { status: 404 }
+      );
+    }
+
+    const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'permissions.configure_users').granted;
     if (!hasAccess) {
       return HttpResponse.json(
         { message: 'غير مصرح: هذه العملية تتطلب صلاحية إدارة الصلاحيات' },
@@ -124,7 +154,6 @@ export const permissionsHandlers = [
       );
     }
 
-    const userId = params.userId as string;
     try {
       const body = (await request.json()) as Omit<UserPermissionOverride, 'updatedAt'>;
       const updated = inMemoryStore.setUserPermissionOverride({
@@ -135,7 +164,7 @@ export const permissionsHandlers = [
       return HttpResponse.json(updated, { status: 200 });
     } catch (err: unknown) {
       if (err instanceof MockStoreError) {
-        return HttpResponse.json({ message: err.message }, { status: err.status });
+        return HttpResponse.json({ message: err.message, code: err.code }, { status: err.status });
       }
       return HttpResponse.json(
         { message: 'فشلت معالجة طلب تخصيص صلاحيات المستخدم' },
@@ -154,7 +183,20 @@ export const permissionsHandlers = [
       );
     }
 
-    const hasAccess = user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'permissions.manage');
+    const userId = params.userId as string;
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
+        { status: 404 }
+      );
+    }
+
+    const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'permissions.configure_users').granted;
     if (!hasAccess) {
       return HttpResponse.json(
         { message: 'غير مصرح: هذه العملية تتطلب صلاحية إدارة الصلاحيات' },
@@ -162,9 +204,18 @@ export const permissionsHandlers = [
       );
     }
 
-    const userId = params.userId as string;
-    inMemoryStore.deleteUserPermissionOverride(userId);
-    return HttpResponse.json({ success: true, message: 'تم حذف التخصيص بنجاح' }, { status: 200 });
+    try {
+      inMemoryStore.deleteUserPermissionOverride(userId, user);
+      return HttpResponse.json({ success: true, message: 'تم حذف التخصيص بنجاح' }, { status: 200 });
+    } catch (err: unknown) {
+      if (err instanceof MockStoreError) {
+        return HttpResponse.json({ message: err.message, code: err.code }, { status: err.status });
+      }
+      return HttpResponse.json(
+        { message: 'فشلت معالجة حذف التخصيص' },
+        { status: 400 }
+      );
+    }
   }),
 
   // ── Increment 11 Phase 2: WhatsApp Contact Routing & Visibility Endpoints ──
@@ -180,9 +231,10 @@ export const permissionsHandlers = [
     }
 
     const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
       user.role === 'admin' ||
-      inMemoryStore.hasUserPermission(user.id, 'permissions.view') ||
-      inMemoryStore.hasUserPermission(user.id, 'permissions.configure_users');
+      inMemoryStore.hasPermission(user, 'permissions.view_matrix').granted;
 
     if (!hasAccess) {
       return HttpResponse.json(
@@ -193,7 +245,7 @@ export const permissionsHandlers = [
 
     const userId = params.userId as string;
     try {
-      const config = inMemoryStore.getUserWhatsAppVisibility(userId);
+      const config = inMemoryStore.getUserWhatsAppVisibility(userId, user.role);
       return HttpResponse.json(config, { status: 200 });
     } catch (err: unknown) {
       if (err instanceof MockStoreError) {
@@ -217,9 +269,10 @@ export const permissionsHandlers = [
     }
 
     const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
       user.role === 'admin' ||
-      inMemoryStore.hasUserPermission(user.id, 'permissions.manage') ||
-      inMemoryStore.hasUserPermission(user.id, 'permissions.configure_users');
+      inMemoryStore.hasPermission(user, 'permissions.configure_users').granted;
 
     if (!hasAccess) {
       return HttpResponse.json(
@@ -231,7 +284,7 @@ export const permissionsHandlers = [
     const userId = params.userId as string;
     try {
       const body = (await request.json()) as SaveUserWhatsAppVisibilityPayload;
-      const updated = inMemoryStore.setUserWhatsAppVisibility(userId, body.assignments, user.id);
+      const updated = inMemoryStore.setUserWhatsAppVisibility(userId, body.assignments, user.id, user.role);
       return HttpResponse.json(updated, { status: 200 });
     } catch (err: unknown) {
       if (err instanceof MockStoreError) {
@@ -294,8 +347,21 @@ export const permissionsHandlers = [
     }
 
     const userId = params.userId as string;
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
+        { status: 404 }
+      );
+    }
+
     const isSelf = user.id.toLowerCase() === userId.toLowerCase();
-    const hasAccess = isSelf || user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'permissions.view');
+    const hasAccess =
+      isSelf ||
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'permissions.view_matrix').granted;
 
     if (!hasAccess) {
       return HttpResponse.json(
@@ -304,7 +370,7 @@ export const permissionsHandlers = [
       );
     }
 
-    const effective = inMemoryStore.getEffectiveUserPermissions(userId);
+    const effective = inMemoryStore.getEffectiveUserPermissions(userId, user.role);
     return HttpResponse.json(effective, { status: 200 });
   }),
 
@@ -319,6 +385,14 @@ export const permissionsHandlers = [
     }
 
     const userId = params.userId as string;
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
+        { status: 404 }
+      );
+    }
+
     const enabled = inMemoryStore.getDelegatedAuthority(userId);
     return HttpResponse.json({ userId, enabled }, { status: 200 });
   }),
@@ -333,7 +407,7 @@ export const permissionsHandlers = [
       );
     }
 
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'developer') {
       return HttpResponse.json(
         { message: 'غير مصرح: تفويض الصلاحيات التشغيلية مخصص لمدير النظام فقط' },
         { status: 403 }
@@ -341,10 +415,49 @@ export const permissionsHandlers = [
     }
 
     const userId = params.userId as string;
-    const body = (await request.json()) as { enabled: boolean };
-    inMemoryStore.setDelegatedAuthority(userId, !!body.enabled);
+    const targetUser = inMemoryStore.getManagedUserById(userId, user.role);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { message: 'المستخدم المطلوب غير موجود في دليل النظام' },
+        { status: 404 }
+      );
+    }
 
-    return HttpResponse.json({ userId, enabled: !!body.enabled }, { status: 200 });
+    const body = (await request.json()) as {
+      enabled?: boolean;
+      active?: boolean;
+      capabilities?: string[];
+      expiresAt?: string | number | null;
+      resourceScope?: {
+        groupId?: string;
+        department?: string;
+        resourceType?: string;
+      };
+    };
+
+    const isEnabled = body.enabled !== undefined ? !!body.enabled : (body.active !== undefined ? !!body.active : true);
+
+    try {
+      const grantPayload = body.capabilities !== undefined
+        ? {
+            active: isEnabled,
+            capabilities: body.capabilities as SystemCapability[],
+            expiresAt: body.expiresAt,
+            resourceScope: body.resourceScope,
+          }
+        : isEnabled;
+
+      inMemoryStore.setDelegatedAuthority(userId, grantPayload, user);
+      return HttpResponse.json({ userId, enabled: isEnabled }, { status: 200 });
+    } catch (err: unknown) {
+      if (err instanceof MockStoreError) {
+        return HttpResponse.json({ message: err.message, code: err.code }, { status: err.status });
+      }
+      return HttpResponse.json(
+        { message: 'فشلت معالجة طلب التفويض التشغيلي' },
+        { status: 400 }
+      );
+    }
   }),
 
   // GET /api/admin/permissions/governance/approvals - List governance approval requests
@@ -357,7 +470,11 @@ export const permissionsHandlers = [
       );
     }
 
-    const hasAccess = user.role === 'admin' || inMemoryStore.hasUserPermission(user.id, 'permissions.view');
+    const hasAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      inMemoryStore.hasPermission(user, 'permissions.view_matrix').granted;
     if (!hasAccess) {
       return HttpResponse.json(
         { message: 'غير مصرح: لا تملك صلاحية عرض طلبات الاعتماد' },
@@ -365,7 +482,7 @@ export const permissionsHandlers = [
       );
     }
 
-    const requests = inMemoryStore.getApprovalRequests();
+    const requests = inMemoryStore.getApprovalRequests(user.role);
     return HttpResponse.json(requests, { status: 200 });
   }),
 
@@ -470,15 +587,54 @@ export const permissionsHandlers = [
     }
   }),
 
+  // ── Increment 3.2 (MFR-03): Secure Group-Assistant Endpoints ──
+
   // POST /api/groups/:groupId/assistants - Assign group assistant lecturer
   http.post('/api/groups/:groupId/assistants', async ({ request, params }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
       return HttpResponse.json({ message: 'غير مصرح: يرجى تسجيل الدخول أولاً' }, { status: 401 });
     }
+
     const groupId = params.groupId as string;
+    const group = inMemoryStore.getGroupById(groupId);
+    if (!group) {
+      return HttpResponse.json({ message: 'المجموعة التدريبية المطلوبة غير موجودة' }, { status: 404 });
+    }
+
+    // Operational administrators and group primary instructors are permitted to assign assistant lecturers.
+    // Assistant Admin cannot mutate without explicit delegation; trainees and unassigned lecturers are denied.
+    const isOperationalAdmin =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin';
+
+    const isAuthorizedInstructor =
+      user.role === 'lecturer' &&
+      inMemoryStore.isUserGroupPrimaryInstructor(group, user.id);
+
+    if (!isOperationalAdmin && !isAuthorizedInstructor) {
+      return HttpResponse.json(
+        { message: 'غير مصرح: إدارة المحاضرين المساعدين مقتصرة على مدير النظام أو المحاضر الأساسي للمجموعة فقط' },
+        { status: 403 }
+      );
+    }
+
     try {
       const body = (await request.json()) as { assistantLecturerId: string };
+      if (!body || !body.assistantLecturerId) {
+        return HttpResponse.json({ message: 'معرف المحاضر المساعد مطلوب' }, { status: 400 });
+      }
+
+      // Group-Scoped Role Integrity: Candidate must be registered with canonical role 'lecturer'
+      const candidate = inMemoryStore.getManagedUserById(body.assistantLecturerId, user.role);
+      if (!candidate || candidate.role !== 'lecturer') {
+        return HttpResponse.json(
+          { message: 'المحاضر المساعد يجب أن يكون مستخدماً مسجلاً بدور محاضر معتمد' },
+          { status: 400 }
+        );
+      }
+
       const assignment = inMemoryStore.assignGroupAssistant(groupId, body.assistantLecturerId, user.id);
       return HttpResponse.json(assignment, { status: 201 });
     } catch (err: unknown) {
@@ -495,8 +651,30 @@ export const permissionsHandlers = [
     if (!user) {
       return HttpResponse.json({ message: 'غير مصرح: يرجى تسجيل الدخول أولاً' }, { status: 401 });
     }
+
     const groupId = params.groupId as string;
     const assistantId = params.assistantId as string;
+    const group = inMemoryStore.getGroupById(groupId);
+    if (!group) {
+      return HttpResponse.json({ message: 'المجموعة التدريبية المطلوبة غير موجودة' }, { status: 404 });
+    }
+
+    const isOperationalAdmin =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin';
+
+    const isAuthorizedInstructor =
+      user.role === 'lecturer' &&
+      inMemoryStore.isUserGroupPrimaryInstructor(group, user.id);
+
+    if (!isOperationalAdmin && !isAuthorizedInstructor) {
+      return HttpResponse.json(
+        { message: 'غير مصرح: إلغاء تعيين المحاضر المساعد مقتصر على مدير النظام أو المحاضر الأساسي للمجموعة فقط' },
+        { status: 403 }
+      );
+    }
+
     const success = inMemoryStore.revokeGroupAssistant(groupId, assistantId);
     if (!success) {
       return HttpResponse.json({ message: 'التعيين غير موجود' }, { status: 404 });
@@ -505,9 +683,47 @@ export const permissionsHandlers = [
   }),
 
   // GET /api/groups/:groupId/assistants - List group assistant lecturers
-  http.get('/api/groups/:groupId/assistants', async ({ params }) => {
+  http.get('/api/groups/:groupId/assistants', async ({ request, params }) => {
+    const user = resolveAuthenticatedUser(request);
+    if (!user) {
+      return HttpResponse.json({ message: 'غير مصرح: يرجى تسجيل الدخول أولاً' }, { status: 401 });
+    }
+
     const groupId = params.groupId as string;
-    const assistants = inMemoryStore.getGroupAssistants(groupId);
+    const group = inMemoryStore.getGroupById(groupId);
+    if (!group) {
+      return HttpResponse.json({ message: 'المجموعة التدريبية المطلوبة غير موجودة' }, { status: 404 });
+    }
+
+    // Administrative read audience (Rule A / MFR-06 / D-14)
+    const isAdministrativeReader =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin';
+
+    // Group-scoped instructors/supervisors
+    const isAssignedSupervisor =
+      user.role === 'lecturer' &&
+      inMemoryStore.isUserAssignedGroupSupervisor(group, user.id);
+
+    // Enrolled group trainees
+    const isEnrolledTrainee =
+      user.role === 'user' &&
+      (group.traineeIds || []).some(
+        (tid) =>
+          tid.toLowerCase() === user.id.toLowerCase() ||
+          resolveCanonicalUserId(tid).toLowerCase() === resolveCanonicalUserId(user.id).toLowerCase()
+      );
+
+    if (!isAdministrativeReader && !isAssignedSupervisor && !isEnrolledTrainee) {
+      return HttpResponse.json(
+        { message: 'غير مصرح: ليس لديك صلاحية استعراض المحاضرين المساعدين لهذه المجموعة' },
+        { status: 403 }
+      );
+    }
+
+    const assistants = inMemoryStore.getGroupAssistants(groupId, user.role);
     return HttpResponse.json(assistants, { status: 200 });
   }),
 
@@ -523,16 +739,17 @@ export const permissionsHandlers = [
       );
     }
 
-    // Sovereign Audit Access Policy:
-    // Only authorized system administrators (role === 'admin' and possessing audit.view_system_logs)
-    // may view the security audit trail.
-    // Assistant administrators, lecturers, and trainees are strictly denied (HTTP 403),
-    // even if operational delegation is enabled.
-    const isSovereignAdmin =
-      user.role === 'admin' &&
-      inMemoryStore.hasPermission(user, 'audit.view_system_logs').granted;
+    // Administrative Audit Access Policy (D-14 & Rule A):
+    // Authorized administrative roles (developer, super_admin, admin, assistant_admin)
+    // may view the security audit trail in read-only mode.
+    // Lecturers and trainees are strictly denied (HTTP 403).
+    const hasAuditAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin';
 
-    if (!isSovereignAdmin) {
+    if (!hasAuditAccess) {
       // Record denied access attempt to audit trail
       inMemoryStore.recordAuditLog({
         actorId: user.id,
@@ -542,12 +759,12 @@ export const permissionsHandlers = [
         actionLabelAr: 'استعراض سجل الرقابة الأمنية',
         severity: 'critical',
         outcome: 'denied',
-        details: 'محاولة غير مصرح بها لاستعراض سجل الرقابة والأمان للمنظومة حُظرت بموجب سياسة السيادة الإدارية',
+        details: 'محاولة غير مصرح بها لاستعراض سجل الرقابة والأمان للمنظومة حُظرت بموجب سياسة الرقابة الإدارية',
         metadata: { attemptedRole: user.role },
       });
 
       return HttpResponse.json(
-        { message: 'غير مصرح: استعراض سجل الرقابة والأمان مخصص لمدير النظام فقط بموجب سياسة السيادة الإدارية' },
+        { message: 'غير مصرح: استعراض سجل الرقابة والأمان مخصص للإدارة فقط بموجب سياسة الرقابة الإدارية' },
         { status: 403 }
       );
     }
@@ -578,7 +795,7 @@ export const permissionsHandlers = [
       pageSize,
     };
 
-    const responseDto = inMemoryStore.getSystemAuditLogs(filterParams);
+    const responseDto = inMemoryStore.getSystemAuditLogs(filterParams, user.role);
     return HttpResponse.json(responseDto, { status: 200 });
   }),
 
@@ -592,19 +809,21 @@ export const permissionsHandlers = [
       );
     }
 
-    const isSovereignAdmin =
-      user.role === 'admin' &&
-      inMemoryStore.hasPermission(user, 'audit.view_system_logs').granted;
+    const hasAuditAccess =
+      user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin';
 
-    if (!isSovereignAdmin) {
+    if (!hasAuditAccess) {
       return HttpResponse.json(
-        { message: 'غير مصرح: استعراض سجل الرقابة والأمان مخصص لمدير النظام فقط بموجب سياسة السيادة الإدارية' },
+        { message: 'غير مصرح: استعراض سجل الرقابة والأمان مخصص للإدارة فقط بموجب سياسة الرقابة الإدارية' },
         { status: 403 }
       );
     }
 
     const id = params.id as string;
-    const entry = inMemoryStore.getSystemAuditLogById(id);
+    const entry = inMemoryStore.getSystemAuditLogById(id, user.role);
     if (!entry) {
       return HttpResponse.json(
         { message: 'سجل التدقيق المطلوب غير موجود' },
@@ -636,7 +855,7 @@ export const permissionsHandlers = [
 
     return HttpResponse.json(
       {
-        departments: inMemoryStore.getAllDepartmentTracks(),
+        departments: inMemoryStore.getAllDepartmentTracks(user.role),
         canonicalDepartments: inMemoryStore.getCanonicalDepartments(),
         tracks: inMemoryStore.getCanonicalTracks(),
       },
@@ -662,7 +881,7 @@ export const permissionsHandlers = [
     }
 
     const deptId = params.departmentId as string;
-    const config = inMemoryStore.getDepartmentTracksById(deptId);
+    const config = inMemoryStore.getDepartmentTracksById(deptId, user.role);
     if (!config) {
       return HttpResponse.json(
         { message: `الإدارة المطلوبة (${deptId}) غير موجودة في السجل القياسي` },
@@ -723,9 +942,7 @@ export const permissionsHandlers = [
     }
 
     // Evaluate permission using central evaluator
-    const evalResult = inMemoryStore.hasPermission(user, 'permissions.configure_departments', {
-      hasDelegationBypass: inMemoryStore.getDelegatedAuthority(user.id),
-    });
+    const evalResult = inMemoryStore.hasPermission(user, 'permissions.configure_departments');
 
     if (!evalResult.granted) {
       return HttpResponse.json(
@@ -752,7 +969,7 @@ export const permissionsHandlers = [
           },
         });
 
-        const currentConfig = inMemoryStore.getDepartmentTracksById(canonicalDept.id);
+        const currentConfig = inMemoryStore.getDepartmentTracksById(canonicalDept.id, user.role);
 
         return HttpResponse.json(
           {

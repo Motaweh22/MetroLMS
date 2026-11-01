@@ -46,12 +46,23 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [user]);
 
   // Approved refresh strategy:
-  // Trigger on initial session load/restoration, user change, or route navigation
+  // Trigger on initial session load/restoration, user change, route navigation, or in-app notification mutation events
   useEffect(() => {
     if (user) {
       loadNotifications();
     }
   }, [user, location.pathname, loadNotifications]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return;
+    const handleNotificationsChanged = () => {
+      void loadNotifications();
+    };
+    window.addEventListener('metro:notifications-changed', handleNotificationsChanged);
+    return () => {
+      window.removeEventListener('metro:notifications-changed', handleNotificationsChanged);
+    };
+  }, [user, loadNotifications]);
 
   const markAsRead = useCallback(async (notificationId: string) => {
     try {

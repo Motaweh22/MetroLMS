@@ -50,6 +50,7 @@ export interface GroupRenewalSchedule {
   renewalIntervalDays?: number | null;
   nextScheduledRenewalDate?: string | null;
   lastAutoRenewedCycleId?: string | null;
+  replacedByGroupId?: string | null;
   recurrenceType?: 'none' | 'monthly' | 'bimonthly' | 'quarterly' | 'custom';
 }
 
@@ -177,6 +178,22 @@ export interface GroupJoinRequest {
   reviewNote?: string | null;
 }
 
+export type GroupInstructorRole = 'primary' | 'assistant';
+
+export interface GroupInstructorDTO {
+  userId: string;
+  name: string;
+  email: string;
+  jobTitle?: string;
+  department?: string;
+  instructorRole: GroupInstructorRole;
+  roleLabelAr: 'المحاضر الأساسي' | 'المحاضر المساعد';
+  phone?: string | null;
+  cleanPhone?: string | null;
+  displayPhone?: string | null;
+  isPhoneValid: boolean;
+}
+
 export interface TrainingGroup {
   id: string;
   name: string;
@@ -184,7 +201,14 @@ export interface TrainingGroup {
   courses: GroupCourseAssignment[];
   courseId: string;
   traineeIds: string[];
+  /** Primary instructor / lecturer assigned to lead this group */
+  primaryInstructorId?: string | null;
+  /** Assistant lecturers assigned to assist in teaching this group */
+  assistantLecturerIds?: string[];
+  /** Combined supervisor IDs (kept synchronized with primaryInstructorId + assistantLecturerIds for backward compatibility) */
   supervisorIds: string[];
+  /** Dynamically resolved instructor contact details (resolved from user directory at read time) */
+  instructors?: GroupInstructorDTO[];
   startDateTime: string;
   deadlineDateTime: string;
   postDeadlinePolicy: PostDeadlinePolicy;
@@ -200,6 +224,8 @@ export interface TrainingGroup {
   maxTrainees?: number | null;
   foldersCount?: number;
   filesCount?: number;
+  replacedByGroupId?: string | null;
+  predecessorGroupId?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -7,12 +7,8 @@ import { Footer } from '@/shared/ui/Footer';
 import { useAuth } from '@/features/auth';
 import { EnrollmentProvider } from '@/features/courses';
 import { NotificationProvider, useNotifications } from '@/features/notifications';
-
-const roleLabelsAr: Record<string, string> = {
-  admin: 'مسؤول النظام',
-  lecturer: 'محاضر معتمد',
-  user: 'متدرب فني',
-};
+import { useAutoRenewalScheduler } from '@/features/groups/hooks/useAutoRenewalScheduler';
+import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
 
 const AppLayoutInner: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -24,7 +20,7 @@ const AppLayoutInner: React.FC = () => {
     ? {
         name: user.name,
         role: user.role,
-        roleLabelAr: roleLabelsAr[user.role] || user.role,
+        roleLabelAr: ROLE_CANONICAL_LABELS_AR[user.role] || user.role,
         initials: user.initials,
       }
     : null;
@@ -55,6 +51,7 @@ const AppLayoutInner: React.FC = () => {
         <Sidebar
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+          userRole={user?.role}
         />
 
         {/* Scrollable Main Viewport + Footer */}
@@ -80,6 +77,10 @@ const AppLayoutInner: React.FC = () => {
 
 export const AppLayout: React.FC = () => {
   const location = useLocation();
+  const { user } = useAuth();
+
+  // Application-level scheduler: periodically checks and processes due automatic group renewals
+  useAutoRenewalScheduler(Boolean(user));
 
   // Immersive Learning Mode: Hide light application navbar, sidebar, and footer on player routes
   const isLearningRoute = Boolean(location.pathname.match(/^\/courses\/[^/]+\/learn(\/.*)?$/));
@@ -88,23 +89,25 @@ export const AppLayout: React.FC = () => {
   if (isLearningRoute) {
     return (
       <EnrollmentProvider>
-        <div
-          className="min-h-screen bg-[#070B14] text-text-light flex flex-col antialiased selection:bg-accent-cyan/20"
-          data-testid="immersive-learning-mode"
-        >
-          {/* Skip to Main Content Link for Keyboard Accessibility */}
-          <a
-            href="#main-content"
-            className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:right-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-dark focus:text-white focus:rounded-md focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-accent-cyan text-sm font-bold"
+        <NotificationProvider>
+          <div
+            className="min-h-screen bg-[#070B14] text-text-light flex flex-col antialiased selection:bg-accent-cyan/20"
+            data-testid="immersive-learning-mode"
           >
-            الانتقال إلى المحتوى الرئيسي
-          </a>
+            {/* Skip to Main Content Link for Keyboard Accessibility */}
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:right-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-dark focus:text-white focus:rounded-md focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-accent-cyan text-sm font-bold"
+            >
+              الانتقال إلى المحتوى الرئيسي
+            </a>
 
-          {/* Dedicated Learning Main Content (Navbar and Sidebar hidden for focused study) */}
-          <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none">
-            <Outlet />
-          </main>
-        </div>
+            {/* Dedicated Learning Main Content (Navbar and Sidebar hidden for focused study) */}
+            <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none">
+              <Outlet />
+            </main>
+          </div>
+        </NotificationProvider>
       </EnrollmentProvider>
     );
   }

@@ -86,7 +86,11 @@ export function detectMeetingPlatform(url?: string | null, explicitType?: string
  * Determines whether a GroupResource represents an interactive meeting session
  * (Teams, Zoom, Google Meet, or generic meeting URL).
  */
-export function isMeetingResource(res: Pick<GroupResource, 'type' | 'url'>): boolean {
+export function isMeetingResource(res: Pick<GroupResource, 'type' | 'url'> & { id?: string }): boolean {
+  if (typeof res.id === 'string' && res.id.toLowerCase().startsWith('meeting-')) {
+    return true;
+  }
+
   const type = (res.type || '').toLowerCase();
   if (type === 'teams' || type === 'zoom' || type === 'meet') return true;
 
@@ -94,9 +98,18 @@ export function isMeetingResource(res: Pick<GroupResource, 'type' | 'url'>): boo
   return (
     url.includes('teams.microsoft.com') ||
     url.includes('teams.live.com') ||
+    url.includes('microsoft.com/teams') ||
     url.includes('zoom.us') ||
     url.includes('zoomgov.com') ||
     url.includes('meet.google.com') ||
     url.includes('google.com/meet')
   );
+}
+
+/**
+ * Determines whether a GroupResource represents an attached file/resource
+ * managed in the "المواد المرفقة" (GroupAttachmentsTab) tab, excluding interactive meetings.
+ */
+export function isAttachmentResource(res: Pick<GroupResource, 'type' | 'url'> & { id?: string }): boolean {
+  return !isMeetingResource(res);
 }

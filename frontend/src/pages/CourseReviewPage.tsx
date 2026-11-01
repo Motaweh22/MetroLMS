@@ -66,11 +66,20 @@ export const CourseReviewPage: React.FC = () => {
     mode: 'approve',
   });
 
-  const isAdmin = user?.role === 'admin';
+  const isReviewViewer =
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'developer' ||
+    user?.role === 'assistant_admin';
+
+  const isOperationalAdmin =
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'developer';
 
   // Load review data and working notes
   const loadReviewStudioData = useCallback(async () => {
-    if (!courseId || !isAuthenticated || !isAdmin) {
+    if (!courseId || !isAuthenticated || !isReviewViewer) {
       setLoading(false);
       return;
     }
@@ -106,7 +115,7 @@ export const CourseReviewPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [courseId, isAuthenticated, isAdmin]);
+  }, [courseId, isAuthenticated, isReviewViewer]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -353,7 +362,7 @@ export const CourseReviewPage: React.FC = () => {
   }
 
   // Unauthorized state (trainee, lecturer, or unauthenticated)
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || !isReviewViewer) {
     return (
       <div
         className="container mx-auto px-4 py-16 max-w-2xl"
@@ -499,7 +508,7 @@ export const CourseReviewPage: React.FC = () => {
                 <span>حفظ التعديلات الآن</span>
               </Button>
             </>
-          ) : (
+          ) : isOperationalAdmin ? (
             <Button
               variant="primary"
               size="md"
@@ -511,6 +520,14 @@ export const CourseReviewPage: React.FC = () => {
               <Icon name="edit" size="sm" />
               <span>تفعيل وضع التعديل</span>
             </Button>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-semibold text-text-muted"
+              data-testid="review-readonly-badge"
+            >
+              <Icon name="eye" size="sm" className="text-primary" />
+              <span>استعراض تدقيق للقراءة فقط</span>
+            </span>
           )}
           <Button
             variant="outline"
@@ -618,10 +635,11 @@ export const CourseReviewPage: React.FC = () => {
           onSaveWorkingNotes={handleSaveWorkingNotes}
           auditLog={reviewData.auditLog || []}
           stagedEdits={serverRecord || reviewData.stagedEdits}
-          onOpenDecisionModal={(mode) => setDecisionModal({ isOpen: true, mode })}
+          onOpenDecisionModal={isOperationalAdmin ? (mode) => setDecisionModal({ isOpen: true, mode }) : undefined}
           autosaveStatus={autosaveStatus}
           hasUnsavedChanges={hasUnsavedChanges}
           hasConflict={autosaveStatus === 'conflict' || conflicts.length > 0}
+          canDecide={isOperationalAdmin}
         />
       </div>
 

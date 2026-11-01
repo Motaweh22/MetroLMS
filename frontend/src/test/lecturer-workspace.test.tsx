@@ -103,7 +103,8 @@ describe('Increment 8 & 11: Lecturer Workspace & Course Management (/lecturer/co
   });
 
   it('strictly isolates performance action by user ID and ignores identical display names', async () => {
-    // Assign USR005 as instructor for CRS002
+    // Promote USR005 to lecturer and assign as instructor for CRS002
+    inMemoryStore.updateUserRole('USR005', 'lecturer');
     const crs002 = inMemoryStore.getCourseById('CRS002');
     if (crs002) {
       crs002.lecturerId = 'USR005';
@@ -165,10 +166,12 @@ describe('Increment 8 & 11: Lecturer Workspace & Course Management (/lecturer/co
   it('strictly blocks trainee from accessing lecturer workspace (403 Access Denied)', async () => {
     renderWorkspaceWithUser(traineeUser);
 
-    expect(screen.getByTestId('lecturer-access-denied')).toBeInTheDocument();
-    expect(
-      screen.getByText('غير مصرح بالدخول إلى مساحة المحاضرين')
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('lecturer-access-denied')).toBeInTheDocument();
+      expect(
+        screen.getByText('غير مصرح بالدخول إلى مساحة المحاضرين')
+      ).toBeInTheDocument();
+    });
   });
 
   it('filters courses by status tabs (all, published, draft, pending)', async () => {

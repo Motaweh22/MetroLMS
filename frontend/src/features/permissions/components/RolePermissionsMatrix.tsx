@@ -31,6 +31,14 @@ export interface RolePermissionsMatrixProps {
 }
 
 const ROLES: UserRole[] = ['admin', 'assistant_admin', 'lecturer', 'user'];
+const ALL_CANONICAL_ROLES: UserRole[] = [
+  'developer',
+  'super_admin',
+  'admin',
+  'assistant_admin',
+  'lecturer',
+  'user',
+];
 
 const ESSENTIAL_ADMIN_CAPABILITIES = new Set<SystemCapability>([
   'permissions.configure_roles',
@@ -104,6 +112,41 @@ function resolveCapabilityStatus(
   };
 }
 
+/**
+ * Computes baseline permissions map per role derived from loaded configs or static defaults.
+ * Guarantees that all six canonical roles (including developer and super_admin) are properly populated.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildBaselineRoleState(
+  configs?: RolePermissionsConfig[]
+): Record<UserRole, Set<SystemCapability>> {
+  const map: Record<UserRole, Set<SystemCapability>> = {
+    developer: new Set(),
+    super_admin: new Set(),
+    admin: new Set(),
+    assistant_admin: new Set(),
+    lecturer: new Set(),
+    user: new Set(),
+  };
+
+  for (const r of ALL_CANONICAL_ROLES) {
+    const cfg = configs?.find((c) => c.role === r);
+    if (cfg && cfg.permissions && cfg.permissions.length > 0) {
+      map[r] = new Set(cfg.permissions);
+    } else if (cfg && cfg.capabilities) {
+      const active = (Object.keys(cfg.capabilities) as SystemCapability[]).filter(
+        (k) => Boolean(cfg.capabilities![k])
+      );
+      map[r] = new Set(active);
+    } else {
+      const def = ROLE_DEFAULT_CAPABILITIES[r] || {};
+      const active = (Object.keys(def) as SystemCapability[]).filter((k) => Boolean(def[k]));
+      map[r] = new Set(active);
+    }
+  }
+  return map;
+}
+
 export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
   configs,
   onReload,
@@ -117,34 +160,14 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
 
   // Baseline permissions map per role derived from loaded configs or static defaults
   const baselineRoleState = useMemo<Record<UserRole, Set<SystemCapability>>>(() => {
-    const map: Record<UserRole, Set<SystemCapability>> = {
-      admin: new Set(),
-      assistant_admin: new Set(),
-      lecturer: new Set(),
-      user: new Set(),
-    };
-
-    for (const r of ROLES) {
-      const cfg = configs?.find((c) => c.role === r);
-      if (cfg && cfg.permissions && cfg.permissions.length > 0) {
-        map[r] = new Set(cfg.permissions);
-      } else if (cfg && cfg.capabilities) {
-        const active = (Object.keys(cfg.capabilities) as SystemCapability[]).filter(
-          (k) => Boolean(cfg.capabilities![k])
-        );
-        map[r] = new Set(active);
-      } else {
-        const def = ROLE_DEFAULT_CAPABILITIES[r] || {};
-        const active = (Object.keys(def) as SystemCapability[]).filter((k) => Boolean(def[k]));
-        map[r] = new Set(active);
-      }
-    }
-    return map;
+    return buildBaselineRoleState(configs);
   }, [configs]);
 
   // Working editable role permissions state
   const [workingRoleState, setWorkingRoleState] = useState<Record<UserRole, Set<SystemCapability>>>(
     () => ({
+      developer: new Set(baselineRoleState.developer),
+      super_admin: new Set(baselineRoleState.super_admin),
       admin: new Set(baselineRoleState.admin),
       assistant_admin: new Set(baselineRoleState.assistant_admin),
       lecturer: new Set(baselineRoleState.lecturer),
@@ -158,6 +181,8 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
     if (configs !== prevConfigsRef.current) {
       prevConfigsRef.current = configs;
       setWorkingRoleState({
+        developer: new Set(baselineRoleState.developer),
+        super_admin: new Set(baselineRoleState.super_admin),
         admin: new Set(baselineRoleState.admin),
         assistant_admin: new Set(baselineRoleState.assistant_admin),
         lecturer: new Set(baselineRoleState.lecturer),
@@ -175,7 +200,7 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
   // Detect which roles have unsaved edits
   const dirtyRoles = useMemo<UserRole[]>(() => {
     const dirty: UserRole[] = [];
-    for (const r of ROLES) {
+    for (const r of ALL_CANONICAL_ROLES) {
       const base = baselineRoleState[r];
       const work = workingRoleState[r];
       if (base.size !== work.size) {
@@ -230,6 +255,8 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
       }));
     } else {
       setWorkingRoleState({
+        developer: new Set(baselineRoleState.developer),
+        super_admin: new Set(baselineRoleState.super_admin),
         admin: new Set(baselineRoleState.admin),
         assistant_admin: new Set(baselineRoleState.assistant_admin),
         lecturer: new Set(baselineRoleState.lecturer),

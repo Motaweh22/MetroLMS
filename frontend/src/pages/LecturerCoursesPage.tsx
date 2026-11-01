@@ -56,7 +56,13 @@ export const LecturerCoursesPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && (user?.role === 'lecturer' || user?.role === 'admin')) {
+    const isAuthorized =
+      user?.role === 'lecturer' ||
+      user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer' ||
+      user?.role === 'assistant_admin';
+    if (isAuthenticated && isAuthorized) {
       fetchCourses();
     }
   }, [isAuthenticated, user?.role, fetchCourses]);
@@ -145,17 +151,22 @@ export const LecturerCoursesPage: React.FC = () => {
           </p>
         </div>
 
-        <Button
-          type="button"
-          variant="primary"
-          size="md"
-          leftIcon="plus"
-          onClick={() => setIsCreationModalOpen(true)}
-          className="self-start sm:self-auto font-bold shadow-md"
-          data-testid="create-course-btn"
-        >
-          إنشاء مقرر جديد
-        </Button>
+        {(user?.role === 'lecturer' ||
+          user?.role === 'admin' ||
+          user?.role === 'super_admin' ||
+          user?.role === 'developer') && (
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            leftIcon="plus"
+            onClick={() => setIsCreationModalOpen(true)}
+            className="self-start sm:self-auto font-bold shadow-md"
+            data-testid="create-course-btn"
+          >
+            إنشاء مقرر جديد
+          </Button>
+        )}
       </div>
 
       {/* Error Alert */}
@@ -330,16 +341,32 @@ export const LecturerCoursesPage: React.FC = () => {
 
                 {/* Card Actions */}
                 <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    leftIcon="edit"
-                    onClick={() => navigate(`/lecturer/builder/${encodeURIComponent(course.id)}`)}
-                    className="flex-1 font-bold text-xs min-w-[120px]"
-                    data-testid={`edit-builder-btn-${course.id}`}
-                  >
-                    تعديل في المنشئ
-                  </Button>
+                  {user?.role === 'lecturer' ||
+                  user?.role === 'admin' ||
+                  user?.role === 'super_admin' ||
+                  user?.role === 'developer' ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon="edit"
+                      onClick={() => navigate(`/lecturer/builder/${encodeURIComponent(course.id)}`)}
+                      className="flex-1 font-bold text-xs min-w-[120px]"
+                      data-testid={`edit-builder-btn-${course.id}`}
+                    >
+                      تعديل في المنشئ
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      leftIcon="eye"
+                      onClick={() => navigate(`/courses/${encodeURIComponent(course.id)}?preview=true`)}
+                      className="flex-1 font-bold text-xs min-w-[120px]"
+                      data-testid={`preview-course-btn-${course.id}`}
+                    >
+                      معاينة المقرر
+                    </Button>
+                  )}
 
                   {isPerformanceAuthorized(course) && (
                     <Button

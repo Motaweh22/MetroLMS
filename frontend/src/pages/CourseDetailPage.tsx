@@ -12,6 +12,7 @@ import { Alert } from '@/shared/ui/Alert';
 import { ExternalResourcesList } from '@/features/courses/components/ExternalResourcesList';
 import { CourseCommentsSection } from '@/features/comments/components/CourseCommentsSection';
 import { WhatsAppFloatingFab } from '@/features/whatsapp';
+import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
 
 export const CourseDetailPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -375,12 +376,12 @@ export const CourseDetailPage: React.FC = () => {
               <div className="bg-neutral-light rounded-lg p-3.5 space-y-2 text-xs text-text-muted">
                 <div className="flex items-center gap-1.5 text-text font-bold">
                   <Icon
-                    name={user?.role === 'admin' ? 'shield' : 'user'}
+                    name={user?.role === 'lecturer' ? 'user' : 'shield'}
                     size="sm"
                     className="text-primary-dark"
                   />
                   <span>
-                    {user?.role === 'admin' ? 'صلاحيات مسؤول النظام' : 'صلاحيات محاضر معتمد'}
+                    {user ? `صلاحيات ${ROLE_CANONICAL_LABELS_AR[user.role] || user.role}` : 'معاينة غير مصرح بها'}
                   </span>
                 </div>
                 <p className="text-[11px] leading-relaxed">

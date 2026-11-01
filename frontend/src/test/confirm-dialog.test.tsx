@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { server } from '@/mocks/server';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { CurriculumTreeEditor } from '@/features/course-builder/components/CurriculumTreeEditor';
 import { CourseBuilderPage } from '@/pages/CourseBuilderPage';
@@ -14,13 +15,13 @@ import { builderApi } from '@/features/course-builder/services/builderApi';
 // Mock Users & Fixtures
 // =========================================================================
 const lecturerKhaled: User = {
-  id: 'usr_lect_001',
-  name: 'م. خالد عبد الرحمن',
-  email: 'khaled.abdelrahman@cairometro.gov.eg',
+  id: 'USR002',
+  name: 'م. خالد إبراهيم',
+  email: 'khaled.ibrahim@cairo-metro.com',
   role: 'lecturer',
-  jobTitle: 'كبير مهندسي صيانة القطارات',
-  department: 'إدارة تشغيل وصيانة القطارات',
-  initials: 'خ.ع',
+  jobTitle: 'مهندس تدريب أول',
+  department: 'إدارة التدريب',
+  initials: 'خ.إ',
 };
 
 const mockChapters: CourseChapter[] = [
@@ -55,8 +56,8 @@ const mockBaseCourse: Course = {
   id: 'CRS_TEST_01',
   title: 'مقرر تجريبي للتحقق من نوافذ التأكيد',
   description: 'وصف تجريبي',
-  lecturerId: 'usr_lect_001',
-  lecturerName: 'م. خالد عبد الرحمن',
+  lecturerId: 'USR002',
+  lecturerName: 'م. خالد إبراهيم',
   status: 'draft',
   estimatedHours: 3,
   rating: 5,
@@ -91,10 +92,16 @@ const renderBuilderWithCourse = (course: Course, initialPath = `/lecturer/builde
 };
 
 describe('Phase 2 Verification: Standardized ConfirmDialog & Course Authoring Flows', () => {
+  beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
   beforeEach(() => {
     vi.restoreAllMocks();
     localStorage.clear();
   });
+  afterEach(() => {
+    server.resetHandlers();
+    authStorage.clearSession();
+  });
+  afterAll(() => server.close());
 
   // =========================================================================
   // 1. ConfirmDialog Component Unit Tests

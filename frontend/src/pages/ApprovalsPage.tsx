@@ -55,7 +55,11 @@ export const ApprovalsPage: React.FC = () => {
   // Lecturer filter tab
   const [lecturerTab, setLecturerTab] = useState<'all' | 'pending' | 'needs_revision' | 'approved'>('all');
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin =
+    user?.role === 'admin' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'developer' ||
+    user?.role === 'assistant_admin';
   const isLecturer = user?.role === 'lecturer';
   const isAuthorized = isAdmin || isLecturer;
 

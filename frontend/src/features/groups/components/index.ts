@@ -14,3 +14,4 @@ export * from './GroupMaterialViewerModal';
 export * from './AttentionBadge';
 export * from './CountdownStrip';
 export * from './TraineeProgressModal';
+export * from './ManageGroupAssistantsModal';

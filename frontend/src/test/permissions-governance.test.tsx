@@ -534,7 +534,7 @@ import {
       expect(selfSuspend.granted).toBe(false);
       expect(selfSuspend.violatesInvariant).toBe(true);
 
-      // Peer administrator mutating another admin is permitted (assuming multiple active admins)
+      // Under INV-R3, regular admin mutating peer admin is strictly forbidden
       const allUsers = [
         { id: 'usr_admin_001', role: 'admin' as UserRole, status: 'active' },
         { id: 'usr_admin_002', role: 'admin' as UserRole, status: 'active' },
@@ -543,7 +543,16 @@ import {
         context: { targetUser: { id: 'usr_admin_002', role: 'admin' }, targetStatus: 'suspended' },
         allUsers,
       });
-      expect(peerAdminAction.granted).toBe(true);
+      expect(peerAdminAction.granted).toBe(false);
+      expect(peerAdminAction.invariantCode).toBe('INVARIANT_ADMIN_PROTECTED');
+
+      // Super Administrator mutating an admin is permitted (assuming multiple active admins)
+      const superAdminActor = { id: 'USR_SUPER_001', role: 'super_admin' as UserRole };
+      const superAdminAction = evaluatePermission(superAdminActor, 'users.change_status', {
+        context: { targetUser: { id: 'usr_admin_002', role: 'admin' }, targetStatus: 'suspended' },
+        allUsers,
+      });
+      expect(superAdminAction.granted).toBe(true);
     });
 
     it('Invariant 3: Zero Administrator Lockout Prevention', () => {
@@ -1123,9 +1132,10 @@ import {
       });
     };
 
-    it('intercepts un-delegated assistant_admin role change into pending ApprovalRequest without mutating target', async () => {
+    it('rejects un-delegated assistant_admin role change with HTTP 403 without mutating target or creating approval request (Phase 2)', async () => {
       asAssistantAdmin();
       inMemoryStore.setDelegatedAuthority(assistantAdminUser.id, false);
+      const prevApprovalCount = inMemoryStore.getApprovalRequests().length;
 
       // Target USR003 role is currently 'user'
       expect(inMemoryStore.getManagedUserById('USR003')?.role).toBe('user');
@@ -1139,27 +1149,21 @@ import {
         body: JSON.stringify({ role: 'lecturer', reason: 'ترقية محاضر تحت الاعتماد' }),
       });
 
-      expect(response.status).toBe(202);
+      expect(response.status).toBe(403);
       const data = await response.json();
-      expect(data.approvalRequired).toBe(true);
-      expect(data.requestId).toBeDefined();
-      expect(data.message).toContain('بانتظار موافقة مدير النظام');
+      expect(data.code).toBe('INVARIANT_ASSISTANT_ADMIN_CEILING');
 
       // Target in store remains UNMUTATED
       expect(inMemoryStore.getManagedUserById('USR003')?.role).toBe('user');
 
-      // Approval request exists in store and is pending
-      const requests = inMemoryStore.getApprovalRequests();
-      const req = requests.find((r) => r.id === data.requestId);
-      expect(req).toBeDefined();
-      expect(req?.status).toBe('pending');
-      expect(req?.actionType).toBe('users.change_role');
-      expect(req?.requesterId).toBe('USR016');
+      // Zero approval requests created in Phase 2
+      expect(inMemoryStore.getApprovalRequests().length).toBe(prevApprovalCount);
     });
 
-    it('intercepts un-delegated assistant_admin status suspension into pending ApprovalRequest without suspending account', async () => {
+    it('rejects un-delegated assistant_admin status suspension with HTTP 403 without suspending account or creating approval request (Phase 2)', async () => {
       asAssistantAdmin();
       inMemoryStore.setDelegatedAuthority(assistantAdminUser.id, false);
+      const prevApprovalCount = inMemoryStore.getApprovalRequests().length;
 
       // Target USR003 status is active
       expect(inMemoryStore.getManagedUserById('USR003')?.status).toBe('active');
@@ -1173,22 +1177,21 @@ import {
         body: JSON.stringify({ status: 'suspended', reason: 'إيقاف حساب قيد المراجعة' }),
       });
 
-      expect(response.status).toBe(202);
+      expect(response.status).toBe(403);
       const data = await response.json();
-      expect(data.approvalRequired).toBe(true);
-      expect(data.requestId).toBeDefined();
+      expect(data.code).toBe('INVARIANT_ASSISTANT_ADMIN_CEILING');
 
       // Crucial: Target remains active in store
       expect(inMemoryStore.getManagedUserById('USR003')?.status).toBe('active');
 
-      const req = inMemoryStore.getApprovalRequests().find((r) => r.id === data.requestId);
-      expect(req?.status).toBe('pending');
-      expect(req?.actionType).toBe('users.change_status');
+      // Zero approval requests created in Phase 2
+      expect(inMemoryStore.getApprovalRequests().length).toBe(prevApprovalCount);
     });
 
-    it('intercepts un-delegated assistant_admin user creation into pending ApprovalRequest without adding to directory', async () => {
+    it('rejects un-delegated assistant_admin user creation with HTTP 403 without adding to directory or creating approval request (Phase 2)', async () => {
       asAssistantAdmin();
       inMemoryStore.setDelegatedAuthority(assistantAdminUser.id, false);
+      const prevApprovalCount = inMemoryStore.getApprovalRequests().length;
 
       const payload = {
         name: 'م. مروان البدري',
@@ -1211,23 +1214,22 @@ import {
         body: JSON.stringify(payload),
       });
 
-      expect(response.status).toBe(202);
+      expect(response.status).toBe(403);
       const data = await response.json();
-      expect(data.approvalRequired).toBe(true);
-      expect(data.requestId).toBeDefined();
+      expect(data.code).toBe('INVARIANT_ASSISTANT_ADMIN_CEILING');
 
       // Crucial: User is NOT created in directory
       const directory = inMemoryStore.getManagedUsers();
       expect(directory.some((u) => u.username === 'marwan_elbadry')).toBe(false);
 
-      const req = inMemoryStore.getApprovalRequests().find((r) => r.id === data.requestId);
-      expect(req?.status).toBe('pending');
-      expect(req?.actionType).toBe('users.create');
+      // Zero approval requests created in Phase 2
+      expect(inMemoryStore.getApprovalRequests().length).toBe(prevApprovalCount);
     });
 
-    it('intercepts un-delegated assistant_admin user deletion into pending ApprovalRequest without deleting user', async () => {
+    it('rejects un-delegated assistant_admin user deletion with HTTP 403 without deleting user or creating approval request (Phase 2)', async () => {
       asAssistantAdmin();
       inMemoryStore.setDelegatedAuthority(assistantAdminUser.id, false);
+      const prevApprovalCount = inMemoryStore.getApprovalRequests().length;
 
       expect(inMemoryStore.getManagedUserById('USR003')).toBeDefined();
 
@@ -1240,17 +1242,15 @@ import {
         body: JSON.stringify({ reason: 'حذف مستخدم عادي تجريبي' }),
       });
 
-      expect(response.status).toBe(202);
+      expect(response.status).toBe(403);
       const data = await response.json();
-      expect(data.approvalRequired).toBe(true);
-      expect(data.requestId).toBeDefined();
+      expect(data.code).toBe('INVARIANT_ASSISTANT_ADMIN_CEILING');
 
       // Crucial: User still exists in directory
       expect(inMemoryStore.getManagedUserById('USR003')).toBeDefined();
 
-      const req = inMemoryStore.getApprovalRequests().find((r) => r.id === data.requestId);
-      expect(req?.status).toBe('pending');
-      expect(req?.actionType).toBe('users.delete');
+      // Zero approval requests created in Phase 2
+      expect(inMemoryStore.getApprovalRequests().length).toBe(prevApprovalCount);
     });
 
     it('intercepts un-delegated assistant_admin group creation and archiving into approval requests', async () => {
@@ -1622,6 +1622,23 @@ import {
   describe('13. Administrator Account Creation and Deletion Lifecycle Invariants', () => {
     const adminUser = SYNTHETIC_DEMO_ACCOUNTS.admin.user;
     const assistantAdminUser = SYNTHETIC_DEMO_ACCOUNTS.assistant_admin.user;
+    const superAdminUser = {
+      id: 'USR_SUPER_001',
+      name: 'م. ياسين رضوان',
+      email: 'superadmin@cairo-metro.com',
+      role: 'super_admin' as UserRole,
+      department: 'الإدارة العليا',
+      jobTitle: 'المسؤول الأعلى للأنظمة',
+      initials: 'ي.ر',
+    };
+
+    const asSuperAdmin = () => {
+      authStorage.setSession({
+        token: `mock_jwt_${superAdminUser.id}_test`,
+        user: superAdminUser,
+        expiresAt: Date.now() + 3600000,
+      });
+    };
 
     const asAssistantAdmin = () => {
       authStorage.setSession({
@@ -1639,8 +1656,8 @@ import {
       });
     };
 
-    it('allows authorized System Administrator to create another administrator account directly', async () => {
-      asAdmin();
+    it('allows authorized Super Administrator to create another administrator account directly', async () => {
+      asSuperAdmin();
 
       const newAdminPayload: CreateUserRequestDTO = {
         name: 'م. طارق عبد الحميد',
@@ -1657,7 +1674,7 @@ import {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer mock_jwt_${adminUser.id}_test`,
+          Authorization: `Bearer mock_jwt_${superAdminUser.id}_test`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(newAdminPayload),
@@ -1672,6 +1689,23 @@ import {
       const stored = inMemoryStore.getManagedUserById(created.id);
       expect(stored).toBeDefined();
       expect(stored?.role).toBe('admin');
+
+      // Under INV-R3, regular admin attempting to create an admin is strictly forbidden (HTTP 403)
+      asAdmin();
+      const forbiddenAdminPayload: CreateUserRequestDTO = {
+        ...newAdminPayload,
+        username: 'unauth_peer_admin_attempt',
+        email: 'unauth.peer@cairo-metro.com',
+      };
+      const resForbidden = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer mock_jwt_${adminUser.id}_test`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(forbiddenAdminPayload),
+      });
+      expect(resForbidden.status).toBe(403);
     });
 
     it('strictly forbids assistant administrator from creating an admin account directly or under delegation (HTTP 403)', async () => {
@@ -1730,7 +1764,7 @@ import {
     it('forbids deletion of existing system administrator accounts by any user (HTTP 403)', async () => {
       // 1. Peer admin attempts to delete another admin (usr_admin_001)
       asAdmin();
-      // Create a second admin to test peer deletion
+      // Create a second admin by Super Admin to test peer deletion
       const secondAdmin = inMemoryStore.createUser(
         {
           name: 'مدير نظير ثان',
@@ -1741,7 +1775,7 @@ import {
           role: 'admin',
           status: 'active',
         },
-        { id: adminUser.id, role: adminUser.role }
+        { id: superAdminUser.id, role: superAdminUser.role }
       );
 
       // Attempt deletion of secondAdmin by adminUser
@@ -1755,7 +1789,7 @@ import {
 
       expect(resDeletePeer.status).toBe(403);
       const peerData = await resDeletePeer.json();
-      expect(peerData.message).toContain('حسابات مديري النظام محصنة ولا يمكن حذفها نهائياً');
+      expect(peerData.message).toContain('إدارة حسابات مديري النظام محجوزة للمطور والمسؤول الأعلى فقط');
       expect(inMemoryStore.getManagedUserById(secondAdmin.id)).toBeDefined();
 
       // 2. Assistant admin attempts to delete secondAdmin
@@ -1807,7 +1841,9 @@ import {
       });
 
       // Tab 1 is active by default
-      expect(screen.getByTestId('role-permissions-matrix-table')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('role-permissions-matrix-table')).toBeInTheDocument();
+      });
 
       // Find toggle for lecturer courses.create (initially unchecked)
       const toggleLecturerCourseCreate = screen.getByTestId(
@@ -1855,7 +1891,9 @@ import {
         expect(screen.getByTestId('permissions-matrix-page')).toBeInTheDocument();
       });
 
-      expect(screen.getByTestId('role-permissions-matrix-table')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('role-permissions-matrix-table')).toBeInTheDocument();
+      });
 
       // Toggles and save buttons must NOT be present for assistant admin
       expect(screen.queryByTestId('toggle-role-capability-lecturer-courses.create')).toBeNull();
@@ -1992,11 +2030,11 @@ import {
         revoked: ['permissions.configure_users'],
       });
 
-      // Attempting to suspend usr_admin_001 (the only viable admin) by a peer
+      // Attempting to suspend usr_admin_001 (the only viable admin) by an authorized supervisor
       expect(() => {
         inMemoryStore.updateUserStatus('usr_admin_001', 'suspended', 'اختبار إيقاف المدير الأخير', {
-          id: 'USR001',
-          role: 'admin',
+          id: 'USR_SUPER_001',
+          role: 'super_admin',
         });
       }).toThrowError(/لا يمكن إيقاف أو تخفيض رتبة أو حذف مدير النظام الأخير الذي يحتفظ بالصلاحيات الإدارية الجوهرية/);
 

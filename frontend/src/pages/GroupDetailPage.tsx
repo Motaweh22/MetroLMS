@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { groupsApi, type EnrichedTrainingGroup } from '@/features/groups/services/groupsApi';
-import { GroupMaterialsTab } from '@/features/groups/components';
+import { GroupMaterialsTab, ManageGroupAssistantsModal } from '@/features/groups/components';
 import { useAuth } from '@/features/auth';
 import { Card, CardContent } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
@@ -9,13 +9,18 @@ import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { ProgressBar } from '@/shared/ui/ProgressBar';
 import { Alert } from '@/shared/ui/Alert';
+import { Modal } from '@/shared/ui/Modal';
 import { useToast } from '@/shared/ui/Toast';
 import {
   isMeetingResource,
   detectMeetingPlatform,
   MEETING_PLATFORMS,
 } from '@/features/groups/utils/meetingUtils';
-import { WhatsAppFloatingFab } from '@/features/whatsapp';
+import {
+  WhatsAppFloatingFab,
+  buildWhatsAppUrl,
+  buildContextMessage,
+} from '@/features/whatsapp';
 
 export const GroupDetailPage: React.FC = () => {
   const toast = useToast();
@@ -25,6 +30,21 @@ export const GroupDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isForbidden, setIsForbidden] = useState(false);
+  const [isInstructorsModalOpen, setIsInstructorsModalOpen] = useState(false);
+  const [isManageAssistantsOpen, setIsManageAssistantsOpen] = useState(false);
+
+  const canManageAssistants = useMemo(() => {
+    if (!user || !group) return false;
+    if (user.role === 'admin') return true;
+    if (user.role === 'lecturer') {
+      const uid = user.id.toLowerCase();
+      if (group.primaryInstructorId !== undefined) {
+        return Boolean(group.primaryInstructorId && group.primaryInstructorId.toLowerCase() === uid);
+      }
+      return Boolean(group.supervisorIds?.[0]?.toLowerCase() === uid);
+    }
+    return false;
+  }, [user, group]);
 
   const loadGroupDetails = useCallback(async () => {
     if (!groupId) return;
@@ -172,13 +192,42 @@ export const GroupDetailPage: React.FC = () => {
             )}
           </div>
 
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-text-heading leading-tight">
-              {group.name}
-            </h1>
-            <p className="text-sm text-text-muted mt-2 leading-relaxed max-w-3xl">
-              {group.description}
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-text-heading leading-tight">
+                {group.name}
+              </h1>
+              <p className="text-sm text-text-muted mt-2 leading-relaxed max-w-3xl">
+                {group.description}
+              </p>
+            </div>
+
+            <div className="flex items-center flex-wrap gap-2 shrink-0 self-start">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                leftIcon="users"
+                onClick={() => setIsInstructorsModalOpen(true)}
+                data-testid="open-group-instructors-modal-btn"
+                className="font-bold text-xs shrink-0"
+              >
+                مشرفين المجموعة
+              </Button>
+              {canManageAssistants && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  leftIcon="user"
+                  onClick={() => setIsManageAssistantsOpen(true)}
+                  data-testid="manage-group-assistants-btn"
+                  className="font-bold text-xs shrink-0"
+                >
+                  إدارة المحاضرين المساعدين
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Attention Notice if any */}
@@ -209,14 +258,17 @@ export const GroupDetailPage: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Resources Sections: المواد المرفقة واللقاءات التفاعلية (Above Assigned Courses) */}
+      {/* Resources Sections: المواد المرفقة واللقاءات التفاعلية (Side-by-Side with Interactive Meetings First) */}
       {(() => {
         const allResources = group.resources || [];
-        const attachments = allResources.filter((r) => !isMeetingResource(r));
         const meetings = allResources.filter((r) => isMeetingResource(r));
+        const attachments = allResources.filter((r) => !isMeetingResource(r));
+        const showMeetingsSection = meetings.length > 0 || attachments.length === 0;
+        const showAttachmentsSection = attachments.length > 0 || meetings.length === 0;
+        const isTwoColumn = showMeetingsSection && showAttachmentsSection;
 
         return (
-          <div className="space-y-6 pt-2" data-testid="group-resources-section">
+          <div className="space-y-5 pt-2" data-testid="group-resources-section">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-3">
               <div>
                 <h2 className="text-xl font-bold text-text-heading flex items-center gap-2">
@@ -224,7 +276,7 @@ export const GroupDetailPage: React.FC = () => {
                   <span>المواد المرفقة واللقاءات التفاعلية</span>
                 </h2>
                 <p className="text-xs text-text-muted mt-1">
-                  المستندات الإرشادية والروابط المباشرة للقاءات التفاعلية المخصصة لأعضاء هذه المجموعة.
+                  اللقاءات التفاعلية المباشرة والمستندات الإرشادية المخصصة لأعضاء هذه المجموعة.
                 </p>
               </div>
               <span className="text-xs text-text-muted font-medium">
@@ -232,152 +284,206 @@ export const GroupDetailPage: React.FC = () => {
               </span>
             </div>
 
-            {/* Sub-section 1: المواد المرفقة */}
-            <div className="space-y-3" data-testid="group-attachments-section">
-              <h3 className="text-sm font-bold text-text flex items-center gap-2">
-                <Icon name="file" size="sm" className="text-primary" />
-                <span>المواد المرفقة</span>
-              </h3>
-              {attachments.length === 0 ? (
-                <Card
-                  variant="default"
-                  className="p-6 text-center text-text-muted text-xs border-dashed"
-                  data-testid="attachments-empty-state"
+            <div
+              className={`grid grid-cols-1 ${
+                isTwoColumn ? 'lg:grid-cols-2' : ''
+              } gap-6 items-start`}
+              data-testid="group-resources-columns"
+            >
+              {/* Column 1 (Right in RTL / First on Mobile): اللقاءات التفاعلية */}
+              {showMeetingsSection && (
+                <div
+                  className="space-y-3.5 bg-surface/40 border border-border/70 rounded-2xl p-4 sm:p-5"
+                  data-testid="group-meetings-section"
                 >
-                  لا توجد مواد تدريبية أو ملفات مرفقة بهذه المجموعة حالياً.
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {attachments.map((res) => {
-                    const isPdf = res.type === 'pdf' || res.url.endsWith('.pdf');
-                    return (
-                      <Card
-                        key={res.id}
-                        variant="default"
-                        className="p-5 flex flex-col justify-between space-y-4 bg-surface hover:border-primary/40 transition-colors"
-                        data-testid={`attachment-card-${res.id}`}
-                      >
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <Badge variant="neutral" className="text-xs gap-1">
-                              <Icon name="attachment" size="sm" />
-                              <span>{isPdf ? 'مستند PDF تدريبي' : 'دليل ومستند تدريبي'}</span>
-                            </Badge>
-                            <span className="text-[11px] font-bold text-warning-dark bg-warning-light/40 px-2 py-0.5 rounded">
-                              بيانات استرشادية للعرض التجريبي
-                            </span>
-                          </div>
-                          <h4 className="text-base font-bold text-text-heading">{res.title}</h4>
-                          {res.description && (
-                            <p className="text-xs text-text-muted leading-relaxed">{res.description}</p>
-                          )}
-                        </div>
-                        <div className="pt-2 border-t border-border/40">
-                          <a href={res.url} target="_blank" rel="noopener noreferrer" className="inline-block">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-xs font-bold gap-1.5"
-                              leftIcon="download"
-                              data-testid={`download-attachment-btn-${res.id}`}
-                            >
-                              {isPdf ? 'تحميل كتيب الطوارئ' : 'تحميل المستند'}
-                            </Button>
-                          </a>
-                        </div>
-                      </Card>
-                    );
-                  })}
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold text-text flex items-center gap-2">
+                      <Icon name="video" size="sm" className="text-primary" />
+                      <span>اللقاءات التفاعلية</span>
+                    </h3>
+                    <Badge variant="neutral" size="sm" className="text-[11px] font-mono">
+                      {meetings.length}
+                    </Badge>
+                  </div>
+                  {meetings.length === 0 ? (
+                    <Card
+                      variant="default"
+                      className="p-6 text-center text-text-muted text-xs border-dashed"
+                      data-testid="meetings-empty-state"
+                    >
+                      لا توجد لقاءات تفاعلية مجدولة لهذه المجموعة حالياً.
+                    </Card>
+                  ) : (
+                    <div
+                      className={`grid grid-cols-1 ${
+                        isTwoColumn ? '' : 'md:grid-cols-2'
+                      } gap-4`}
+                    >
+                      {meetings.map((res) => {
+                        const platform = detectMeetingPlatform(res.url, res.type);
+                        const meta = MEETING_PLATFORMS[platform];
+                        const platformLabel =
+                          platform === 'teams'
+                            ? 'Teams'
+                            : platform === 'zoom'
+                            ? 'Zoom'
+                            : platform === 'meet'
+                            ? 'Google Meet'
+                            : meta.shortLabel;
+
+                        return (
+                          <Card
+                            key={res.id}
+                            variant="default"
+                            className="p-5 flex flex-col justify-between space-y-4 bg-surface hover:border-primary/40 transition-colors"
+                            data-testid={`meeting-card-${res.id}`}
+                          >
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <Badge variant={meta.badgeVariant} className="text-xs gap-1">
+                                  <Icon name="video" size="sm" />
+                                  <span>لقاء تفاعلي {platformLabel}</span>
+                                </Badge>
+                                <span className="text-[11px] font-bold text-warning-dark bg-warning-light/40 px-2 py-0.5 rounded">
+                                  بيانات استرشادية للعرض التجريبي
+                                </span>
+                              </div>
+                              <h4 className="text-base font-bold text-text-heading">{res.title}</h4>
+                              {res.description && (
+                                <p className="text-xs text-text-muted leading-relaxed">
+                                  {res.description}
+                                </p>
+                              )}
+                            </div>
+                            <div className="pt-2 border-t border-border/40">
+                              {(() => {
+                                const handleJoinClick = (e: React.MouseEvent) => {
+                                  if (
+                                    res.url.startsWith('#') ||
+                                    res.url.includes('teams.microsoft.com') ||
+                                    res.url.includes('zoom.us') ||
+                                    res.url.includes('meet.google.com')
+                                  ) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    toast.info(
+                                      `هذا رابط تجريبي تمثيلي لجلسة التدريب الميدانية عبر ${meta.label}.`,
+                                      {
+                                        title: 'رابط تدريب تجريبي',
+                                        duration: 5000,
+                                      }
+                                    );
+                                  }
+                                };
+
+                                return (
+                                  <a
+                                    href={res.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block"
+                                    onClick={handleJoinClick}
+                                  >
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      className="text-xs font-bold gap-1.5"
+                                      leftIcon="video"
+                                      onClick={handleJoinClick}
+                                      data-testid={`join-meeting-btn-${res.id}`}
+                                    >
+                                      الانضمام للقاء التجريبي
+                                    </Button>
+                                  </a>
+                                );
+                              })()}
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
 
-            {/* Sub-section 2: اللقاءات التفاعلية */}
-            <div className="space-y-3" data-testid="group-meetings-section">
-              <h3 className="text-sm font-bold text-text flex items-center gap-2">
-                <Icon name="video" size="sm" className="text-primary" />
-                <span>اللقاءات التفاعلية</span>
-              </h3>
-              {meetings.length === 0 ? (
-                <Card
-                  variant="default"
-                  className="p-6 text-center text-text-muted text-xs border-dashed"
-                  data-testid="meetings-empty-state"
+              {/* Column 2 (Left in RTL / Second on Mobile): المواد المرفقة */}
+              {showAttachmentsSection && (
+                <div
+                  className="space-y-3.5 bg-surface/40 border border-border/70 rounded-2xl p-4 sm:p-5"
+                  data-testid="group-attachments-section"
                 >
-                  لا توجد لقاءات تفاعلية مجدولة لهذه المجموعة حالياً.
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {meetings.map((res) => {
-                    const platform = detectMeetingPlatform(res.url, res.type);
-                    const meta = MEETING_PLATFORMS[platform];
-                    const platformLabel = platform === 'teams' ? 'Teams' : platform === 'zoom' ? 'Zoom' : platform === 'meet' ? 'Google Meet' : meta.shortLabel;
-
-                    return (
-                      <Card
-                        key={res.id}
-                        variant="default"
-                        className="p-5 flex flex-col justify-between space-y-4 bg-surface hover:border-primary/40 transition-colors"
-                        data-testid={`meeting-card-${res.id}`}
-                      >
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <Badge variant={meta.badgeVariant} className="text-xs gap-1">
-                              <Icon name="video" size="sm" />
-                              <span>لقاء تفاعلي {platformLabel}</span>
-                            </Badge>
-                            <span className="text-[11px] font-bold text-warning-dark bg-warning-light/40 px-2 py-0.5 rounded">
-                              بيانات استرشادية للعرض التجريبي
-                            </span>
-                          </div>
-                          <h4 className="text-base font-bold text-text-heading">{res.title}</h4>
-                          {res.description && (
-                            <p className="text-xs text-text-muted leading-relaxed">{res.description}</p>
-                          )}
-                        </div>
-                        <div className="pt-2 border-t border-border/40">
-                          {(() => {
-                            const handleJoinClick = (e: React.MouseEvent) => {
-                              if (
-                                res.url.startsWith('#') ||
-                                res.url.includes('teams.microsoft.com') ||
-                                res.url.includes('zoom.us') ||
-                                res.url.includes('meet.google.com')
-                              ) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                toast.info(`هذا رابط تجريبي تمثيلي لجلسة التدريب الميدانية عبر ${meta.label}.`, {
-                                  title: 'رابط تدريب تجريبي',
-                                  duration: 5000,
-                                });
-                              }
-                            };
-
-                            return (
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold text-text flex items-center gap-2">
+                      <Icon name="file" size="sm" className="text-primary" />
+                      <span>المواد المرفقة</span>
+                    </h3>
+                    <Badge variant="neutral" size="sm" className="text-[11px] font-mono">
+                      {attachments.length}
+                    </Badge>
+                  </div>
+                  {attachments.length === 0 ? (
+                    <Card
+                      variant="default"
+                      className="p-6 text-center text-text-muted text-xs border-dashed"
+                      data-testid="attachments-empty-state"
+                    >
+                      لا توجد مواد تدريبية أو ملفات مرفقة بهذه المجموعة حالياً.
+                    </Card>
+                  ) : (
+                    <div
+                      className={`grid grid-cols-1 ${
+                        isTwoColumn ? '' : 'md:grid-cols-2'
+                      } gap-4`}
+                    >
+                      {attachments.map((res) => {
+                        const isPdf = res.type === 'pdf' || res.url.endsWith('.pdf');
+                        return (
+                          <Card
+                            key={res.id}
+                            variant="default"
+                            className="p-5 flex flex-col justify-between space-y-4 bg-surface hover:border-primary/40 transition-colors"
+                            data-testid={`attachment-card-${res.id}`}
+                          >
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <Badge variant="neutral" className="text-xs gap-1">
+                                  <Icon name="attachment" size="sm" />
+                                  <span>{isPdf ? 'مستند PDF تدريبي' : 'دليل ومستند تدريبي'}</span>
+                                </Badge>
+                                <span className="text-[11px] font-bold text-warning-dark bg-warning-light/40 px-2 py-0.5 rounded">
+                                  بيانات استرشادية للعرض التجريبي
+                                </span>
+                              </div>
+                              <h4 className="text-base font-bold text-text-heading">{res.title}</h4>
+                              {res.description && (
+                                <p className="text-xs text-text-muted leading-relaxed">
+                                  {res.description}
+                                </p>
+                              )}
+                            </div>
+                            <div className="pt-2 border-t border-border/40">
                               <a
                                 href={res.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-block"
-                                onClick={handleJoinClick}
                               >
                                 <Button
-                                  variant="primary"
+                                  variant="outline"
                                   size="sm"
                                   className="text-xs font-bold gap-1.5"
-                                  leftIcon="video"
-                                  onClick={handleJoinClick}
-                                  data-testid={`join-meeting-btn-${res.id}`}
+                                  leftIcon="download"
+                                  data-testid={`download-attachment-btn-${res.id}`}
                                 >
-                                  الانضمام للقاء التجريبي
+                                  {isPdf ? 'تحميل كتيب الطوارئ' : 'تحميل المستند'}
                                 </Button>
                               </a>
-                            );
-                          })()}
-                        </div>
-                      </Card>
-                    );
-                  })}
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -479,10 +585,187 @@ export const GroupDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Group Materials Library (Phase 7 - Read-only for Trainees) */}
+      {/* Group Materials Library */}
       <div className="space-y-4 pt-2" data-testid="trainee-group-materials-section">
-        <GroupMaterialsTab groupId={group.id} group={group} readOnly={true} />
+        <GroupMaterialsTab
+          groupId={group.id}
+          group={group}
+          readOnly={user?.role === 'user'}
+        />
       </div>
+
+      {/* Group Instructors Contact Modal (مشرفين المجموعة) */}
+      <Modal
+        isOpen={isInstructorsModalOpen}
+        onClose={() => setIsInstructorsModalOpen(false)}
+        title="مشرفين المجموعة"
+        description={`طاقم التدريب والإشراف المخصص لمجموعة: ${group.name}`}
+        size="lg"
+        dataTestId="group-instructors-modal"
+        footer={
+          <div className="flex items-center justify-between w-full gap-3">
+            <div>
+              {canManageAssistants && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  leftIcon="user"
+                  onClick={() => {
+                    setIsInstructorsModalOpen(false);
+                    setIsManageAssistantsOpen(true);
+                  }}
+                  data-testid="modal-manage-group-assistants-btn"
+                  className="font-bold text-xs"
+                >
+                  إدارة المحاضرين المساعدين
+                </Button>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsInstructorsModalOpen(false)}
+              data-testid="close-group-instructors-modal-btn"
+              className="font-bold text-xs"
+            >
+              إغلاق
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4" dir="rtl">
+          {!group.instructors || group.instructors.length === 0 ? (
+            <Card
+              variant="default"
+              className="p-6 text-center text-text-muted text-xs border-dashed"
+              data-testid="group-instructors-empty-state"
+            >
+              لم يتم تعيين محاضرين لهذه المجموعة التدريبية حتى الآن.
+            </Card>
+          ) : (
+            <div
+              className="grid grid-cols-1 gap-3.5"
+              data-testid="group-instructors-cards-grid"
+            >
+              {group.instructors.map((instructor) => {
+                const isPrimary = instructor.instructorRole === 'primary';
+                const waHref =
+                  instructor.isPhoneValid && instructor.cleanPhone
+                    ? buildWhatsAppUrl(
+                        instructor.cleanPhone,
+                        buildContextMessage('group', {
+                          groupName: group.name,
+                        })
+                      )
+                    : null;
+
+                return (
+                  <Card
+                    key={`${instructor.instructorRole}-${instructor.userId}`}
+                    variant="default"
+                    className="p-4 sm:p-5 flex flex-col justify-between gap-4 bg-surface border border-border hover:border-primary/40 transition-colors"
+                    data-testid={`group-instructor-card-${instructor.userId}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 font-bold text-sm ${
+                            isPrimary
+                              ? 'bg-primary/15 text-primary'
+                              : 'bg-info/15 text-info'
+                          }`}
+                        >
+                          {instructor.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3
+                              className="text-base font-bold text-text-heading truncate"
+                              data-testid={`instructor-name-${instructor.userId}`}
+                            >
+                              {instructor.name}
+                            </h3>
+                            <Badge
+                              variant={isPrimary ? 'primary' : 'info'}
+                              size="sm"
+                              data-testid={`instructor-role-badge-${instructor.userId}`}
+                            >
+                              {instructor.roleLabelAr}
+                            </Badge>
+                          </div>
+                          {(instructor.jobTitle || instructor.department) && (
+                            <p className="text-xs text-text-muted truncate mt-1">
+                              {instructor.jobTitle}
+                              {instructor.jobTitle && instructor.department ? ' • ' : ''}
+                              {instructor.department}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border/60">
+                      {instructor.isPhoneValid && instructor.cleanPhone ? (
+                        <>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-text-muted">رقم واتساب:</span>
+                            <span
+                              className="font-mono font-bold text-text-heading bg-neutral-light px-2.5 py-1 rounded-lg border border-border/60"
+                              dir="ltr"
+                              data-testid={`instructor-phone-${instructor.userId}`}
+                            >
+                              {instructor.displayPhone || instructor.phone}
+                            </span>
+                          </div>
+                          {waHref && (
+                            <a
+                              href={waHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#25D366] hover:bg-[#1ebe57] transition-colors shadow-xs shrink-0"
+                              data-testid={`contact-instructor-whatsapp-${instructor.userId}`}
+                            >
+                              <span>تواصل عبر واتساب</span>
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <div
+                          className="flex items-center justify-between w-full text-xs text-text-muted bg-neutral-light/50 px-3 py-2 rounded-lg border border-border/50"
+                          data-testid={`instructor-phone-unavailable-${instructor.userId}`}
+                        >
+                          <span>رقم واتساب غير متوفر حالياً</span>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Manage Group Assistants Modal (Primary Instructor or Admin) */}
+      {canManageAssistants && (
+        <ManageGroupAssistantsModal
+          isOpen={isManageAssistantsOpen}
+          onClose={() => setIsManageAssistantsOpen(false)}
+          group={group}
+          onAssistantsUpdated={(updatedGroup) => {
+            setGroup((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    ...updatedGroup,
+                  }
+                : prev
+            );
+          }}
+        />
+      )}
 
       {/* Context-Aware Floating WhatsApp Contacts for Group Supervisors */}
       <WhatsAppFloatingFab
@@ -491,6 +774,8 @@ export const GroupDetailPage: React.FC = () => {
           group: {
             id: group.id,
             name: group.name,
+            primaryInstructorId: group.primaryInstructorId,
+            assistantLecturerIds: group.assistantLecturerIds,
             supervisorIds: group.supervisorIds,
             traineeIds: group.traineeIds,
           },

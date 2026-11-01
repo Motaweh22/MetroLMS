@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
 import { LoginForm } from '@/features/auth/components/LoginForm';
 import { WhatsAppFloatingFab } from '@/features/whatsapp';
@@ -21,11 +21,6 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="login-page">
-      {/* Discreet Developer Navigation to Design System Preview */}
-      <Link to="/design-system" className="login-dev-link" tabIndex={-1}>
-        <span>معمل التصميم</span>
-      </Link>
-
       <div className="login-container">
         <LoginForm onSuccess={() => navigate(targetPath, { replace: true })} />
       </div>

@@ -5,6 +5,8 @@ import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
+import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
+import type { UserRole } from '@/core/auth/types';
 
 export const ProfilePage: React.FC = () => {
   const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
@@ -29,20 +31,15 @@ export const ProfilePage: React.FC = () => {
   }, [loadProfile]);
 
   const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'مسؤول النظام';
-      case 'lecturer':
-        return 'محاضر / مدرب';
-      case 'user':
-      default:
-        return 'متدرب فني';
-    }
+    return ROLE_CANONICAL_LABELS_AR[role as UserRole] || role;
   };
 
   const getRoleBadgeVariant = (role: string): 'primary' | 'warning' | 'neutral' => {
     switch (role) {
+      case 'developer':
+      case 'super_admin':
       case 'admin':
+      case 'assistant_admin':
         return 'warning';
       case 'lecturer':
         return 'neutral';

@@ -131,8 +131,10 @@ describe('Increment 11 — Phase 1: Central User Directory Foundation & Seed Dat
         expect(screen.getByTestId('user-management-page')).toBeInTheDocument();
       });
 
-      expect(screen.getByText('دليل المستخدمين الموحد')).toBeInTheDocument();
-      expect(screen.getByTestId('user-count-badge')).toHaveTextContent('15 مستخدم');
+      await waitFor(() => {
+        expect(screen.getByText('دليل المستخدمين الموحد')).toBeInTheDocument();
+        expect(screen.getByTestId('user-count-badge')).toHaveTextContent('15 مستخدم');
+      });
 
       // Verify specific user rows
       await waitFor(() => {

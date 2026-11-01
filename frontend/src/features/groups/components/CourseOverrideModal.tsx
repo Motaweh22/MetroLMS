@@ -38,12 +38,10 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
   cycle,
   initialCustomStartDateTime,
   initialCustomDeadlineDateTime,
-  initialCustomPostDeadlinePolicy,
   onApply,
 }) => {
   const [customStart, setCustomStart] = useState<string>('');
   const [customDeadline, setCustomDeadline] = useState<string>('');
-  const [customPolicy, setCustomPolicy] = useState<string>('inherit');
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Initialize or reset state when modal opens
@@ -51,10 +49,9 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
     if (isOpen) {
       setCustomStart(toDatetimeLocal(initialCustomStartDateTime));
       setCustomDeadline(toDatetimeLocal(initialCustomDeadlineDateTime));
-      setCustomPolicy(initialCustomPostDeadlinePolicy || 'inherit');
       setValidationError(null);
     }
-  }, [isOpen, initialCustomStartDateTime, initialCustomDeadlineDateTime, initialCustomPostDeadlinePolicy]);
+  }, [isOpen, initialCustomStartDateTime, initialCustomDeadlineDateTime]);
 
   // Compute effective settings dynamically for preview
   const previewAssignment = useMemo<GroupCycleCourseAssignment>(() => ({
@@ -63,8 +60,8 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
     order: 1,
     customStartDateTime: customStart ? toIsoString(customStart) : null,
     customDeadlineDateTime: customDeadline ? toIsoString(customDeadline) : null,
-    customPostDeadlinePolicy: customPolicy !== 'inherit' ? (customPolicy as PostDeadlinePolicy) : null,
-  }), [courseId, customStart, customDeadline, customPolicy]);
+    customPostDeadlinePolicy: null,
+  }), [courseId, customStart, customDeadline]);
 
   const effective = useMemo(() => {
     return getEffectiveCourseSettings(group, previewAssignment, undefined, cycle);
@@ -82,7 +79,6 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
   const handleClearOverrides = () => {
     setCustomStart('');
     setCustomDeadline('');
-    setCustomPolicy('inherit');
     setValidationError(null);
   };
 
@@ -92,26 +88,25 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
     onApply({
       customStartDateTime: customStart ? toIsoString(customStart) : null,
       customDeadlineDateTime: customDeadline ? toIsoString(customDeadline) : null,
-      customPostDeadlinePolicy: customPolicy !== 'inherit' ? (customPolicy as PostDeadlinePolicy) : null,
+      customPostDeadlinePolicy: null,
     });
     onClose();
   };
 
   const inheritedStartDate = cycle?.startDateTime || group.startDateTime;
   const inheritedDeadlineDate = cycle?.deadlineDateTime || group.deadlineDateTime;
-  const inheritedPolicy = cycle?.postDeadlinePolicy || group.postDeadlinePolicy || 'keep_no_cert';
+  const inheritedPolicy = group.postDeadlinePolicy || cycle?.postDeadlinePolicy || 'keep_no_cert';
 
   const policyLabels: Record<string, string> = {
     keep_no_cert: 'إتاحة المحتوى دون شهادة (keep_no_cert)',
     hide: 'حجب المحتوى التدريبي (hide)',
-    inherit: `استخدام السياسة العامة الموروثة (${inheritedPolicy === 'keep_no_cert' ? 'دون شهادة' : 'حجب'})`,
   };
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="تخصيص مواعيد وسياسة المقرر التدريبي"
+      title="تخصيص مواعيد المقرر التدريبي"
       size="lg"
       dataTestId="course-override-modal"
     >
@@ -124,7 +119,7 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
             <span className="text-xs text-primary font-mono">{courseId}</span>
           </div>
           <Badge variant="neutral" size="sm">
-            {cycle ? `ضمن ${cycle.title}` : 'ضمن إعدادات المجموعة العامة'}
+            ضمن إعدادات المجموعة العامة
           </Badge>
         </div>
 
@@ -132,20 +127,20 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
         <div className="bg-surface rounded-xl p-3.5 border border-border/80 text-xs text-text-muted space-y-1.5">
           <div className="flex items-center gap-1.5 font-bold text-text">
             <Icon name="info" size="sm" className="text-primary" />
-            <span>المواعيد والسياسات الموروثة افتراضياً للدورة:</span>
+            <span>المواعيد الموروثة افتراضياً من المجموعة:</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
             <div>
-              <span className="font-semibold text-text">بداية الدورة: </span>
+              <span className="font-semibold text-text">بداية المجموعة: </span>
               <span>{formatArabicDateTime(inheritedStartDate)}</span>
             </div>
             <div>
-              <span className="font-semibold text-text">نهاية الدورة: </span>
+              <span className="font-semibold text-text">نهاية المجموعة: </span>
               <span>{formatArabicDateTime(inheritedDeadlineDate)}</span>
             </div>
           </div>
           <div className="text-[11px]">
-            <span className="font-semibold text-text">سياسة ما بعد الموعد الموروثة: </span>
+            <span className="font-semibold text-text">سياسة ما بعد الموعد للمجموعة: </span>
             <span>{policyLabels[inheritedPolicy] || inheritedPolicy}</span>
           </div>
         </div>
@@ -172,7 +167,7 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
                 size="sm"
                 data-testid="start-inheritance-badge"
               >
-                {customStart ? 'مخصص لهذا المقرر' : 'موروث من دورة التدريب'}
+                {customStart ? 'مخصص لهذا المقرر' : 'موروث من المجموعة'}
               </Badge>
             </div>
             <input
@@ -184,7 +179,7 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
               data-testid="custom-start-input"
             />
             <p className="text-[11px] text-text-muted mt-1">
-              اترك الحقل فارغاً لوراثة تاريخ البداية تلقائياً من الدورة التدريبية.
+              اترك الحقل فارغاً لوراثة تاريخ البداية تلقائياً من المجموعة التدريبية.
             </p>
           </div>
 
@@ -199,7 +194,7 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
                 size="sm"
                 data-testid="deadline-inheritance-badge"
               >
-                {customDeadline ? 'مخصص لهذا المقرر' : 'موروث من دورة التدريب'}
+                {customDeadline ? 'مخصص لهذا المقرر' : 'موروث من المجموعة'}
               </Badge>
             </div>
             <input
@@ -211,35 +206,8 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
               data-testid="custom-deadline-input"
             />
             <p className="text-[11px] text-text-muted mt-1">
-              اترك الحقل فارغاً لوراثة الموعد النهائي تلقائياً من الدورة التدريبية.
+              اترك الحقل فارغاً لوراثة الموعد النهائي تلقائياً من المجموعة التدريبية.
             </p>
-          </div>
-
-          {/* Custom Post Deadline Policy */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="custom-policy-select" className="text-xs font-semibold text-text">
-                سياسة ما بعد انتهاء الموعد النهائي لهذا المقرر
-              </label>
-              <Badge
-                variant={customPolicy !== 'inherit' ? 'primary' : 'neutral'}
-                size="sm"
-                data-testid="policy-inheritance-badge"
-              >
-                {customPolicy !== 'inherit' ? 'سياسة مخصصة' : 'موروثة'}
-              </Badge>
-            </div>
-            <select
-              id="custom-policy-select"
-              value={customPolicy}
-              onChange={(e) => setCustomPolicy(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              data-testid="custom-policy-select"
-            >
-              <option value="inherit">استخدام السياسة العامة الموروثة</option>
-              <option value="keep_no_cert">إتاحة المحتوى للقراءة دون إصدار شهادة (keep_no_cert)</option>
-              <option value="hide">حجب المحتوى التدريبي تماماً بعد الموعد (hide)</option>
-            </select>
           </div>
         </div>
 

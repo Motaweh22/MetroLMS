@@ -81,7 +81,9 @@ export const UserFilterBar: React.FC<UserFilterBarProps> = ({
             className="w-full py-2 px-3 text-xs bg-bg-alt/50 border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer"
           >
             <option value="all">كافة الأدوار (الكل)</option>
+            <option value="super_admin">{USER_ROLE_LABELS_AR.super_admin}</option>
             <option value="admin">{USER_ROLE_LABELS_AR.admin}</option>
+            <option value="assistant_admin">{USER_ROLE_LABELS_AR.assistant_admin}</option>
             <option value="lecturer">{USER_ROLE_LABELS_AR.lecturer}</option>
             <option value="user">{USER_ROLE_LABELS_AR.user}</option>
           </select>

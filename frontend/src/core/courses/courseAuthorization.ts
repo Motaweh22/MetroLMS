@@ -11,6 +11,8 @@
  *    to guarantee zero authorization drift across the application boundary.
  */
 
+import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
+
 export interface CourseInstructorContext {
   lecturerId?: string | null;
   coLecturers?: string[] | null;
@@ -38,6 +40,11 @@ export function isMatchingInstructorId(actorUserId: string, assignedLecturerId: 
   const assignedLower = assignedLecturerId.trim().toLowerCase();
 
   if (actorLower === assignedLower) return true;
+
+  // Canonical identity comparison (e.g. 'usr_lect_001' <-> 'USR003')
+  const canonicalActor = resolveCanonicalUserId(actorUserId).toLowerCase();
+  const canonicalAssigned = resolveCanonicalUserId(assignedLecturerId).toLowerCase();
+  if (canonicalActor === canonicalAssigned) return true;
 
   // Documented trusted synthetic demo lecturer alias ('usr_lect_002' <-> 'usr002' / 'USR002')
   const isSyntheticDemoPair =

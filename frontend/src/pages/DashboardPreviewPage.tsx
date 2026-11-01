@@ -9,15 +9,14 @@ import { Modal } from '@/shared/ui/Modal';
 import { ProgressBar } from '@/shared/ui/ProgressBar';
 import { NAVIGATION_SECTIONS } from '@/shared/config/navigation';
 import { useAuth } from '@/features/auth';
-
-const roleLabelsAr: Record<string, string> = {
-  admin: 'مسؤول النظام',
-  lecturer: 'محاضر معتمد',
-  user: 'متدرب فني',
-};
+import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
+import type { UserRole } from '@/core/auth/types';
 
 const roleBadgeVariants: Record<string, 'primary' | 'warning' | 'info'> = {
+  developer: 'primary',
+  super_admin: 'primary',
   admin: 'primary',
+  assistant_admin: 'warning',
   lecturer: 'warning',
   user: 'info',
 };
@@ -62,11 +61,13 @@ export const DashboardPreviewPage: React.FC = () => {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            <Link to="/design-system">
-              <Button variant="secondary" size="md" leftIcon="palette" className="shadow-xs font-bold">
-                استعراض معمل التصميم (Increment 1)
-              </Button>
-            </Link>
+            {user?.role === 'developer' && (
+              <Link to="/design-system">
+                <Button variant="secondary" size="md" leftIcon="palette" className="shadow-xs font-bold">
+                  استعراض معمل التصميم (Increment 1)
+                </Button>
+              </Link>
+            )}
 
             <Button
               variant="outline"
@@ -98,7 +99,7 @@ export const DashboardPreviewPage: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-lg">{user.name}</CardTitle>
                     <Badge variant={roleBadgeVariants[user.role] || 'neutral'}>
-                      {roleLabelsAr[user.role] || user.role}
+                      {ROLE_CANONICAL_LABELS_AR[user.role as UserRole] || user.role}
                     </Badge>
                   </div>
                   <CardDescription>
@@ -134,7 +135,7 @@ export const DashboardPreviewPage: React.FC = () => {
                   onClick={() => switchDemoUser('admin')}
                   className="text-xs"
                 >
-                  مسؤول النظام
+                  {ROLE_CANONICAL_LABELS_AR.admin}
                 </Button>
                 <Button
                   variant={user.role === 'lecturer' ? 'primary' : 'outline'}
@@ -143,7 +144,7 @@ export const DashboardPreviewPage: React.FC = () => {
                   onClick={() => switchDemoUser('lecturer')}
                   className="text-xs"
                 >
-                  محاضر معتمد
+                  {ROLE_CANONICAL_LABELS_AR.lecturer}
                 </Button>
                 <Button
                   variant={user.role === 'user' ? 'primary' : 'outline'}
@@ -152,7 +153,7 @@ export const DashboardPreviewPage: React.FC = () => {
                   onClick={() => switchDemoUser('user')}
                   className="text-xs"
                 >
-                  متدرب فني
+                  {ROLE_CANONICAL_LABELS_AR.user}
                 </Button>
               </div>
             </div>
@@ -222,21 +223,23 @@ export const DashboardPreviewPage: React.FC = () => {
           </CardContent>
         </Card>
 
-        <Card variant="default">
-          <CardHeader>
-            <div className="h-10 w-10 rounded-lg bg-warning-light flex items-center justify-center text-warning-dark mb-3">
-              <Icon name="palette" size="lg" />
-            </div>
-            <CardTitle>معمل التصميم متاح دائماً</CardTitle>
-            <CardDescription>استثناء المعمل من الحماية</CardDescription>
-          </CardHeader>
-          <CardContent className="text-xs text-text-muted space-y-2">
-            <p>
-              مسار /design-system غير محمي عمداً لتمكين المراجعين والمطورين من فحص المكونات حتى دون تسجيل الدخول.
-            </p>
-            <Badge variant="primary">متاح للعامة</Badge>
-          </CardContent>
-        </Card>
+        {user?.role === 'developer' && (
+          <Card variant="default">
+            <CardHeader>
+              <div className="h-10 w-10 rounded-lg bg-warning-light flex items-center justify-center text-warning-dark mb-3">
+                <Icon name="palette" size="lg" />
+              </div>
+              <CardTitle>معمل التصميم للمطورين</CardTitle>
+              <CardDescription>معمل التصميم ونظام المكونات</CardDescription>
+            </CardHeader>
+            <CardContent className="text-xs text-text-muted space-y-2">
+              <p>
+                مسار /design-system متاح حصرياً لحساب المطور لفحص واختبار المكونات.
+              </p>
+              <Badge variant="primary">مطور فقط</Badge>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Roadmap Progress Section */}
@@ -268,15 +271,14 @@ export const DashboardPreviewPage: React.FC = () => {
             {increments.map((inc) => (
               <div
                 key={inc.num}
-                className={`p-3 rounded-xl border text-center transition-all ${
-                  inc.status === 'completed'
-                    ? 'bg-success-light/40 border-success/30 text-success'
-                    : inc.status === 'active'
+                className={`p-3 rounded-xl border text-center transition-all ${inc.status === 'completed'
+                  ? 'bg-success-light/40 border-success/30 text-success'
+                  : inc.status === 'active'
                     ? 'bg-primary-light border-primary text-primary-dark font-bold shadow-xs'
                     : inc.status === 'next'
-                    ? 'bg-accent-coral/10 border-accent-coral/30 text-accent-coral'
-                    : 'bg-surface border-border text-text-muted/60 opacity-75'
-                }`}
+                      ? 'bg-accent-coral/10 border-accent-coral/30 text-accent-coral'
+                      : 'bg-surface border-border text-text-muted/60 opacity-75'
+                  }`}
               >
                 <div className="text-xs font-bold">مرحلة {inc.num}</div>
                 <div className="text-xs truncate font-medium mt-1">{inc.title}</div>
@@ -286,10 +288,10 @@ export const DashboardPreviewPage: React.FC = () => {
                       inc.status === 'completed'
                         ? 'success'
                         : inc.status === 'active'
-                        ? 'primary'
-                        : inc.status === 'next'
-                        ? 'warning'
-                        : 'neutral'
+                          ? 'primary'
+                          : inc.status === 'next'
+                            ? 'warning'
+                            : 'neutral'
                     }
                     className="text-[9px] px-1 py-0 font-normal"
                   >
@@ -380,9 +382,11 @@ export const DashboardPreviewPage: React.FC = () => {
             <li>
               <strong className="text-text-heading">استمرارية الجلسة (Session Persistence):</strong> بعد تسجيل الدخول، قم بإعادة تحميل الصفحة (Refresh)؛ وتأكد من بقاء الجلسة نشطة وعرض اسم المستخدم الصحيح دون فقدان.
             </li>
-            <li>
-              <strong className="text-text-heading">إتاحة معمل التصميم:</strong> تحقق من إمكانية زيارة رابط (/design-system) في أي وقت دون الحاجة لتسجيل الدخول.
-            </li>
+            {user?.role === 'developer' && (
+              <li>
+                <strong className="text-text-heading">معمل التصميم للمطور:</strong> تحقق من إمكانية زيارة رابط (/design-system) أثناء الدخول بحساب المطور.
+              </li>
+            )}
           </ol>
 
           <div className="pt-2 flex justify-end">

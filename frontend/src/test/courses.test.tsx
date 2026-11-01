@@ -472,7 +472,9 @@ describe('Increment 4: Course Catalog & Course Details (Read-Only) Verification'
       );
 
       // Verify AppLayout rendered navbar with user initials
-      expect(screen.getByText('أم')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('أم')).toBeInTheDocument();
+      });
 
       // Wait for courses catalog content
       await waitFor(() => {

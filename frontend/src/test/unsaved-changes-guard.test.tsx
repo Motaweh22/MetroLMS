@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { server } from '@/mocks/server';
 import {
   createMemoryRouter,
   RouterProvider,
@@ -54,6 +55,7 @@ const mockInitialCourse: Course = {
 };
 
 describe('Comprehensive Unsaved Changes Navigation Guard & Data Router Integration', () => {
+  beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -69,9 +71,13 @@ describe('Comprehensive Unsaved Changes Navigation Guard & Data Router Integrati
   });
 
   afterEach(() => {
+    server.resetHandlers();
     vi.restoreAllMocks();
     localStorage.clear();
+    authStorage.clearSession();
   });
+
+  afterAll(() => server.close());
 
   const renderBuilderWithDataRouter = (initialRoute = '/lecturer/builder/crs-guard-test') => {
     // Navigation bar with standard Link and NavLink representing Sidebar and Navbar

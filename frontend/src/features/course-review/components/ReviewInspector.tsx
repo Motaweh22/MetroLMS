@@ -25,6 +25,7 @@ export interface ReviewInspectorProps {
   autosaveStatus?: 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
   hasUnsavedChanges?: boolean;
   hasConflict?: boolean;
+  canDecide?: boolean;
 }
 
 function formatAuditTimestamp(timestamp?: string | null): string {
@@ -60,6 +61,7 @@ export const ReviewInspector: React.FC<ReviewInspectorProps> = ({
   autosaveStatus = 'idle',
   hasUnsavedChanges = false,
   hasConflict = false,
+  canDecide = true,
 }) => {
   const [activeTab, setActiveTab] = useState<'notes' | 'audit' | 'diff'>('notes');
   const [selectedDiffEntry, setSelectedDiffEntry] = useState<CourseAuditLogEntry | null>(null);
@@ -561,78 +563,89 @@ export const ReviewInspector: React.FC<ReviewInspectorProps> = ({
 
       {/* Sticky Bottom Review Action Footer */}
       <div className="p-3 border-t border-border bg-surface-muted/30 flex flex-col gap-2 shrink-0">
-        <div className="p-2 rounded-lg bg-surface border border-border text-[11px] text-text-muted leading-tight">
-          <div className="flex items-center gap-1 font-semibold text-text mb-0.5">
-            <Icon name="info" size="sm" className="text-primary" />
-            <span>قرارات الاعتماد الرسمية</span>
+        {canDecide ? (
+          <>
+            <div className="p-2 rounded-lg bg-surface border border-border text-[11px] text-text-muted leading-tight">
+              <div className="flex items-center gap-1 font-semibold text-text mb-0.5">
+                <Icon name="info" size="sm" className="text-primary" />
+                <span>قرارات الاعتماد الرسمية</span>
+              </div>
+              <span>
+                يمكنك تعديل المحتوى بحرية عبر وضع التعديل قبل اتخاذ أي قرار. الأزرار أدناه لإنهاء دورة المراجعة.
+              </span>
+            </div>
+
+            <Tooltip
+              content={approveTooltip}
+              disabled={!isApproveDisabled}
+              isTriggerDisabled={isApproveDisabled}
+              wrapperClassName="w-full"
+              testId="approve-tooltip"
+              align="center"
+            >
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => onOpenDecisionModal?.('approve')}
+                disabled={isApproveDisabled}
+                data-testid="action-approve-btn"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium justify-center text-xs h-9"
+              >
+                <Icon name="checkCircle" size="sm" />
+                <span>اعتماد ونشر المقرر</span>
+              </Button>
+            </Tooltip>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Tooltip
+                content={returnEditsTooltip}
+                disabled={!isReturnEditsDisabled}
+                isTriggerDisabled={isReturnEditsDisabled}
+                wrapperClassName="w-full"
+                testId="return-edits-tooltip"
+                align="start"
+              >
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onOpenDecisionModal?.('return_with_edits')}
+                  disabled={isReturnEditsDisabled}
+                  data-testid="action-return-edits-btn"
+                  className="text-xs justify-center h-9 w-full font-semibold"
+                >
+                  <span>إرجاع للمحاضر مع تعديلات الإدارة</span>
+                </Button>
+              </Tooltip>
+
+              <Tooltip
+                content={rejectTooltip}
+                disabled={!isRejectDisabled}
+                isTriggerDisabled={isRejectDisabled}
+                wrapperClassName="w-full"
+                testId="reject-tooltip"
+                align="end"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onOpenDecisionModal?.('reject')}
+                  disabled={isRejectDisabled}
+                  data-testid="action-reject-btn"
+                  className="text-xs text-danger border-danger/40 hover:bg-danger/10 justify-center h-9 w-full font-medium"
+                >
+                  <span>إعادة بطلب تعديلات</span>
+                </Button>
+              </Tooltip>
+            </div>
+          </>
+        ) : (
+          <div className="p-3 rounded-lg bg-surface border border-border text-xs text-text-muted flex items-start gap-2" data-testid="review-readonly-notice">
+            <Icon name="info" size="sm" className="text-primary mt-0.5 shrink-0" />
+            <span className="leading-relaxed">
+              استعراض المراجعة متاح للقراءة والتدقيق. اعتماد أو إرجاع القرارات مخصص لمدير النظام التنفيذي.
+            </span>
           </div>
-          <span>
-            يمكنك تعديل المحتوى بحرية عبر وضع التعديل قبل اتخاذ أي قرار. الأزرار أدناه لإنهاء دورة المراجعة.
-          </span>
-        </div>
-
-        <Tooltip
-          content={approveTooltip}
-          disabled={!isApproveDisabled}
-          isTriggerDisabled={isApproveDisabled}
-          wrapperClassName="w-full"
-          testId="approve-tooltip"
-          align="center"
-        >
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => onOpenDecisionModal?.('approve')}
-            disabled={isApproveDisabled}
-            data-testid="action-approve-btn"
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium justify-center text-xs h-9"
-          >
-            <Icon name="checkCircle" size="sm" />
-            <span>اعتماد ونشر المقرر</span>
-          </Button>
-        </Tooltip>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <Tooltip
-            content={returnEditsTooltip}
-            disabled={!isReturnEditsDisabled}
-            isTriggerDisabled={isReturnEditsDisabled}
-            wrapperClassName="w-full"
-            testId="return-edits-tooltip"
-            align="start"
-          >
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onOpenDecisionModal?.('return_with_edits')}
-              disabled={isReturnEditsDisabled}
-              data-testid="action-return-edits-btn"
-              className="text-xs justify-center h-9 w-full font-semibold"
-            >
-              <span>إرجاع للمحاضر مع تعديلات الإدارة</span>
-            </Button>
-          </Tooltip>
-
-          <Tooltip
-            content={rejectTooltip}
-            disabled={!isRejectDisabled}
-            isTriggerDisabled={isRejectDisabled}
-            wrapperClassName="w-full"
-            testId="reject-tooltip"
-            align="end"
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenDecisionModal?.('reject')}
-              disabled={isRejectDisabled}
-              data-testid="action-reject-btn"
-              className="text-xs text-danger border-danger/40 hover:bg-danger/10 justify-center h-9 w-full font-medium"
-            >
-              <span>إعادة بطلب تعديلات</span>
-            </Button>
-          </Tooltip>
-        </div>
+        )}
       </div>
 
       {/* Snapshot Diff Modal */}

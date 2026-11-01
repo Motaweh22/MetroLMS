@@ -91,18 +91,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Left Section in RTL: Actions, Notifications, & User Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Quick link to Design System Laboratory */}
-          <Link to="/design-system" tabIndex={-1}>
-            <Button
-              variant={isDesignSystemActive ? 'primary' : 'outline'}
-              size="sm"
-              leftIcon="palette"
-              className="text-xs sm:text-sm font-semibold"
-            >
-              <span className="hidden xs:inline">معمل التصميم</span>
-              <span className="xs:hidden">المعمل</span>
-            </Button>
-          </Link>
+          {/* Surface 11: Developer-only link to Design System Laboratory */}
+          {user?.role === 'developer' && (
+            <Link to="/design-system" tabIndex={-1}>
+              <Button
+                variant={isDesignSystemActive ? 'primary' : 'outline'}
+                size="sm"
+                leftIcon="palette"
+                className="text-xs sm:text-sm font-semibold"
+              >
+                <span className="hidden xs:inline">معمل التصميم</span>
+                <span className="xs:hidden">المعمل</span>
+              </Button>
+            </Link>
+          )}
 
           {/* Notifications Button with dynamic unread badge */}
           <div className="relative">

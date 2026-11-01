@@ -6,12 +6,17 @@ import { EnrollmentContext, type EnrollmentContextValue } from './context';
 import type { CourseEnrollment, EnrollmentResponse } from '@/core/courses/types';
 
 export const EnrollmentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const refetchEnrollments = useCallback(async (): Promise<void> => {
+    // If authentication revalidation is currently pending, wait until it settles
+    if (authLoading) {
+      return;
+    }
+
     // Only authenticated trainees can fetch their enrollments
     if (!isAuthenticated || user?.role !== 'user') {
       setEnrollments([]);
@@ -33,7 +38,7 @@ export const EnrollmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, user?.role]);
+  }, [authLoading, isAuthenticated, user?.role]);
 
   // Synchronize enrollments whenever the active session or persona changes
   useEffect(() => {
