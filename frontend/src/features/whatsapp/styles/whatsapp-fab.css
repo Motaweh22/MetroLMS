@@ -47,9 +47,10 @@
 .wa-fab-icon {
   width: 32px;
   height: 32px;
-  object-fit: contain;
+  flex-shrink: 0;
   display: block;
   user-select: none;
+  shape-rendering: geometricPrecision;
 }
 
 .wa-fab-menu {

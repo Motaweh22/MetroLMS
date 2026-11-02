@@ -993,5 +993,45 @@ describe('Increment 11 — Phase 5D: Context-Aware WhatsApp Contact System & Leg
         expect(screen.getByTestId('wa-fab-menu')).not.toHaveClass('show');
       });
     });
+
+    // WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13
+    it('renders crisp official WhatsApp brand vector icon without distorted paths or artifacts', () => {
+      renderWithProviders(<WhatsAppFloatingFab config={{ context: 'login' }} />);
+      const btn = screen.getByTestId('wa-fab-btn');
+      const svg = btn.querySelector('svg.wa-fab-icon');
+      expect(svg).toBeInTheDocument();
+      expect(svg).toHaveAttribute('viewBox', '0 0 24 24');
+      const path = svg?.querySelector('path');
+      expect(path).toBeInTheDocument();
+      const d = path?.getAttribute('d') || '';
+      // Verifies canonical brand vector path
+      expect(d).toContain('M12.04 2c-5.46 0-9.91');
+      // Verifies legacy distorted approximation path has been removed
+      expect(d).not.toContain('M12 2C6.477');
+    });
+
+    // WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13
+    it('renders crisp brand vector in login dialogs (forgot password and signup)', async () => {
+      renderWithProviders(<LoginPage />);
+      // 1. Open Forgot Password Modal
+      fireEvent.click(screen.getByRole('button', { name: /نسيت كلمة المرور؟/i }));
+      const forgotBtn = await screen.findByTestId('forgot-password-whatsapp-btn');
+      const forgotSvg = forgotBtn.querySelector('svg');
+      expect(forgotSvg).toBeInTheDocument();
+      const forgotPath = forgotSvg?.querySelector('path')?.getAttribute('d') || '';
+      expect(forgotPath).toContain('M12.04 2c-5.46 0-9.91');
+      expect(forgotPath).not.toContain('M12 2C6.477');
+      // Close modal
+      fireEvent.click(screen.getByRole('button', { name: 'إغلاق' }));
+
+      // 2. Open Signup Modal
+      fireEvent.click(screen.getByRole('button', { name: /إنشاء حساب جديد/i }));
+      const signupBtn = await screen.findByTestId('signup-whatsapp-btn');
+      const signupSvg = signupBtn.querySelector('svg');
+      expect(signupSvg).toBeInTheDocument();
+      const signupPath = signupSvg?.querySelector('path')?.getAttribute('d') || '';
+      expect(signupPath).toContain('M12.04 2c-5.46 0-9.91');
+      expect(signupPath).not.toContain('M12 2C6.477');
+    });
   });
 });
