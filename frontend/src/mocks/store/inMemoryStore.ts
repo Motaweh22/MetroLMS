@@ -1012,7 +1012,7 @@ class InMemoryStore {
    */
   public resolveAuthoritativeProgressRole(
     userId: string,
-    candidateRole?: UserRole,
+    _candidateRole?: UserRole,
     envMode: 'development' | 'production' = import.meta.env.DEV ? 'development' : 'production'
   ): {
     canonicalUserId: string;
@@ -1067,7 +1067,7 @@ class InMemoryStore {
         (acc) =>
           acc.user.id.toLowerCase() === canonicalUserId ||
           acc.user.id.toLowerCase() === rawUserId ||
-          (acc.user.username && acc.user.username.toLowerCase() === rawUserId)
+          (Boolean((acc.user as any).username) && (acc.user as any).username.toLowerCase() === rawUserId)
       );
       if (matchedDemo) {
         authoritativeRole = matchedDemo.user.role;
@@ -1540,7 +1540,7 @@ class InMemoryStore {
     const rawTraineeIds = (group.traineeIds || []).filter((tid) => {
       if (viewerRole && viewerRole !== 'developer') {
         const u = this.getManagedUserById(tid, viewerRole);
-        return Boolean(u) && u.role !== 'developer';
+        return Boolean(u && u.role !== 'developer');
       }
       return true;
     });
@@ -2152,7 +2152,7 @@ class InMemoryStore {
 
     if (typeof SYNTHETIC_DEMO_ACCOUNTS === 'object' && SYNTHETIC_DEMO_ACCOUNTS !== null) {
       for (const account of Object.values(SYNTHETIC_DEMO_ACCOUNTS)) {
-        if (account?.user && allowedRoles.includes(account.user.role) && account.user.status !== 'suspended') {
+        if (account?.user && allowedRoles.includes(account.user.role) && (account.user as any).status !== 'suspended') {
           const canonical = resolveCanonicalUserId(account.user.id);
           if (!excludeNormalized || canonical.toLowerCase() !== excludeNormalized) {
             ids.add(canonical);
@@ -2349,7 +2349,7 @@ class InMemoryStore {
     if (n.type === 'content_pending_review' && n.courseId) {
       const course = this.courses.find((c) => c.id.toLowerCase() === n.courseId?.toLowerCase());
       if (course) {
-        const isPending = course.status === 'pending_review' || Boolean(course.isUpdatePendingApproval);
+        const isPending = course.status === 'pending_admin' || (course.status as string) === 'pending_review' || Boolean(course.isUpdatePendingApproval);
         const isReviewerRole =
           viewerRole === 'admin' ||
           viewerRole === 'super_admin' ||
@@ -2385,16 +2385,16 @@ class InMemoryStore {
         viewerRole === 'assistant_admin';
 
       // An assigned course instructor receives the notification to monitor course discussion,
-      // but it is actionable ONLY if they hold explicit comment moderation authority.
-      // Otherwise, it remains strictly informational (not counted in Requires Action).
+      // but it is actionable ONLY if they hold explicit mutation authority (comments.ignore_report or comments.delete).
+      // 'comments.moderate' is strictly read-only for queue inspection and does not grant report resolution authority.
       const isCourseStaff =
         course && viewerRole === 'lecturer' && isUserAuthorizedCourseInstructor(course, canonicalUserId);
-      const hasModerationAuthority =
+      const hasMutationAuthority =
         Boolean(isCourseStaff) &&
-        (this.hasPermission({ id: canonicalUserId, role: 'lecturer' }, 'comments.moderate').granted ||
-          this.hasPermission({ id: canonicalUserId, role: 'lecturer' }, 'comments.ignore_report').granted);
+        (this.hasPermission({ id: canonicalUserId, role: 'lecturer' }, 'comments.ignore_report').granted ||
+          this.hasPermission({ id: canonicalUserId, role: 'lecturer' }, 'comments.delete').granted);
 
-      return Boolean(isReviewerRole || hasModerationAuthority);
+      return Boolean(isReviewerRole || hasMutationAuthority);
     }
 
     return false;
@@ -4017,7 +4017,7 @@ class InMemoryStore {
         action: 'approved',
         actorId: user.id,
         actorName: user.name,
-        actorRole: user.role,
+        actorRole: (user.role === 'developer' || user.role === 'assistant_admin' || user.role === 'super_admin' ? 'admin' : user.role) as 'admin' | 'lecturer',
         timestamp: decisionTimestamp,
         summary: shouldUseStaged
           ? `تم اعتماد ونشر المقرر مع تعديلات إدارة الجودة بواسطة ${user.name}`
@@ -4129,7 +4129,7 @@ class InMemoryStore {
         action: 'returned_with_admin_edits',
         actorId: user.id,
         actorName: user.name,
-        actorRole: user.role,
+        actorRole: (user.role === 'developer' || user.role === 'assistant_admin' || user.role === 'super_admin' ? 'admin' : user.role) as 'admin' | 'lecturer',
         timestamp: decisionTimestamp,
         summary: `تمت إعادة المقرر للمحاضر مع تعديلات إدارة الجودة بواسطة ${user.name}`,
         feedback,
@@ -4205,7 +4205,7 @@ class InMemoryStore {
         action: 'rejected',
         actorId: user.id,
         actorName: user.name,
-        actorRole: user.role,
+        actorRole: (user.role === 'developer' || user.role === 'assistant_admin' || user.role === 'super_admin' ? 'admin' : user.role) as 'admin' | 'lecturer',
         timestamp: decisionTimestamp,
         summary: `تم رفض المقرر وإعادته للمحاضر بواسطة ${user.name}`,
         feedback,
@@ -5796,6 +5796,12 @@ class InMemoryStore {
     const newlyAddedCourses = normalizedCourses.filter(
       (c) => !previousCourseIds.has(c.courseId.toLowerCase())
     );
+    const currentCourseIds = new Set(
+      normalizedCourses.map((c) => c.courseId.toLowerCase())
+    );
+    const removedCourses = (cycle.courses || []).filter(
+      (c) => !currentCourseIds.has(c.courseId.toLowerCase())
+    );
 
     cycle.courses = normalizedCourses;
     cycle.updatedAt = new Date().toISOString();
@@ -5865,9 +5871,25 @@ class InMemoryStore {
           dedupeKey: `group_course_assigned:${group.id}:${newlyAddedCourses[0].courseId}:${resolveCanonicalUserId(tid)}`,
         });
       }
+
+      if (removedCourses.length > 0 && group.adminStatus === 'active') {
+        const firstRemovedCourse = this.getCourseById(removedCourses[0].courseId);
+        this.createNotification({
+          userId: tid,
+          type: 'group_updated',
+          title: 'تحديث الخطة التدريبية للمجموعة',
+          message: firstRemovedCourse
+            ? `تم استبعاد المقرر التدريبي "${firstRemovedCourse.title}" من الخطة التدريبية للمجموعة "${group.name}".`
+            : `تم تحديث قائمة المقررات المسندة للمجموعة التدريبية "${group.name}".`,
+          courseId: removedCourses[0].courseId,
+          groupId: group.id,
+          targetUrl: `/my-groups/${group.id}`,
+          dedupeKey: `group_course_removed:${group.id}:${removedCourses[0].courseId}:${resolveCanonicalUserId(tid)}`,
+        });
+      }
     }
 
-    if (newlyAddedCourses.length > 0 && group.adminStatus === 'active') {
+    if ((newlyAddedCourses.length > 0 || removedCourses.length > 0) && group.adminStatus === 'active') {
       for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
         this.createNotification({
           userId: staffId,
@@ -7227,6 +7249,21 @@ class InMemoryStore {
     if (group) {
       group.foldersCount = Math.max(0, (group.foldersCount || allFolderIdsToDelete.length) - allFolderIdsToDelete.length);
       group.filesCount = Math.max(0, (group.filesCount || files.length) - files.length);
+
+      // If visible learning materials were removed from an active group, notify enrolled trainees of curriculum content update
+      if (group.adminStatus === 'active' && folder.isVisibleToTrainees && files.length > 0) {
+        for (const tid of group.traineeIds || []) {
+          this.createNotification({
+            userId: tid,
+            type: 'group_updated',
+            title: 'تحديث المواد التدريبية للمجموعة',
+            message: `تم تحديث وإزالة مجلد تعليمي ("${folder.name}") ومحتوياته في المجموعة التدريبية "${group.name}".`,
+            groupId: group.id,
+            targetUrl: `/my-groups/${group.id}`,
+            dedupeKey: `folder_deleted:${folder.id}:${resolveCanonicalUserId(tid)}`,
+          });
+        }
+      }
     }
 
     return { success: true, deletedFilesCount: files.length };
@@ -7332,6 +7369,22 @@ class InMemoryStore {
     file.uploadedByName = uploader.name;
     file.uploadedAt = new Date().toISOString();
 
+    const folder = this.materialFolders.find((f) => f.id === file.folderId);
+    const group = this.groups.find((g) => g.id.toLowerCase() === file.groupId.toLowerCase());
+    if (group && group.adminStatus === 'active' && file.isVisible && (!folder || folder.isVisibleToTrainees)) {
+      for (const tid of group.traineeIds || []) {
+        this.createNotification({
+          userId: tid,
+          type: 'group_updated',
+          title: 'تحديث مادة تدريبية في المجموعة',
+          message: `تم تحديث واستبدال الملف التعليمي "${file.title}" في المجموعة التدريبية "${group.name}".`,
+          groupId: group.id,
+          targetUrl: `/my-groups/${group.id}`,
+          dedupeKey: `material_file_replaced:${file.id}:${file.uploadedAt}:${resolveCanonicalUserId(tid)}`,
+        });
+      }
+    }
+
     return file;
   }
 
@@ -7350,7 +7403,24 @@ class InMemoryStore {
     if (folder) folder.filesCount = Math.max(0, (folder.filesCount || 1) - 1);
 
     const group = this.groups.find((g) => g.id.toLowerCase() === file.groupId.toLowerCase());
-    if (group) group.filesCount = Math.max(0, (group.filesCount || 1) - 1);
+    if (group) {
+      group.filesCount = Math.max(0, (group.filesCount || 1) - 1);
+
+      // If a visible learning file was deleted from an active group, notify enrolled trainees of material update
+      if (group.adminStatus === 'active' && file.isVisible && (!folder || folder.isVisibleToTrainees)) {
+        for (const tid of group.traineeIds || []) {
+          this.createNotification({
+            userId: tid,
+            type: 'group_updated',
+            title: 'تحديث المواد التدريبية للمجموعة',
+            message: `تمت إزالة الملف التدريبي "${file.title}" من المجموعة التدريبية "${group.name}".`,
+            groupId: group.id,
+            targetUrl: `/my-groups/${group.id}`,
+            dedupeKey: `material_file_deleted:${file.id}:${resolveCanonicalUserId(tid)}`,
+          });
+        }
+      }
+    }
 
     return { success: true, message: 'تم حذف الملف بنجاح.' };
   }
@@ -7502,7 +7572,7 @@ class InMemoryStore {
       ? (viewerRole && viewerRole !== 'developer'
           ? group.traineeIds.filter((tid) => {
               const u = this.getManagedUserById(tid, viewerRole);
-              return Boolean(u) && u.role !== 'developer';
+              return Boolean(u && u.role !== 'developer');
             })
           : group.traineeIds)
       : [];
@@ -8089,7 +8159,7 @@ class InMemoryStore {
 
   public setUserStatus(
     userId: string,
-    status: 'active' | 'suspended' | 'pending',
+    status: UserStatus,
     reason?: string,
     actor?: { id: string; role: UserRole }
   ): ManagedUserDTO {
@@ -9338,6 +9408,7 @@ class InMemoryStore {
       targetUser = {
         id: userId,
         name: 'مساعد مدير نظام تجريبي',
+        username: userId.toLowerCase(),
         email: `${userId.toLowerCase()}@metro.gov.eg`,
         role: 'assistant_admin',
         department: 'التشغيل والدعم الإداري',
@@ -9516,13 +9587,14 @@ class InMemoryStore {
 
         // Strict resource scope validation: scoped grants cannot act as global bypasses
         if (grant.resourceScope) {
-          if (grant.resourceScope.groupId) {
-            if (!context?.targetGroupId || context.targetGroupId !== grant.resourceScope.groupId) {
+          const scope = grant.resourceScope as { groupId?: string; courseId?: string; department?: string };
+          if (scope.groupId) {
+            if (!context?.targetGroupId || context.targetGroupId !== scope.groupId) {
               return false;
             }
           }
-          if (grant.resourceScope.courseId) {
-            if (!context?.targetCourseId || context.targetCourseId !== grant.resourceScope.courseId) {
+          if (scope.courseId) {
+            if (!context?.targetCourseId || context.targetCourseId !== scope.courseId) {
               return false;
             }
           }
@@ -9613,7 +9685,7 @@ class InMemoryStore {
           DEV_FINGERPRINTS && (
             r.reviewedBy === DEV_FINGERPRINTS.id ||
             r.decidedBy === DEV_FINGERPRINTS.id ||
-            r.reviewedByName === DEV_FINGERPRINTS.name ||
+            (r as any).reviewedByName === DEV_FINGERPRINTS.name ||
             r.decidedByName === DEV_FINGERPRINTS.name ||
             (r.reviewedBy && resolveCanonicalUserId(r.reviewedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId) ||
             (r.decidedBy && resolveCanonicalUserId(r.decidedBy).toLowerCase() === DEV_FINGERPRINTS.canonicalId)
@@ -9621,7 +9693,7 @@ class InMemoryStore {
         if (isDevReviewer) {
           r.reviewedBy = 'SYSTEM';
           if (r.decidedBy) r.decidedBy = 'SYSTEM';
-          r.reviewedByName = 'النظام';
+          (r as any).reviewedByName = 'النظام';
           if (r.decidedByName) r.decidedByName = 'النظام';
         }
         return r;
@@ -9676,10 +9748,10 @@ class InMemoryStore {
           contentUrl: it.contentUrl,
         })),
       })),
-      sections: (courseOrDraft.sections || []).map((s) => ({
+      sections: ((courseOrDraft as any).sections || []).map((s: any) => ({
         id: s.id,
         title: s.title,
-        lessons: (s.lessons || []).map((l) => ({
+        lessons: (s.lessons || []).map((l: any) => ({
           id: l.id,
           title: l.title,
           duration: l.duration,
@@ -10478,12 +10550,11 @@ class InMemoryStore {
         } else if (payload.action === 'update' && payload.folderId) {
           this.updateMaterialFolder(payload.folderId as string, {
             name: payload.name as string,
-            description: payload.description as string,
             isVisibleToTrainees: payload.isVisibleToTrainees as boolean,
           });
         } else {
           if (!payload.name) throw new MockStoreError('اسم المجلد مطلوب', 400);
-          this.createMaterialFolder(group.id, payload as CreateMaterialFolderDTO);
+          this.createMaterialFolder(group.id, payload as unknown as CreateMaterialFolderDTO);
         }
 
       } else if (
@@ -11693,7 +11764,7 @@ class InMemoryStore {
     }
     if (typeof SYNTHETIC_DEMO_ACCOUNTS === 'object' && SYNTHETIC_DEMO_ACCOUNTS !== null) {
       for (const account of Object.values(SYNTHETIC_DEMO_ACCOUNTS)) {
-        if (account?.user?.role === 'assistant_admin' && account.user.status !== 'suspended') {
+        if (account?.user?.role === 'assistant_admin' && (account.user as any).status !== 'suspended') {
           const canonical = resolveCanonicalUserId(account.user.id);
           if (canonical.toLowerCase() !== resolveCanonicalUserId(actor.id).toLowerCase()) {
             moderationRecipients.add(canonical);

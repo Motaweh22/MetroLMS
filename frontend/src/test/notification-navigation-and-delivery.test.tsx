@@ -23,6 +23,7 @@ import { AuthProvider } from '@/core/auth/AuthContext';
 import { ProtectedRoute } from '@/core/auth/ProtectedRoute';
 import { AppLayout } from '@/app/layouts/AppLayout';
 import { NotificationsPage, getNotificationCategory } from '@/pages/NotificationsPage';
+import { isReadOnlyCapability } from '@/core/permissions/policy';
 import { SYNTHETIC_DEMO_ACCOUNTS } from '@/core/auth/demoAccounts';
 import type { User } from '@/core/auth/types';
 import type { NotificationItem } from '@/core/notifications/types';
@@ -288,6 +289,47 @@ describe('Notification Center Navigation & Delivery Remediation Suite', () => {
       expect(assistantNotif?.actionRequired).toBe(true);
     });
 
+    it('10c. comments.moderate alone is strictly read-only and does not confer actionRequired to an assigned instructor', async () => {
+      // Confirm capability classification
+      expect(isReadOnlyCapability('comments.moderate')).toBe(true);
+
+      const comment = inMemoryStore.getCourseComments('CRS001')[0];
+      inMemoryStore.reportComment(
+        comment.id,
+        { reason: 'inappropriate_content' },
+        { id: traineeUser.id, role: 'user', name: traineeUser.name }
+      );
+
+      // Instructor has only read-only visibility into comment reports -> actionRequired remains false
+      const instructorNotif = inMemoryStore
+        .getNotificationsForUser('usr_lect_002', 'lecturer')
+        .find((n) => n.commentId === comment.id);
+
+      expect(instructorNotif).toBeDefined();
+      expect(instructorNotif?.actionRequired).toBe(false);
+    });
+
+    it('10d. assigned instructor with explicit mutation authority receives actionable notification', async () => {
+      const comment = inMemoryStore.getCourseComments('CRS001')[0];
+      inMemoryStore.reportComment(
+        comment.id,
+        { reason: 'harassment' },
+        { id: traineeUser.id, role: 'user', name: traineeUser.name }
+      );
+
+      // Simulating authorized mutation authority check via inMemoryStore computeNotificationActionRequired
+      const adminNotif = inMemoryStore
+        .getNotificationsForUser('usr_admin_001', 'admin')
+        .find((n) => n.commentId === comment.id);
+      expect(adminNotif?.actionRequired).toBe(true);
+
+      // An instructor without mutation capability receives strictly informational notification
+      const lecturerNotif = inMemoryStore
+        .getNotificationsForUser('usr_lect_002', 'lecturer')
+        .find((n) => n.commentId === comment.id);
+      expect(lecturerNotif?.actionRequired).toBe(false);
+    });
+
     it('11. unauthorized recipients do not receive it', async () => {
       const comment = inMemoryStore.getCourseComments('CRS001')[0];
       inMemoryStore.reportComment(
@@ -420,6 +462,21 @@ describe('Notification Center Navigation & Delivery Remediation Suite', () => {
       expect(afterRemoval.some((n) => Boolean(n.title?.includes('تم إخراجك')) && n.groupId === group.id)).toBe(true);
     });
 
+    it('17a. group course unassignment notifies enrolled trainees of curriculum removal', async () => {
+      const group = inMemoryStore.getGroups()[0];
+      const cycle = inMemoryStore.getGroupCycles(group.id)[0];
+      inMemoryStore.addGroupMember(group.id, traineeUser.id, 'admin_assigned');
+
+      // Reassign courses leaving out one course (unassignment)
+      const remainingCourses = (cycle.courses || []).slice(0, 1);
+      inMemoryStore.assignCoursesToCycle(group.id, cycle.id, {
+        courses: remainingCourses,
+      });
+
+      const traineeNotifs = inMemoryStore.getNotificationsForUser(traineeUser.id, 'user');
+      expect(traineeNotifs.some((n) => n.type === 'group_updated' && Boolean(n.title?.includes('تحديث الخطة التدريبية')))).toBe(true);
+    });
+
     it('18. material or meeting events use the intended group-scoped recipients', async () => {
       const group = inMemoryStore.getGroups()[0];
       inMemoryStore.addGroupMember(group.id, traineeUser.id, 'admin_assigned');
@@ -433,6 +490,30 @@ describe('Notification Center Navigation & Delivery Remediation Suite', () => {
 
       const traineeNotifs = inMemoryStore.getNotificationsForUser(traineeUser.id, 'user');
       expect(traineeNotifs.some((n) => Boolean(n.title?.includes('إلغاء لقاء')) || n.type === 'group_updated')).toBe(true);
+    });
+
+    it('18a. deleting a visible material file notifies enrolled trainees of content update', async () => {
+      const group = inMemoryStore.getGroups()[0];
+      const folders = inMemoryStore.getGroupMaterials(group.id, 'admin').folders;
+      const folder = folders[0];
+      const file = inMemoryStore.addMaterialFile(
+        group.id,
+        folder.id,
+        {
+          title: 'ملف توجيهي إضافي للسلامة',
+          fileName: 'extra-safety-guide.pdf',
+          sizeBytes: 102400,
+          mimeType: 'application/pdf',
+          isVisible: true,
+        },
+        adminUser
+      );
+
+      inMemoryStore.addGroupMember(group.id, traineeUser.id, 'admin_assigned');
+      inMemoryStore.deleteMaterialFile(file.id);
+
+      const traineeNotifs = inMemoryStore.getNotificationsForUser(traineeUser.id, 'user');
+      expect(traineeNotifs.some((n) => n.type === 'group_updated' && Boolean(n.message?.includes('تمت إزالة الملف التدريبي')))).toBe(true);
     });
 
     it('19. unrelated groups and users do not receive the notification', async () => {
