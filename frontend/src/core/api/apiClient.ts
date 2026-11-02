@@ -1,4 +1,10 @@
 import { authStorage } from '@/core/auth/authStorage';
+import {
+  isRolePreviewMutationBlocked,
+  setRolePreviewMutationBarrier,
+  triggerRolePreviewBlockedNotification,
+  ROLE_PREVIEW_MUTATION_BLOCKED_MESSAGE,
+} from '@/core/auth/previewMutationBarrier';
 
 /**
  * Standard typed API error representing network, HTTP, or data-parsing failures.
@@ -151,6 +157,30 @@ export async function apiClient<T>(
       ...headers,
     },
   };
+
+  // Visual Role Preview Mutation Barrier (MFR-40 / D-10)
+  // Intercept state-changing operations during Visual Role Preview to protect Developer authorization authority
+  const method = (customConfig.method || 'GET').toUpperCase();
+  const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  
+  // Authentication Lifecycle Exemption: Session termination (/api/auth/logout) must never be blocked
+  // by Visual Role Preview, ensuring the Developer can safely log out and terminate their session.
+  const isSessionTermination = url.includes('/api/auth/logout');
+
+  if (isMutation && isRolePreviewMutationBlocked()) {
+    if (isSessionTermination) {
+      // Deactivate the mutation barrier immediately upon session termination
+      setRolePreviewMutationBarrier(false);
+    } else {
+      triggerRolePreviewBlockedNotification();
+      throw new ApiError(
+        ROLE_PREVIEW_MUTATION_BLOCKED_MESSAGE,
+        403,
+        { code: 'ROLE_PREVIEW_MUTATION_BLOCKED', previewBlocked: true },
+        url
+      );
+    }
+  }
 
   let response: Response;
   try {

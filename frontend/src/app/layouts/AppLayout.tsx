@@ -4,7 +4,10 @@ import { Navbar, type NavbarUser } from '@/shared/ui/Navbar';
 import { Sidebar } from '@/shared/ui/Sidebar';
 import { MobileDrawer } from '@/shared/ui/MobileDrawer';
 import { Footer } from '@/shared/ui/Footer';
-import { useAuth } from '@/features/auth';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
+import { RolePreviewBanner } from '@/features/auth/components/RolePreviewBanner';
+import { RolePreviewModal } from '@/features/auth/components/RolePreviewModal';
 import { EnrollmentProvider } from '@/features/courses';
 import { NotificationProvider, useNotifications } from '@/features/notifications';
 import { useAutoRenewalScheduler } from '@/features/groups/hooks/useAutoRenewalScheduler';
@@ -13,20 +16,29 @@ import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
 const AppLayoutInner: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
+  const { effectiveUiRole, isPreviewing, previewLabelAr } = useRolePreview();
+
+  const previewRoleLabel = isPreviewing
+    ? (previewLabelAr || ROLE_CANONICAL_LABELS_AR[effectiveUiRole] || effectiveUiRole)
+    : (user ? (ROLE_CANONICAL_LABELS_AR[user.role] || user.role) : '');
 
   const navbarUser: NavbarUser | null = user
     ? {
         name: user.name,
-        role: user.role,
-        roleLabelAr: ROLE_CANONICAL_LABELS_AR[user.role] || user.role,
+        role: effectiveUiRole,
+        roleLabelAr: previewRoleLabel,
         initials: user.initials,
       }
     : null;
 
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col antialiased selection:bg-primary/20">
+      {/* Visual Role Preview Persistent Top Banner (D-10 / MFR-40) */}
+      <RolePreviewBanner onOpenSelector={() => setIsPreviewModalOpen(true)} />
+
       {/* Skip to Main Content Link for Keyboard Accessibility */}
       <a
         href="#main-content"
@@ -43,6 +55,7 @@ const AppLayoutInner: React.FC = () => {
         user={navbarUser}
         onLogout={logout}
         unreadCount={unreadCount}
+        onOpenRolePreview={() => setIsPreviewModalOpen(true)}
       />
 
       {/* Primary Shell Container */}
@@ -51,7 +64,7 @@ const AppLayoutInner: React.FC = () => {
         <Sidebar
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
-          userRole={user?.role}
+          userRole={effectiveUiRole}
         />
 
         {/* Scrollable Main Viewport + Footer */}
@@ -70,6 +83,12 @@ const AppLayoutInner: React.FC = () => {
         onClose={() => setIsMobileDrawerOpen(false)}
         user={navbarUser}
         onLogout={logout}
+      />
+
+      {/* Visual Role Preview Selector Modal */}
+      <RolePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={() => setIsPreviewModalOpen(false)}
       />
     </div>
   );

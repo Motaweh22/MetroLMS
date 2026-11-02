@@ -1,11 +1,21 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/features/auth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 
-export const Footer: React.FC = () => {
+export interface FooterProps {
+  /** Optional explicit role override for testing or scoped layout (does not grant Developer chrome) */
+  userRole?: string;
+}
+
+export const Footer: React.FC<FooterProps> = ({ userRole: _userRole }) => {
   const { user } = useAuth();
+  const { isPreviewing } = useRolePreview();
+  // Developer-only UI depends EXCLUSIVELY on actual authenticated AuthContext identity
+  // During visual preview of other roles, developer chrome is suppressed for fidelity
+  const isDeveloper = user?.role === 'developer' && !isPreviewing;
 
   return (
     <footer className="mt-auto border-t border-border bg-surface/80 py-6 px-4 sm:px-6 lg:px-8">
@@ -21,15 +31,22 @@ export const Footer: React.FC = () => {
 
         {/* System Build Status & Roadmap Link */}
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Badge variant="primary" className="text-[11px] px-2 py-0.5">
-            المرحلة 2: هيكل التطبيق (v0.2.0)
-          </Badge>
+          {isDeveloper && (
+            <Badge
+              variant="primary"
+              className="text-[11px] px-2 py-0.5"
+              data-testid="footer-prototype-badge"
+            >
+              المرحلة 2: هيكل التطبيق (v0.2.0)
+            </Badge>
+          )}
 
           {/* Surface 11: Developer-only link */}
-          {user?.role === 'developer' && (
+          {isDeveloper && (
             <Link
               to="/design-system"
               className="flex items-center gap-1.5 font-medium text-primary hover:text-primary-dark transition-colors"
+              data-testid="footer-design-system-link"
             >
               <Icon name="palette" size="sm" />
               <span>معمل التصميم</span>

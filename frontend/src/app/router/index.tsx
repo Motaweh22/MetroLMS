@@ -7,8 +7,10 @@ import {
   Route,
   Navigate,
   useParams,
+  useLocation,
 } from 'react-router-dom';
 import { AuthProvider } from '@/core/auth/AuthContext';
+import { RolePreviewProvider } from '@/core/auth/RolePreviewContext';
 import { ToastProvider } from '@/shared/ui/Toast';
 import { ProtectedRoute } from '@/core/auth/ProtectedRoute';
 import { AppLayout } from '@/app/layouts/AppLayout';
@@ -44,6 +46,7 @@ import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { UnexpectedErrorPage } from '@/pages/UnexpectedErrorPage';
 import { RouteErrorBoundary } from './RouteErrorBoundary';
 import { ErrorBoundary } from '@/shared/ui/Error';
+import { LoadingScreen } from '@/shared/ui/Loading';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 
 const AdminReviewParamRedirect: React.FC = () => {
@@ -70,12 +73,47 @@ const GroupsAdaptiveRedirect: React.FC = () => {
 };
 
 
+export interface DeveloperRouteGuardProps {
+  children: React.ReactNode;
+  /**
+   * Optional flag: if true, unauthenticated visitors are redirected to /login (preserving return location).
+   * If false or omitted, unauthenticated visitors receive standard NotFoundPage (404) for uniform INV-R8 non-disclosure.
+   */
+  redirectUnauthenticated?: boolean;
+}
+
+// Re-export RolePreviewProvider for convenient centralized router-level imports
 // eslint-disable-next-line react-refresh/only-export-components
-export const DeveloperRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
-  if (!isAuthenticated || user?.role !== 'developer') {
+export { RolePreviewProvider } from '@/core/auth/RolePreviewContext';
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const DeveloperRouteGuard: React.FC<DeveloperRouteGuardProps> = ({
+  children,
+  redirectUnauthenticated = false,
+}) => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <LoadingScreen
+        message="جارٍ التحقق من صلاحيات الوصول..."
+        subtitle="يرجى الانتظار لحظات للتحقق وتجهيز البيانات..."
+      />
+    );
+  }
+
+  if (!isAuthenticated) {
+    if (redirectUnauthenticated) {
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
     return <NotFoundPage standalone />;
   }
+
+  if (user?.role !== 'developer') {
+    return <NotFoundPage standalone />;
+  }
+
   return <>{children}</>;
 };
 
@@ -105,7 +143,7 @@ export const appRouteElements = (
     <Route
       path="/design-system"
       element={
-        <DeveloperRouteGuard>
+        <DeveloperRouteGuard redirectUnauthenticated={true}>
           <DesignSystemPreviewPage />
         </DeveloperRouteGuard>
       }
@@ -356,7 +394,9 @@ export const AppRouter: React.FC<{ initialEntries?: string[] }> = ({ initialEntr
     <ErrorBoundary>
       <AuthProvider>
         <ToastProvider>
-          <RouterProvider router={routerInstance} />
+          <RolePreviewProvider>
+            <RouterProvider router={routerInstance} />
+          </RolePreviewProvider>
         </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>

@@ -27,6 +27,8 @@ export interface NavbarProps {
   onLogout?: () => void;
   /** Unread notifications count */
   unreadCount?: number;
+  /** Optional callback to open Role Preview modal for Developer */
+  onOpenRolePreview?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,6 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   user,
   onLogout,
   unreadCount = 0,
+  onOpenRolePreview,
 }) => {
   const location = useLocation();
   const isDesignSystemActive = location.pathname.startsWith('/design-system');
@@ -93,17 +96,35 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Surface 11: Developer-only link to Design System Laboratory */}
           {user?.role === 'developer' && (
-            <Link to="/design-system" tabIndex={-1}>
+            <Link to="/design-system" tabIndex={-1} data-testid="navbar-design-system-link">
               <Button
                 variant={isDesignSystemActive ? 'primary' : 'outline'}
                 size="sm"
                 leftIcon="palette"
                 className="text-xs sm:text-sm font-semibold"
+                data-testid="navbar-design-system-button"
               >
                 <span className="hidden xs:inline">معمل التصميم</span>
                 <span className="xs:hidden">المعمل</span>
               </Button>
             </Link>
+          )}
+
+          {/* Developer Visual Role Preview Selector Trigger (MFR-40 / D-10) */}
+          {user?.role === 'developer' && onOpenRolePreview && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon="eye"
+              onClick={onOpenRolePreview}
+              className="text-xs sm:text-sm font-semibold"
+              data-testid="navbar-role-preview-btn"
+              aria-label="معاينة أدوار المنظومة بصرياً"
+            >
+              <span className="hidden xs:inline">معاينة الأدوار</span>
+              <span className="xs:hidden">المعاينة</span>
+            </Button>
           )}
 
           {/* Notifications Button with dynamic unread badge */}

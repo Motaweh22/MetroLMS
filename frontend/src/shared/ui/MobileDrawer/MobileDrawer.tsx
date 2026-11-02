@@ -3,6 +3,8 @@ import { Button } from '@/shared/ui/Button';
 import { SidebarItem } from '@/shared/ui/Sidebar/SidebarItem';
 import { NAVIGATION_SECTIONS, type NavItem, isNavItemVisibleForRole } from '@/shared/config/navigation';
 import { useLockBodyScroll } from '@/shared/hooks/useLockBodyScroll';
+import { useAuthContext } from '@/core/auth/useAuthContext';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 
 import type { NavbarUser } from '@/shared/ui/Navbar';
 
@@ -27,6 +29,8 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
   onLogout,
 }) => {
   const drawerRef = useRef<HTMLDivElement>(null);
+  const { user: authUser } = useAuthContext();
+  const { isPreviewing, previewRole } = useRolePreview();
 
   // Prevent background scroll while mobile drawer is open
   useLockBodyScroll(isOpen);
@@ -51,7 +55,17 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const isItemVisible = (item: NavItem) => isNavItemVisibleForRole(item, user?.role);
+  const isItemVisible = (item: NavItem) => {
+    // Surface 11 & MFR-25: Design System link depends EXCLUSIVELY on actual authenticated Developer identity
+    if (item.id === 'design-system') {
+      return authUser?.role === 'developer' && !isPreviewing;
+    }
+    // Group-scoped Assistant Lecturer: scoped strictly to assigned group, does not expose full course-builder
+    if (previewRole === 'assistant_lecturer' && item.id === 'course-builder') {
+      return false;
+    }
+    return isNavItemVisibleForRole(item, user?.role);
+  };
 
   return (
     <div
@@ -150,8 +164,11 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
           )}
 
           <div className="text-center pt-2 border-t border-border/40">
-            <span className="text-[11px] text-text-muted font-medium">
-              المنظومة التدريبية الذكية لمترو القاهرة (المرحلة 3)
+            <span
+              className="text-[11px] text-text-muted font-medium"
+              data-testid="mobile-drawer-brand-version"
+            >
+              المنظومة التدريبية الذكية لمترو القاهرة{user?.role === 'developer' && !isPreviewing ? ' (المرحلة 3)' : ''}
             </span>
           </div>
         </div>

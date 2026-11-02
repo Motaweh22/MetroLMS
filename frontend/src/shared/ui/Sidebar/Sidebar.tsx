@@ -2,7 +2,8 @@ import React from 'react';
 import { Button } from '@/shared/ui/Button';
 import { SidebarItem } from './SidebarItem';
 import { NAVIGATION_SECTIONS, type NavItem, isNavItemVisibleForRole } from '@/shared/config/navigation';
-import { useAuth } from '@/features/auth';
+import { useAuthContext } from '@/core/auth/useAuthContext';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 
 export interface SidebarProps {
   /** Whether the desktop sidebar is collapsed to icon-only width */
@@ -21,10 +22,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onItemSelect,
   userRole,
 }) => {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
+  const { isPreviewing, previewRole } = useRolePreview();
   const effectiveRole = userRole ?? user?.role;
 
-  const isItemVisible = (item: NavItem) => isNavItemVisibleForRole(item, effectiveRole);
+  const isItemVisible = (item: NavItem) => {
+    // Surface 11 & MFR-25: Design System link depends EXCLUSIVELY on actual authenticated Developer identity
+    // During active visual preview, suppress developer link to make preview authentic
+    if (item.id === 'design-system') {
+      return user?.role === 'developer' && !isPreviewing;
+    }
+    // Group-scoped Assistant Lecturer: scoped strictly to assigned group, does not expose full course-builder
+    if (previewRole === 'assistant_lecturer' && item.id === 'course-builder') {
+      return false;
+    }
+    return isNavItemVisibleForRole(item, effectiveRole);
+  };
 
   return (
     <aside
@@ -80,8 +93,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {!isCollapsed && (
           <div className="text-center pt-1 border-t border-border/40">
-            <span className="text-[10px] text-text-muted font-medium">
-              مترو القاهرة LMS • مرحلة 2
+            <span
+              className="text-[10px] text-text-muted font-medium"
+              data-testid="sidebar-brand-version"
+            >
+              {user?.role === 'developer' && !isPreviewing
+                ? 'مترو القاهرة LMS • مرحلة 2'
+                : 'مترو القاهرة LMS'}
             </span>
           </div>
         )}
