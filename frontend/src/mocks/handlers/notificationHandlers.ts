@@ -3,6 +3,42 @@ import { inMemoryStore, MockStoreError } from '../store/inMemoryStore';
 import { resolveAuthenticatedUser } from './resolveUser';
 
 /**
+ * Shared resolver for marking an individual notification as read.
+ * Authoritatively enforces canonical ownership: only the notification recipient may mark it read.
+ */
+function handleMarkRead({ request, params }: { request: Request; params: Record<string, string | readonly string[] | undefined> }) {
+  const user = resolveAuthenticatedUser(request);
+  if (!user) {
+    return HttpResponse.json(
+      { message: 'يجب تسجيل الدخول لتعديل الإشعار' },
+      { status: 401 }
+    );
+  }
+
+  const notificationId = params.id as string;
+  try {
+    const updated = inMemoryStore.markNotificationRead(notificationId, user.id, user.role);
+    const unreadCount = inMemoryStore.getUnreadNotificationsCount(user.id);
+
+    return HttpResponse.json(
+      {
+        notification: updated,
+        unreadCount,
+      },
+      { status: 200 }
+    );
+  } catch (err) {
+    if (err instanceof MockStoreError) {
+      return HttpResponse.json({ message: err.message }, { status: err.status });
+    }
+    return HttpResponse.json(
+      { message: 'فشل في تحديث حالة الإشعار' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * MSW v2 REST Interceptors for Notification Center
  */
 export const notificationHandlers = [
@@ -29,37 +65,12 @@ export const notificationHandlers = [
     );
   }),
 
-  // Mark a single notification as read
+  // Mark a single notification as read (supports both PATCH and POST)
   http.patch('/api/notifications/:id/read', ({ request, params }) => {
-    const user = resolveAuthenticatedUser(request);
-    if (!user) {
-      return HttpResponse.json(
-        { message: 'يجب تسجيل الدخول لتعديل الإشعار' },
-        { status: 401 }
-      );
-    }
-
-    const notificationId = params.id as string;
-    try {
-      const updated = inMemoryStore.markNotificationRead(notificationId, user.id, user.role);
-      const unreadCount = inMemoryStore.getUnreadNotificationsCount(user.id);
-
-      return HttpResponse.json(
-        {
-          notification: updated,
-          unreadCount,
-        },
-        { status: 200 }
-      );
-    } catch (err) {
-      if (err instanceof MockStoreError) {
-        return HttpResponse.json({ message: err.message }, { status: err.status });
-      }
-      return HttpResponse.json(
-        { message: 'فشل في تحديث حالة الإشعار' },
-        { status: 500 }
-      );
-    }
+    return handleMarkRead({ request, params });
+  }),
+  http.post('/api/notifications/:id/read', ({ request, params }) => {
+    return handleMarkRead({ request, params });
   }),
 
   // Mark all notifications for current user as read

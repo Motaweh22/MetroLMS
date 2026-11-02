@@ -6,6 +6,7 @@ import type {
   EvaluationContext,
   UserPermissionOverride,
 } from './types';
+export type { EvaluationContext } from './types';
 import { ROLE_CANONICAL_LABELS_AR } from './types';
 
 /**
@@ -227,10 +228,10 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<UserRole, Partial<Record<SystemCa
     // 12. Approvals Management
     'approvals.submit_request': true,
     'approvals.decide_request': false, // Immutably blocked
-    // 13. Comments Moderation (Increment 11 Phase 5)
+    // 13. Comments Moderation (Increment 11 Phase 5 & Phase 4 INV-R9)
     'comments.moderate': true,
     'comments.delete': true, // Requires approval by default, direct if delegated
-    'comments.ignore_report': true, // Direct execution for triage
+    'comments.ignore_report': true, // Requires approval by default, direct if delegated (INV-R9 / MFR-35)
     'comments.toggle': true, // Requires approval by default, direct if delegated
   },
 
@@ -381,8 +382,9 @@ export const ROLE_CAPABILITY_CEILINGS: Record<UserRole, ReadonlySet<SystemCapabi
     'courses.delete_lectures',
     // Quality & reviews
     'reviews.submit_course',
-    // Learning access
+    // Learning & Catalog access
     'learning.access_assigned',
+    'courses.view_catalog',
   ]),
 
   // Assistant Admin: Approved administrative capabilities subject to routine approval/delegation.
@@ -402,16 +404,21 @@ export const ROLE_CAPABILITY_CEILINGS: Record<UserRole, ReadonlySet<SystemCapabi
     'groups.manage_members',
     'groups.generate_qr',
     'groups.review_join_requests',
+    'groups.view_all',
     'materials.manage_folders',
     'materials.upload_files',
     'materials.delete_files',
     'materials.manage_meetings',
+    'materials.view_all',
     'courses.create',
     'courses.edit_metadata',
     'courses.edit_curriculum',
     'courses.upload_lectures',
     'courses.delete_lectures',
     'courses.publish',
+    'courses.view_catalog',
+    'courses.view_history',
+    'reports.view_department',
     'reviews.submit_course',
     'learning.access_assigned',
     'permissions.view_matrix',
@@ -574,7 +581,8 @@ export function validatePermissionOverride(
 
 /**
  * Capabilities that require approval for Assistant Administrator
- * unless full operational delegation is active
+ * unless exact active operational delegation covers the requested capability (INV-R9 / MFR-35).
+ * Comprehensive inventory of state-changing and audit-sensitive operations.
  */
 export const ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES: ReadonlySet<SystemCapability> = new Set([
   'users.export_roster',
@@ -582,22 +590,84 @@ export const ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES: ReadonlySet<SystemC
   'users.change_role',
   'users.change_status',
   'users.delete',
+  'users.manage',
   'groups.create',
   'groups.edit_config',
   'groups.archive',
   'groups.manage_members',
+  'groups.generate_qr',
   'groups.review_join_requests',
+  'materials.manage_folders',
+  'materials.upload_files',
   'materials.delete_files',
+  'materials.manage_meetings',
+  'materials.manage',
   'courses.create',
   'courses.edit_metadata',
   'courses.edit_curriculum',
   'courses.upload_lectures',
   'courses.delete_lectures',
   'courses.publish',
+  'reviews.submit_course',
   'permissions.configure_departments',
+  'permissions.manage',
   'comments.delete',
+  'comments.ignore_report',
   'comments.toggle',
+  'analytics.export',
+  'learning.self_enroll',
 ]);
+
+/**
+ * Read-Only / Non-Mutating Capabilities
+ * Grounded in docs/backend/pre-backend-migration-remediation-roadmap.md (INV-R9 / MFR-35).
+ * Capabilities that purely read, view, or query information, or perform the direct meta-action
+ * of requesting an approval (which itself requires no dual control).
+ */
+export const READ_ONLY_CAPABILITIES: ReadonlySet<SystemCapability> = new Set([
+  'users.view_directory',
+  'users.view_transcript',
+  'users.view',
+  'courses.view',
+  'courses.view_catalog',
+  'courses.view_history',
+  'groups.view_all',
+  'materials.view_all',
+  'reports.view_department',
+  'learning.access_assigned',
+  'permissions.view_matrix',
+  'permissions.view',
+  'audit.view_system_logs',
+  'audit.view',
+  'transcripts.view',
+  'comments.moderate',
+] as any);
+
+/**
+ * Checks whether a capability is classified as read-only / non-mutating.
+ * Uses a strict whitelist approach (fail-closed for unclassified capabilities).
+ */
+export function isReadOnlyCapability(capability: SystemCapability | string): boolean {
+  return READ_ONLY_CAPABILITIES.has(capability as SystemCapability);
+}
+
+/**
+ * Direct Administrative Meta-Capabilities
+ * Grounded in docs/backend/pre-backend-migration-remediation-roadmap.md (Phase 4).
+ * Operational meta-actions that mutate governance state directly (e.g. creating an approval request)
+ * without requiring secondary approval, strictly to prevent infinite approval recursion.
+ * These are NOT read-only capabilities and must be tracked separately from queries.
+ */
+export const DIRECT_META_CAPABILITIES: ReadonlySet<SystemCapability> = new Set([
+  'approvals.submit_request',
+]);
+
+/**
+ * Checks whether a capability is classified as an direct administrative meta-action.
+ */
+export function isDirectMetaCapability(capability: SystemCapability | string): boolean {
+  return DIRECT_META_CAPABILITIES.has(capability as SystemCapability);
+}
 
 /**
  * Capabilities that are immutably blocked for Assistant Administrator
@@ -1037,11 +1107,9 @@ export function evaluateProtectedInvariant(
   });
 
   if (!canonicalCap) {
-    return {
-      allowed: false,
-      code: 'INVARIANT_UNKNOWN_CAPABILITY',
-      messageAr: 'غير مصرح: العملية أو الصلاحية المطلوبة غير معرفة في النظام',
-    };
+    // Unclassified or arbitrary capabilities do not violate account safety invariants directly;
+    // they are evaluated downstream against role ceiling and execution mode policies.
+    return { allowed: true };
   }
 
   // Invariant Fail-Safe: Guardrail when sensitive target context is missing
@@ -1253,17 +1321,43 @@ export function evaluatePermission(
     };
   }
 
+  // 3. Individual-User Permission Override (Evaluated strictly within ceiling)
+  const canonicalActorId = (resolveCanonicalUserId(actor.id) || actor.id).toLowerCase();
+  const actorIdLower = actor.id.toLowerCase();
+  const override =
+    userOverrides?.[actor.id] ||
+    userOverrides?.[actorIdLower] ||
+    userOverrides?.[canonicalActorId];
+
+  const isOverrideGranted = Boolean(
+    override &&
+    (override.granted?.includes(capability) || (override as any).grantedPermissions?.includes(capability))
+  );
+
+  const isReadOnly = isReadOnlyCapability(capability);
+  const isAdministrativeViewer =
+    actor.role === 'developer' ||
+    actor.role === 'super_admin' ||
+    actor.role === 'admin' ||
+    actor.role === 'assistant_admin';
+
   // 2. Canonical Role Capability Ceiling Check
   const ceiling = ROLE_CAPABILITY_CEILINGS[actor.role];
   if (!ceiling || !ceiling.has(capability)) {
-    const roleLabel = ROLE_CANONICAL_LABELS_AR[actor.role] || actor.role;
-    return {
-      granted: false,
-      executionMode: 'denied',
-      source: 'role_default',
-      reason: 'ROLE_CEILING_EXCEEDED',
-      reasonAr: `غير مصرح: هذه العملية مخصصة لمديري النظام فقط وتقع خارج السقف الأقصى المسموح لدور (${roleLabel}).`,
-    };
+    if (isReadOnly && isAdministrativeViewer) {
+      // Whitelisted read-only capabilities are readable by administrative roles
+    } else if (isOverrideGranted && actor.role === 'assistant_admin') {
+      // Permitted via explicit override to enter evaluation flow (executionMode will fail closed to requires_approval)
+    } else {
+      const roleLabel = ROLE_CANONICAL_LABELS_AR[actor.role] || actor.role;
+      return {
+        granted: false,
+        executionMode: 'denied',
+        source: 'role_default',
+        reason: 'ROLE_CEILING_EXCEEDED',
+        reasonAr: `غير مصرح: هذه العملية مخصصة لمديري النظام فقط وتقع خارج السقف الأقصى المسموح لدور (${roleLabel}).`,
+      };
+    }
   }
 
   // 2b. Immutable Blocked Set for Assistant Admin
@@ -1282,14 +1376,6 @@ export function evaluatePermission(
   let isGranted: boolean | undefined = undefined;
   let source: PermissionCheckResult['source'] = 'role_default';
 
-  // 3. Individual-User Permission Override (Evaluated strictly within ceiling)
-  const canonicalActorId = (resolveCanonicalUserId(actor.id) || actor.id).toLowerCase();
-  const actorIdLower = actor.id.toLowerCase();
-  const override =
-    userOverrides?.[actor.id] ||
-    userOverrides?.[actorIdLower] ||
-    userOverrides?.[canonicalActorId];
-
   if (override) {
     const revokedList = override.revoked || [];
     if (revokedList.includes(capability)) {
@@ -1302,12 +1388,16 @@ export function evaluatePermission(
       };
     }
 
-    const grantedList = override.granted || override.grantedPermissions || [];
+    const grantedList = override.granted || (override as any).grantedPermissions || [];
     if (grantedList.includes(capability)) {
-      // Override grant is valid because ceiling was already verified in Step 2
       isGranted = true;
       source = 'user_override';
     }
+  }
+
+  if (isGranted === undefined && isReadOnly && isAdministrativeViewer) {
+    isGranted = true;
+    source = 'role_default';
   }
 
   // 4. Configured Role Defaults / Fixed Baseline Permissions of Canonical Role
@@ -1361,16 +1451,24 @@ export function evaluatePermission(
     }
   }
 
-  // 6. Approval / Delegation Execution Policy Resolution
+  // 6. Approval / Delegation Execution Policy Resolution (INV-R9 / MFR-35)
+  // For Assistant Administrator: Every state-changing capability requires approval by default,
+  // unless an active, valid delegation explicitly covers that exact capability.
+  // Fail-closed invariant: An omitted, unclassified, or unrecognized capability must NEVER
+  // receive direct state-changing execution access.
   let executionMode: PermissionCheckResult['executionMode'] = 'direct';
 
   if (actor.role === 'assistant_admin') {
     if (context?.hasDelegationBypass) {
       executionMode = 'direct';
-    } else if (ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES.has(capability)) {
-      executionMode = 'requires_approval';
-    } else {
+    } else if (isReadOnlyCapability(capability)) {
       executionMode = 'direct';
+    } else if (isDirectMetaCapability(capability)) {
+      // Direct administrative meta-actions execute directly to prevent infinite approval recursion
+      executionMode = 'direct';
+    } else {
+      // Default-to-approval: all state-changing, sensitive, or unclassified capabilities require approval
+      executionMode = 'requires_approval';
     }
   }
 

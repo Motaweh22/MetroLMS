@@ -150,6 +150,16 @@ export const DecisionModal: React.FC<DecisionModalProps> = ({
 
       const result = await reviewApi.executeReviewDecision(course.id, payload);
 
+      if ((result as any)?.approvalRequired) {
+        toast.info(
+          (result as any).message ||
+            'تم إرسال قرار مراجعة المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        navigate('/approvals');
+        onClose();
+        return;
+      }
+
       if (mode === 'approve') {
         toast.success('تم اعتماد ونشر المقرر بنجاح');
       } else if (mode === 'return_with_edits') {

@@ -75,6 +75,14 @@ export const GroupAttachmentsTab: React.FC<GroupAttachmentsTabProps> = ({
 
       const updatedResources = [...(group.resources || []), newAttachment];
       const updated = await groupsApi.updateGroup(groupId, { resources: updatedResources });
+      if ((updated as any)?.approvalRequired) {
+        setIsAddModalOpen(false);
+        toast.info(
+          (updated as any).message ||
+            'تم إرسال طلب إضافة المرفق للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       toast.success('تمت إضافة المادة المرفقة بنجاح');
       onUpdateGroup?.(updated);
       setIsAddModalOpen(false);
@@ -92,6 +100,14 @@ export const GroupAttachmentsTab: React.FC<GroupAttachmentsTabProps> = ({
     try {
       const updatedResources = (group.resources || []).filter((r) => r.id !== attachmentToDelete.id);
       const updated = await groupsApi.updateGroup(groupId, { resources: updatedResources });
+      if ((updated as any)?.approvalRequired) {
+        setAttachmentToDelete(null);
+        toast.info(
+          (updated as any).message ||
+            'تم إرسال طلب حذف المرفق للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       toast.success(`تم حذف المادة المرفقة: ${attachmentToDelete.title}`);
       onUpdateGroup?.(updated);
       setAttachmentToDelete(null);

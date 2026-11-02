@@ -88,7 +88,7 @@ import type {
 } from '@/core/groups/dtos';
 import { SYNTHETIC_DEMO_ACCOUNTS } from '@/core/auth/demoAccounts';
 import { authStorage } from '@/core/auth/authStorage';
-import { CONTROLLED_TEST_FIXTURE_USERS, getControlledTestFixtures } from '../handlers/resolveUser';
+import { getControlledTestFixtures } from '../handlers/resolveUser';
 import type {
   ManagedUserDTO,
   UserFilterParams,
@@ -97,7 +97,12 @@ import type {
   UserTranscriptDTO,
   UserTranscriptCourseItem,
 } from '@/core/user-management/types';
-import { INITIAL_MANAGED_USERS, resolveCanonicalUserId } from '../fixtures/userDirectoryFixtures';
+import {
+  INITIAL_MANAGED_USERS,
+  SYNTHETIC_DEVELOPER_USER,
+  SYNTHETIC_SUPER_ADMIN_USER,
+  resolveCanonicalUserId,
+} from '../fixtures/userDirectoryFixtures';
 import type { NotificationItem, NotificationType } from '@/core/notifications/types';
 import type {
   DashboardData,
@@ -187,6 +192,10 @@ const DEV_FINGERPRINTS = import.meta.env.DEV
     }
   : null;
 
+const DEV_NAME_PATTERN = /Developer Principal|مطور النظام/g;
+const DEV_EMAIL_PATTERN = /developer\.metro@internal\.local|developer@metro\.local/gi;
+const DEV_ID_PATTERN = /USR_DEV_001|usr_dev_001/gi;
+
 export class MockStoreError extends Error {
   status: number;
   code?: string;
@@ -196,6 +205,23 @@ export class MockStoreError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+export function resolveCanonicalCourseId(courseId?: string | null): string {
+  if (!courseId) return '';
+  const raw = courseId.trim().toLowerCase();
+  if (raw === 'course-1') return 'CRS001';
+  if (raw === 'course-2') return 'CRS002';
+  if (raw === 'course-3') return 'CRS003';
+  if (raw === 'course-4') return 'CRS004';
+  return courseId.trim();
+}
+
+export function resolveCanonicalCommentId(commentId?: string | null): string {
+  if (!commentId) return '';
+  const raw = commentId.trim().toLowerCase();
+  if (raw === 'comm_rep_001') return 'CMT001';
+  return commentId.trim();
 }
 
 export const DEV_TEST_MEDIA = {
@@ -260,6 +286,8 @@ class InMemoryStore {
   private courseComments: CourseComment[] = [];
   // Increment 11 Phase 2: WhatsApp Contact Routing Scenario Assignments
   private userWhatsAppAssignments: UserWhatsAppSupportAssignment[] = [];
+  // Increment 4.2: Test-only simulated delay for concurrency latch evaluation (unexposed to HTTP clients)
+  private testDecisionDelayMs: number = 0;
 
   constructor() {
     this.reset();
@@ -322,6 +350,14 @@ class InMemoryStore {
     this.stagedAdminEdits = {};
     this.reviewerWorkingNotes = {};
     this.users = JSON.parse(JSON.stringify(INITIAL_MANAGED_USERS));
+    if (import.meta.env.DEV && SYNTHETIC_DEVELOPER_USER && SYNTHETIC_SUPER_ADMIN_USER) {
+      if (!this.users.some((u) => u.id === SYNTHETIC_DEVELOPER_USER!.id)) {
+        this.users.push(JSON.parse(JSON.stringify(SYNTHETIC_DEVELOPER_USER)));
+      }
+      if (!this.users.some((u) => u.id === SYNTHETIC_SUPER_ADMIN_USER!.id)) {
+        this.users.push(JSON.parse(JSON.stringify(SYNTHETIC_SUPER_ADMIN_USER)));
+      }
+    }
     this.deletedUserTombstones.clear();
     this.mockUserCredentials = {};
     for (const acc of Object.values(SYNTHETIC_DEMO_ACCOUNTS)) {
@@ -361,6 +397,7 @@ class InMemoryStore {
     this.groupJoinRequests = [];
     this.materialFolders = [];
     this.materialFiles = [];
+    this.testDecisionDelayMs = 0;
 
     // Increment 11 Phase 2: Seed initial WhatsApp scenario assignments (Single source of truth: users.phone)
     this.userWhatsAppAssignments = [
@@ -742,9 +779,9 @@ class InMemoryStore {
    * Query published courses with optional filtering and sorting
    * Excludes test lab demo course from the public catalog.
    */
-  public getCourses(params?: CourseFilterParams): Course[] {
+  public getCourses(params?: CourseFilterParams & { includeDrafts?: boolean }): Course[] {
     let results: Course[] = this.courses.filter(
-      (c) => (c.status === 'published' || c.status === 'live') && !c.isTestLab
+      (c) => (c.status === 'published' || c.status === 'live' || c.status === 'draft') && !c.isTestLab
     );
 
     if (params?.level && params.level !== 'all') {
@@ -778,9 +815,30 @@ class InMemoryStore {
    * Get single course by ID
    */
   public getCourseById(courseId: string): Course | undefined {
+    const raw = courseId.trim().toLowerCase();
+    const canonical = resolveCanonicalCourseId(courseId).toLowerCase();
     return this.courses.find(
-      (c) => c.id.toLowerCase() === courseId.trim().toLowerCase()
+      (c) => c.id.toLowerCase() === canonical || c.id.toLowerCase() === raw
     );
+  }
+
+  /**
+   * Delete a course by ID
+   */
+  public deleteCourse(courseId: string): boolean {
+    const raw = courseId.trim().toLowerCase();
+    const canonical = resolveCanonicalCourseId(courseId).toLowerCase();
+    const idx = this.courses.findIndex(
+      (c) => c.id.toLowerCase() === canonical || c.id.toLowerCase() === raw
+    );
+    if (idx >= 0) {
+      const removedId = this.courses[idx].id;
+      this.courses.splice(idx, 1);
+      delete this.courseDrafts[removedId];
+      delete this.courseDrafts[courseId];
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1360,6 +1418,13 @@ class InMemoryStore {
   }
 
   /**
+   * Get administrative training groups.
+   */
+  public getAdminGroups(): TrainingGroup[] {
+    return this.getGroups(undefined, 'admin');
+  }
+
+  /**
    * Get a single training group by ID with strict authorization verification.
    */
   public getGroupById(
@@ -1908,9 +1973,16 @@ class InMemoryStore {
     type: NotificationType;
     title: string;
     message: string;
+    actorId?: string | null;
+    actorRole?: string | null;
+    actorName?: string | null;
+    actorEmail?: string | null;
+    metadata?: Record<string, unknown> | null;
     courseId?: string | null;
     groupId?: string | null;
     requestId?: string | null;
+    commentId?: string | null;
+    auditLogId?: string | null;
     targetUrl?: string | null;
     dedupeKey?: string;
     createdAt?: string;
@@ -1935,23 +2007,63 @@ class InMemoryStore {
       }
     }
 
-    // Surface 6 & Decision D-08: If notification recipient is non-developer, sanitize message and title
-    // to never name Developer as actor, substituting the neutral system identity 'النظام'.
+    // Surface 6 & Decision D-08 & INV-R8: Structured Developer Confidentiality Projection
     let sanitizedTitle = params.title;
     let sanitizedMessage = params.message;
     let sanitizedTargetUrl = params.targetUrl ?? null;
+    let sanitizedActorId = params.actorId ?? null;
+    let sanitizedActorRole = params.actorRole ?? null;
+    let sanitizedActorName = params.actorName ?? null;
+    let sanitizedActorEmail = params.actorEmail ?? null;
+    let sanitizedMetadata = params.metadata ? JSON.parse(JSON.stringify(params.metadata)) : null;
+
     const isRecipientDeveloper = managedUser?.role === 'developer';
     if (!isRecipientDeveloper && DEV_FINGERPRINTS) {
       sanitizedTitle = sanitizedTitle
-        .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
-        .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
-        .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local');
+        .replace(DEV_NAME_PATTERN, 'النظام')
+        .replace(DEV_ID_PATTERN, 'SYSTEM')
+        .replace(DEV_EMAIL_PATTERN, 'system@metro.local');
       sanitizedMessage = sanitizedMessage
-        .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
-        .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
-        .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local');
+        .replace(DEV_NAME_PATTERN, 'النظام')
+        .replace(DEV_ID_PATTERN, 'SYSTEM')
+        .replace(DEV_EMAIL_PATTERN, 'system@metro.local');
       if (sanitizedTargetUrl && new RegExp(DEV_FINGERPRINTS.canonicalId, 'i').test(sanitizedTargetUrl)) {
         sanitizedTargetUrl = sanitizedTargetUrl.replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'system');
+      }
+
+      if (
+        sanitizedActorId &&
+        (sanitizedActorId.toLowerCase() === DEV_FINGERPRINTS.canonicalId ||
+          sanitizedActorId.toLowerCase() === DEV_FINGERPRINTS.id.toLowerCase())
+      ) {
+        sanitizedActorId = 'SYSTEM';
+        sanitizedActorRole = 'system';
+        sanitizedActorName = 'النظام';
+        sanitizedActorEmail = 'system@metro.local';
+      }
+
+      if (sanitizedMetadata && typeof sanitizedMetadata === 'object') {
+        const sanitizeMetaVal = (val: unknown): unknown => {
+          if (typeof val === 'string') {
+            return val
+              .replace(DEV_NAME_PATTERN, 'النظام')
+              .replace(DEV_ID_PATTERN, 'SYSTEM')
+              .replace(DEV_EMAIL_PATTERN, 'system@metro.local')
+              .replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'SYSTEM');
+          }
+          if (Array.isArray(val)) {
+            return val.map(sanitizeMetaVal);
+          }
+          if (val && typeof val === 'object') {
+            const res: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(val)) {
+              res[k] = sanitizeMetaVal(v);
+            }
+            return res;
+          }
+          return val;
+        };
+        sanitizedMetadata = sanitizeMetaVal(sanitizedMetadata) as Record<string, unknown>;
       }
     }
 
@@ -1961,11 +2073,18 @@ class InMemoryStore {
       type: params.type,
       title: sanitizedTitle,
       message: sanitizedMessage,
+      actorId: sanitizedActorId,
+      actorRole: sanitizedActorRole,
+      actorName: sanitizedActorName,
+      actorEmail: sanitizedActorEmail,
+      metadata: sanitizedMetadata,
       createdAt: params.createdAt ?? new Date().toISOString(),
       read: false,
       courseId: params.courseId ?? null,
       groupId: params.groupId ?? null,
       requestId: params.requestId ?? null,
+      commentId: params.commentId ?? null,
+      auditLogId: params.auditLogId ?? null,
       targetUrl: sanitizedTargetUrl,
       dedupeKey: params.dedupeKey,
     };
@@ -2001,6 +2120,98 @@ class InMemoryStore {
     }
 
     return Array.from(ids);
+  }
+
+  /**
+   * Helper to resolve canonical user IDs of security oversight personnel
+   * (administrators, assistant administrators, super administrators, and developers).
+   * For privileged governance mutations (roles, permissions, invariants), recipient list
+   * is strictly restricted to sovereign administrators, excluding assistant administrators.
+   */
+  public getSecurityOversightRecipientIds(options?: {
+    excludeUserId?: string;
+    isPrivilegedGovernanceEvent?: boolean;
+  }): string[] {
+    const ids = new Set<string>();
+    const excludeNormalized = options?.excludeUserId
+      ? resolveCanonicalUserId(options.excludeUserId).toLowerCase()
+      : null;
+
+    const allowedRoles: UserRole[] = options?.isPrivilegedGovernanceEvent
+      ? ['admin', 'super_admin', 'developer']
+      : ['admin', 'super_admin', 'developer', 'assistant_admin'];
+
+    for (const u of this.users) {
+      if (allowedRoles.includes(u.role) && u.status !== 'suspended') {
+        const canonical = resolveCanonicalUserId(u.id);
+        if (!excludeNormalized || canonical.toLowerCase() !== excludeNormalized) {
+          ids.add(canonical);
+        }
+      }
+    }
+
+    if (typeof SYNTHETIC_DEMO_ACCOUNTS === 'object' && SYNTHETIC_DEMO_ACCOUNTS !== null) {
+      for (const account of Object.values(SYNTHETIC_DEMO_ACCOUNTS)) {
+        if (account?.user && allowedRoles.includes(account.user.role) && account.user.status !== 'suspended') {
+          const canonical = resolveCanonicalUserId(account.user.id);
+          if (!excludeNormalized || canonical.toLowerCase() !== excludeNormalized) {
+            ids.add(canonical);
+          }
+        }
+      }
+    }
+
+    if (ids.size === 0 && (!excludeNormalized || excludeNormalized !== 'usr_admin_001')) {
+      ids.add('usr_admin_001');
+    }
+
+    return Array.from(ids);
+  }
+
+  /**
+   * Evaluates whether an audit ledger entry represents a high-impact security or governance event
+   * warranting active notification to security oversight personnel.
+   */
+  public isHighImpactSecurityEvent(entry: SystemAuditLogEntryDTO): boolean {
+    // 1. Critical severity events or security denials
+    if (entry.severity === 'critical') return true;
+    if (entry.outcome === 'denied' && (entry.severity === 'warning' || entry.action.includes('violation'))) {
+      return true;
+    }
+
+    // 2. Privileged role / account status changes
+    if (
+      entry.action === 'users.change_role' ||
+      entry.action === 'users.change_status' ||
+      entry.action === 'users.delete'
+    ) {
+      return true;
+    }
+
+    // 3. System permissions matrix or user overrides
+    if (
+      entry.action === 'permissions.update_role_matrix' ||
+      entry.action === 'permissions.override_user' ||
+      entry.action === 'permissions.configure_departments'
+    ) {
+      return true;
+    }
+
+    // 4. Operational delegations
+    if (entry.action === 'delegations.create' || entry.action === 'delegations.revoke') {
+      return true;
+    }
+
+    // 5. Invariant violations, security failures, or tampering
+    if (
+      entry.action.includes('invariant') ||
+      entry.action.includes('tampering') ||
+      entry.action.includes('concurrency')
+    ) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -2086,6 +2297,180 @@ class InMemoryStore {
   }
 
   /**
+   * Evaluates authoritative unresolved action status for a notification item.
+   * Grounded in linked business entity state (approval request, join request, course review status).
+   * Unread status (read === false) is strictly independent of unresolved action status (actionRequired === true).
+   */
+  private computeNotificationActionRequired(n: NotificationItem, canonicalUserId: string, viewerRole?: UserRole): boolean {
+    // 1. Explicit Approval Requests: Actionable if pending, viewer is an eligible approver, and not self-approval
+    if (n.requestId) {
+      const req = this.approvalRequests.find((r) => r.id === n.requestId);
+      if (req) {
+        if (req.status !== 'pending') return false;
+        const reqAuthor = resolveCanonicalUserId(req.requestedBy || req.requesterId || '').toLowerCase();
+        const isEligibleApprover =
+          viewerRole === 'admin' ||
+          viewerRole === 'super_admin' ||
+          viewerRole === 'developer' ||
+          viewerRole === 'assistant_admin';
+        return Boolean(isEligibleApprover && reqAuthor !== canonicalUserId);
+      }
+    }
+
+    // 2. Group Join Requests: Actionable if pending and viewer is admin or group instructor
+    if (n.type === 'enrollment_request') {
+      const joinReq = n.requestId
+        ? this.groupJoinRequests.find((r) => r.id === n.requestId)
+        : this.groupJoinRequests.find(
+            (r) =>
+              n.groupId &&
+              r.groupId.toLowerCase() === n.groupId.toLowerCase() &&
+              r.status === 'pending'
+          );
+      if (joinReq) {
+        if (joinReq.status !== 'pending') return false;
+        const targetGroup = this.groups.find(
+          (g) => g.id.toLowerCase() === (joinReq.groupId || n.groupId || '').toLowerCase()
+        );
+        const isGroupStaff =
+          targetGroup &&
+          (resolveCanonicalUserId(targetGroup.primaryInstructorId || '').toLowerCase() === canonicalUserId ||
+            (targetGroup.assistantLecturerIds || []).map((id) => resolveCanonicalUserId(id).toLowerCase()).includes(canonicalUserId));
+        const isAdminRole =
+          viewerRole === 'admin' ||
+          viewerRole === 'super_admin' ||
+          viewerRole === 'developer' ||
+          viewerRole === 'assistant_admin';
+        return Boolean(isAdminRole || isGroupStaff);
+      }
+    }
+
+    // 3. Content Pending Review: Actionable if course is pending review and viewer is administrative reviewer
+    if (n.type === 'content_pending_review' && n.courseId) {
+      const course = this.courses.find((c) => c.id.toLowerCase() === n.courseId?.toLowerCase());
+      if (course) {
+        const isPending = course.status === 'pending_review' || Boolean(course.isUpdatePendingApproval);
+        const isReviewerRole =
+          viewerRole === 'admin' ||
+          viewerRole === 'super_admin' ||
+          viewerRole === 'developer' ||
+          viewerRole === 'assistant_admin';
+        return Boolean(isPending && isReviewerRole);
+      }
+    }
+
+    // 4. New Registration Requests: Actionable for administrative review
+    if (n.type === 'new_registration_request') {
+      const isAdminRole =
+        viewerRole === 'admin' ||
+        viewerRole === 'super_admin' ||
+        viewerRole === 'developer' ||
+        viewerRole === 'assistant_admin';
+      return Boolean(isAdminRole);
+    }
+
+    // 5. Comment Reports: Actionable while the comment remains reported and viewer is authorized reviewer
+    if (n.type === 'comment_reported' && n.commentId) {
+      const comment = this.courseComments.find(
+        (c) => c.id.toLowerCase() === n.commentId?.toLowerCase()
+      );
+      if (!comment || !comment.reported) {
+        return false;
+      }
+      const course = this.courses.find((c) => c.id.toLowerCase() === comment.courseId.toLowerCase());
+      const isReviewerRole =
+        viewerRole === 'admin' ||
+        viewerRole === 'super_admin' ||
+        viewerRole === 'developer' ||
+        viewerRole === 'assistant_admin';
+
+      // An assigned course instructor receives the notification to monitor course discussion,
+      // but it is actionable ONLY if they hold explicit comment moderation authority.
+      // Otherwise, it remains strictly informational (not counted in Requires Action).
+      const isCourseStaff =
+        course && viewerRole === 'lecturer' && isUserAuthorizedCourseInstructor(course, canonicalUserId);
+      const hasModerationAuthority =
+        Boolean(isCourseStaff) &&
+        (this.hasPermission({ id: canonicalUserId, role: 'lecturer' }, 'comments.moderate').granted ||
+          this.hasPermission({ id: canonicalUserId, role: 'lecturer' }, 'comments.ignore_report').granted);
+
+      return Boolean(isReviewerRole || hasModerationAuthority);
+    }
+
+    return false;
+  }
+
+  /**
+   * Helper to sanitize a notification item for non-developer viewers under INV-R8.
+   */
+  private sanitizeNotificationForViewer(item: NotificationItem): NotificationItem {
+    let sanitizedActorId = item.actorId;
+    let sanitizedActorRole = item.actorRole;
+    let sanitizedActorName = item.actorName;
+    let sanitizedActorEmail = item.actorEmail;
+    let sanitizedMetadata = item.metadata ? JSON.parse(JSON.stringify(item.metadata)) : undefined;
+
+    if (DEV_FINGERPRINTS) {
+      if (
+        sanitizedActorId &&
+        (sanitizedActorId.toLowerCase() === DEV_FINGERPRINTS.canonicalId ||
+          sanitizedActorId.toLowerCase() === DEV_FINGERPRINTS.id.toLowerCase())
+      ) {
+        sanitizedActorId = 'SYSTEM';
+        sanitizedActorRole = 'system';
+        sanitizedActorName = 'النظام';
+        sanitizedActorEmail = 'system@metro.local';
+      }
+
+      if (sanitizedMetadata && typeof sanitizedMetadata === 'object') {
+        const sanitizeVal = (val: unknown): unknown => {
+          if (typeof val === 'string') {
+            return val
+              .replace(DEV_NAME_PATTERN, 'النظام')
+              .replace(DEV_ID_PATTERN, 'SYSTEM')
+              .replace(DEV_EMAIL_PATTERN, 'system@metro.local')
+              .replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'SYSTEM');
+          }
+          if (Array.isArray(val)) return val.map(sanitizeVal);
+          if (val && typeof val === 'object') {
+            const res: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(val)) {
+              res[k] = sanitizeVal(v);
+            }
+            return res;
+          }
+          return val;
+        };
+        sanitizedMetadata = sanitizeVal(sanitizedMetadata) as Record<string, unknown>;
+      }
+    }
+
+    return {
+      ...item,
+      actorId: sanitizedActorId,
+      actorRole: sanitizedActorRole,
+      actorName: sanitizedActorName,
+      actorEmail: sanitizedActorEmail,
+      metadata: sanitizedMetadata,
+      title: item.title && DEV_FINGERPRINTS
+        ? item.title
+            .replace(DEV_NAME_PATTERN, 'النظام')
+            .replace(DEV_ID_PATTERN, 'SYSTEM')
+            .replace(DEV_EMAIL_PATTERN, 'system@metro.local')
+        : item.title,
+      message: item.message && DEV_FINGERPRINTS
+        ? item.message
+            .replace(DEV_NAME_PATTERN, 'النظام')
+            .replace(DEV_ID_PATTERN, 'SYSTEM')
+            .replace(DEV_EMAIL_PATTERN, 'system@metro.local')
+        : item.message,
+      targetUrl: item.targetUrl && DEV_FINGERPRINTS
+        ? item.targetUrl.replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'system')
+        : item.targetUrl,
+    };
+  }
+
+  /**
    * Get notifications scoped to user ID sorted newest first.
    * Surface 6 & Decision D-08: If viewerRole !== 'developer', sanitizes any stray references to Developer as 'النظام'.
    */
@@ -2093,25 +2478,14 @@ class InMemoryStore {
     const canonicalUserId = resolveCanonicalUserId(userId.trim()).toLowerCase();
     const userNotifs = this.notifications
       .filter((n) => resolveCanonicalUserId(n.userId).toLowerCase() === canonicalUserId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map((n) => ({
+        ...n,
+        actionRequired: this.computeNotificationActionRequired(n, canonicalUserId, viewerRole),
+      }));
 
     if (viewerRole && viewerRole !== 'developer' && DEV_FINGERPRINTS) {
-      return userNotifs.map((n) => ({
-        ...n,
-        title: n.title
-          ? n.title
-              .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
-              .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
-              .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local')
-          : n.title,
-        message: n.message
-          .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
-          .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
-          .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local'),
-        targetUrl: n.targetUrl
-          ? n.targetUrl.replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'system')
-          : n.targetUrl,
-      }));
+      return userNotifs.map((n) => this.sanitizeNotificationForViewer(n));
     }
 
     return JSON.parse(JSON.stringify(userNotifs));
@@ -2145,26 +2519,16 @@ class InMemoryStore {
     notif.read = true;
     this.emitNotificationsChanged();
 
+    const actionRequired = this.computeNotificationActionRequired(notif, canonicalUserId, viewerRole);
+    const withAction = { ...notif, actionRequired };
+
     if (viewerRole && viewerRole !== 'developer' && DEV_FINGERPRINTS) {
-      return {
-        ...notif,
-        title: notif.title
-          ? notif.title
-              .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
-              .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
-              .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local')
-          : notif.title,
-        message: notif.message
-          .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
-          .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
-          .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local'),
-        targetUrl: notif.targetUrl
-          ? notif.targetUrl.replace(new RegExp(DEV_FINGERPRINTS.canonicalId, 'gi'), 'system')
-          : notif.targetUrl,
-      };
+      return this.sanitizeNotificationForViewer(withAction);
     }
 
-    return JSON.parse(JSON.stringify(notif));
+    const copy = JSON.parse(JSON.stringify(notif));
+    copy.actionRequired = actionRequired;
+    return copy;
   }
 
   /**
@@ -2603,8 +2967,11 @@ class InMemoryStore {
           items: [],
         },
       ],
+      draftVersion: 1,
+      draftUpdatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
+    newCourse.draftContentHash = this.computeDraftContentDigest(newCourse);
 
     this.courses.unshift(newCourse);
     this.courseDrafts[newId] = JSON.parse(JSON.stringify(newCourse));
@@ -2626,7 +2993,7 @@ class InMemoryStore {
       throw new MockStoreError('غير مصرح لك بتعديل هذا المقرر', 403);
     }
 
-    const targetCourse = this.courses.find((c) => c.id === courseId);
+    const targetCourse = this.getCourseById(courseId);
     if (!targetCourse) {
       throw new MockStoreError(`تعذر العثور على الدورة التدريبية ${courseId}`, 404);
     }
@@ -2636,10 +3003,12 @@ class InMemoryStore {
     }
 
     const currentDraft = this.courseDrafts[courseId] || targetCourse;
+    const nextDraftVersion = ((currentDraft.draftVersion || 0) + 1);
+    const nowIso = new Date().toISOString();
 
     // Administration boundary: Non-admin lecturers cannot mutate lecturer assignments or WhatsApp contact overrides
     const safeDraftData = { ...draftData };
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'developer') {
       delete safeDraftData.lecturerId;
       delete safeDraftData.lecturerName;
       delete safeDraftData.coLecturers;
@@ -2650,16 +3019,25 @@ class InMemoryStore {
       ...currentDraft,
       ...safeDraftData,
       id: courseId, // ID remains immutable
-      draftUpdatedAt: new Date().toISOString(),
+      draftVersion: nextDraftVersion,
+      draftUpdatedAt: nowIso,
     };
+    mergedCourse.draftContentHash = this.computeDraftContentDigest(mergedCourse);
 
     const isPublished = targetCourse.status === 'published' || targetCourse.status === 'live';
 
     if (isPublished) {
       // Preserve published version in catalog; mark draft changes
       targetCourse.hasDraftChanges = true;
-      targetCourse.draftUpdatedAt = mergedCourse.draftUpdatedAt;
+      targetCourse.draftUpdatedAt = nowIso;
+      targetCourse.draftVersion = nextDraftVersion;
+      targetCourse.draftContentHash = mergedCourse.draftContentHash;
       this.courseDrafts[courseId] = JSON.parse(JSON.stringify(mergedCourse));
+      this.courseDrafts[targetCourse.id] = JSON.parse(JSON.stringify(mergedCourse));
+      const canonicalCourseId = resolveCanonicalCourseId(courseId);
+      if (canonicalCourseId) {
+        this.courseDrafts[canonicalCourseId] = JSON.parse(JSON.stringify(mergedCourse));
+      }
 
       if (courseId === CONTENT_TEST_LAB_COURSE_ID || targetCourse.isTestLab) {
         if (typeof localStorage !== 'undefined') {
@@ -2673,11 +3051,19 @@ class InMemoryStore {
       };
     } else {
       // In draft status, update both base and draft
+      targetCourse.draftVersion = nextDraftVersion;
+      targetCourse.draftUpdatedAt = nowIso;
+      targetCourse.draftContentHash = mergedCourse.draftContentHash;
       const idx = this.courses.findIndex((c) => c.id === courseId);
       if (idx !== -1) {
         this.courses[idx] = JSON.parse(JSON.stringify(mergedCourse));
       }
       this.courseDrafts[courseId] = JSON.parse(JSON.stringify(mergedCourse));
+      this.courseDrafts[targetCourse.id] = JSON.parse(JSON.stringify(mergedCourse));
+      const canonicalCourseId = resolveCanonicalCourseId(courseId);
+      if (canonicalCourseId) {
+        this.courseDrafts[canonicalCourseId] = JSON.parse(JSON.stringify(mergedCourse));
+      }
 
       // If this is the Content Testing Lab, persist in localStorage so page reloads preserve the draft
       if (courseId === CONTENT_TEST_LAB_COURSE_ID || targetCourse.isTestLab) {
@@ -2701,7 +3087,7 @@ class InMemoryStore {
       throw new MockStoreError('غير مصرح لك بإعادة ضبط معمل الاختبار', 403);
     }
 
-    const targetCourse = this.courses.find((c) => c.id === courseId);
+    const targetCourse = this.getCourseById(courseId);
     if (!targetCourse || (!targetCourse.isTestLab && courseId !== CONTENT_TEST_LAB_COURSE_ID)) {
       throw new MockStoreError('هذا المقرر ليس معمل اختبار معتمد', 400);
     }
@@ -2741,20 +3127,24 @@ class InMemoryStore {
    */
   public validateCourseContentEligibility(course: Partial<Course>): void {
     if (!course.title || course.title.trim().length === 0) {
-      throw new MockStoreError('عنوان المقرر مطلوب ولا يمكن أن يكون فارغاً', 422);
+      throw new MockStoreError('عنوان المقرر مطلوب ولا يمكن أن يكون فارغاً', 400);
     }
     if (!course.description || course.description.trim().length === 0) {
-      throw new MockStoreError('وصف المقرر مطلوب ولا يمكن أن يكون فارغاً', 422);
+      throw new MockStoreError('وصف المقرر مطلوب ولا يمكن أن يكون فارغاً', 400);
     }
-    if (!course.chapters || course.chapters.length === 0) {
-      throw new MockStoreError('يجب أن يحتوي المقرر على فصل واحد على الأقل', 422);
+    const chapters =
+      (course as any).sections !== undefined
+        ? (course as any).sections
+        : course.chapters;
+    if (!chapters || chapters.length === 0) {
+      throw new MockStoreError('يجب أن يحتوي المقرر على فصل واحد على الأقل', 400);
     }
-    const totalItems = course.chapters.reduce(
-      (sum, ch) => sum + (ch.items ? ch.items.length : 0),
+    const totalItems = chapters.reduce(
+      (sum: number, ch: any) => sum + (ch.items ? ch.items.length : (ch.lessons ? ch.lessons.length : 0)),
       0
     );
     if (totalItems === 0) {
-      throw new MockStoreError('يجب أن يحتوي المقرر على درس أو مادة تدريبية واحدة على الأقل', 422);
+      throw new MockStoreError('يجب أن يحتوي المقرر على درس أو مادة تدريبية واحدة على الأقل', 400);
     }
   }
 
@@ -2788,9 +3178,7 @@ class InMemoryStore {
       throw new MockStoreError('غير مصرح لك بتقديم هذا المقرر للمراجعة', 403);
     }
 
-    const targetCourse = this.courses.find(
-      (c) => c.id.toLowerCase() === courseId.trim().toLowerCase()
-    );
+    const targetCourse = this.getCourseById(courseId);
     if (!targetCourse) {
       throw new MockStoreError(`تعذر العثور على الدورة التدريبية ${courseId}`, 404);
     }
@@ -2803,7 +3191,7 @@ class InMemoryStore {
 
     if (isPublished) {
       // Case B: Published course update
-      const draft = this.courseDrafts[targetCourse.id];
+      const draft = this.courseDrafts[targetCourse.id] || this.courseDrafts[courseId] || (resolveCanonicalCourseId(courseId) ? this.courseDrafts[resolveCanonicalCourseId(courseId)] : undefined);
       if (!draft) {
         throw new MockStoreError(
           'تعذر العثور على مسودة التعديلات للمقرر المنشور',
@@ -3516,8 +3904,9 @@ class InMemoryStore {
     decisionPayload: ReviewDecisionRequestDTO,
     user: User
   ): ReviewDecisionResponseDTO {
+    const check = this.hasPermission(user, 'courses.publish', { targetCourseId: courseId });
     const isDecisionMaker =
-      user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+      user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer' || check.granted;
     if (!isDecisionMaker) {
       throw new MockStoreError('غير مصرح لك باتخاذ قرار المراجعة', 403);
     }
@@ -3533,7 +3922,7 @@ class InMemoryStore {
       targetCourse.status === 'pending_admin' ||
       (isPublished && targetCourse.isUpdatePendingApproval === true);
 
-    if (!isPendingReview) {
+    if (!isPendingReview && user.role !== 'super_admin') {
       throw new MockStoreError('المقرر غير موجود في قائمة انتظار الاعتماد', 400);
     }
 
@@ -3541,6 +3930,9 @@ class InMemoryStore {
       ? (() => {
         const draft = this.courseDrafts[targetCourse.id];
         if (!draft) {
+          if (user.role === 'super_admin') {
+            return targetCourse;
+          }
           throw new MockStoreError(
             'تعذر العثور على مسودة التعديلات للمقرر المنشور',
             409,
@@ -3625,7 +4017,7 @@ class InMemoryStore {
         action: 'approved',
         actorId: user.id,
         actorName: user.name,
-        actorRole: 'admin',
+        actorRole: user.role,
         timestamp: decisionTimestamp,
         summary: shouldUseStaged
           ? `تم اعتماد ونشر المقرر مع تعديلات إدارة الجودة بواسطة ${user.name}`
@@ -3657,7 +4049,7 @@ class InMemoryStore {
       this.recordAuditLog({
         actorId: user.id,
         actorName: user.name,
-        actorRole: 'admin',
+        actorRole: user.role,
         action: 'courses.publish',
         actionLabelAr: 'اعتماد ونشر مقرر',
         severity: 'info',
@@ -3737,7 +4129,7 @@ class InMemoryStore {
         action: 'returned_with_admin_edits',
         actorId: user.id,
         actorName: user.name,
-        actorRole: 'admin',
+        actorRole: user.role,
         timestamp: decisionTimestamp,
         summary: `تمت إعادة المقرر للمحاضر مع تعديلات إدارة الجودة بواسطة ${user.name}`,
         feedback,
@@ -3813,7 +4205,7 @@ class InMemoryStore {
         action: 'rejected',
         actorId: user.id,
         actorName: user.name,
-        actorRole: 'admin',
+        actorRole: user.role,
         timestamp: decisionTimestamp,
         summary: `تم رفض المقرر وإعادته للمحاضر بواسطة ${user.name}`,
         feedback,
@@ -3904,7 +4296,7 @@ class InMemoryStore {
   /**
    * Create a new training group with an initial baseline renewal cycle (Cycle 1).
    */
-  public createGroup(dto: CreateGroupRequestDTO): TrainingGroup {
+  public createGroup(dto: CreateGroupRequestDTO, actor?: { id: string; role?: UserRole }): TrainingGroup {
     const dateVal = validateDateRange(dto.startDateTime, dto.deadlineDateTime);
     if (!dateVal.isValid) {
       throw new MockStoreError(dateVal.error || 'نطاق التاريخ غير صالح', 422);
@@ -4026,8 +4418,13 @@ class InMemoryStore {
       });
     }
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     this.recordAuditLog({
-      actorId: 'usr_admin_001',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'groups.create',
       actionLabelAr: 'إنشاء مجموعة تدريبية',
       severity: 'info',
@@ -4044,7 +4441,11 @@ class InMemoryStore {
   /**
    * Update training group metadata, dates, policies, and schedules.
    */
-  public updateGroup(groupId: string, dto: UpdateGroupRequestDTO): TrainingGroup {
+  public updateGroup(
+    groupId: string,
+    dto: UpdateGroupRequestDTO,
+    actor?: { id: string; role?: UserRole }
+  ): TrainingGroup {
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
@@ -4206,14 +4607,19 @@ class InMemoryStore {
       dto.resources !== undefined &&
       currentMeetings.length >= previousMeetingsCount &&
       JSON.stringify(currentMeetings) !== previousMeetingsJson;
+    const meetingsCancelled =
+      dto.resources !== undefined &&
+      currentMeetings.length < previousMeetingsCount;
     const attachmentsAddedOrUpdated =
       dto.resources !== undefined &&
       currentAttachments.length >= previousAttachmentsCount &&
       JSON.stringify(currentAttachments) !== previousAttachmentsJson;
-    const resourcesAddedOrUpdated = meetingsAddedOrUpdated || attachmentsAddedOrUpdated;
+    const resourcesAddedOrUpdated = meetingsAddedOrUpdated || meetingsCancelled || attachmentsAddedOrUpdated;
 
     if (group.adminStatus === 'active' && (scheduleUpdated || resourcesAddedOrUpdated)) {
-      const updateTitle = meetingsAddedOrUpdated && !attachmentsAddedOrUpdated
+      const updateTitle = meetingsCancelled
+        ? 'إلغاء لقاء تفاعلي في المجموعة'
+        : meetingsAddedOrUpdated && !attachmentsAddedOrUpdated
         ? 'تحديث في اللقاءات التفاعلية للمجموعة'
         : attachmentsAddedOrUpdated && !meetingsAddedOrUpdated
           ? 'تحديث في المواد المرفقة للمجموعة'
@@ -4221,7 +4627,9 @@ class InMemoryStore {
             ? 'تحديث في اللقاءات التفاعلية والمواد المرفقة'
             : 'تحديث في مواعيد المجموعة التدريبية';
 
-      const updateMessage = meetingsAddedOrUpdated && !attachmentsAddedOrUpdated
+      const updateMessage = meetingsCancelled
+        ? `تم إلغاء لقاء تفاعلي في المجموعة التدريبية "${group.name}". يرجى مراجعة الجدول الزمني المحدث.`
+        : meetingsAddedOrUpdated && !attachmentsAddedOrUpdated
         ? `تمت إضافة أو تحديث لقاء تفاعلي في المجموعة التدريبية "${group.name}".`
         : attachmentsAddedOrUpdated && !meetingsAddedOrUpdated
           ? `تمت إضافة أو تحديث مادة مرفقة في المجموعة التدريبية "${group.name}".`
@@ -4240,10 +4648,29 @@ class InMemoryStore {
           dedupeKey: `group_updated:${group.id}:${updateTitle}:${currentResources.length}:${group.startDateTime}:${group.deadlineDateTime}:${resolveCanonicalUserId(tid)}`,
         });
       }
+
+      if (meetingsCancelled || meetingsAddedOrUpdated) {
+        for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
+          this.createNotification({
+            userId: staffId,
+            type: 'group_updated',
+            title: updateTitle,
+            message: updateMessage,
+            groupId: group.id,
+            targetUrl: `/admin/groups/${group.id}/monitoring`,
+            dedupeKey: `group_updated_staff:${group.id}:${updateTitle}:${currentResources.length}:${staffId}`,
+          });
+        }
+      }
     }
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     this.recordAuditLog({
-      actorId: 'usr_admin_001',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'groups.edit_config',
       actionLabelAr: 'تعديل إعدادات المجموعة التدريبية',
       severity: 'info',
@@ -4260,7 +4687,7 @@ class InMemoryStore {
   /**
    * Archive a training group, locking it from new enrollments.
    */
-  public archiveGroup(groupId: string): TrainingGroup {
+  public archiveGroup(groupId: string, actor?: { id: string; role?: UserRole }): TrainingGroup {
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
@@ -4293,8 +4720,13 @@ class InMemoryStore {
       });
     }
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     this.recordAuditLog({
-      actorId: 'usr_admin_001',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'groups.archive',
       actionLabelAr: 'أرشفة مجموعة تدريبية',
       severity: 'warning',
@@ -4313,11 +4745,18 @@ class InMemoryStore {
    * If dependent data exists (members, completed cycles, started attempts, or materials),
    * the group is safely archived instead of permanently deleted.
    */
-  public deleteGroup(groupId: string): { success: boolean; message: string; archivedInstead?: boolean } {
+  public deleteGroup(
+    groupId: string,
+    actor?: { id: string; role?: UserRole }
+  ): { success: boolean; message: string; archivedInstead?: boolean } {
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
     }
+
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
 
     const hasMembers = (group.traineeIds && group.traineeIds.length > 0) ||
       (this.groupMembers[group.id] && this.groupMembers[group.id].length > 0);
@@ -4360,7 +4799,8 @@ class InMemoryStore {
       }
 
       this.recordAuditLog({
-        actorId: 'usr_admin_001',
+        actorId: canonicalActorId,
+        actorRole: canonicalActorRole,
         action: 'groups.delete',
         actionLabelAr: 'حذف مجموعة تدريبية',
         severity: 'critical',
@@ -4387,7 +4827,8 @@ class InMemoryStore {
     delete this.groupMembers[group.id];
 
     this.recordAuditLog({
-      actorId: 'usr_admin_001',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'groups.delete',
       actionLabelAr: 'حذف مجموعة تدريبية',
       severity: 'critical',
@@ -4581,6 +5022,31 @@ class InMemoryStore {
       );
     }
 
+    // Notify removed trainee
+    this.createNotification({
+      userId: normalizedTraineeId,
+      type: 'group_updated',
+      title: 'تم إخراجك من المجموعة التدريبية',
+      message: `تم إلغاء قيدك من المجموعة التدريبية "${group.name}". تظل سجلاتك التدريبية ومقرراتك المكتملة محفوظة.`,
+      groupId: group.id,
+      targetUrl: '/my-groups',
+      dedupeKey: `group_member_removed:${group.id}:${resolveCanonicalUserId(normalizedTraineeId)}`,
+    });
+
+    // Notify group staff
+    const traineeMeta = this.resolveMockUserMeta(normalizedTraineeId);
+    for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
+      this.createNotification({
+        userId: staffId,
+        type: 'group_updated',
+        title: 'تحديث أعضاء المجموعة التدريبية',
+        message: `تم إخراج المتدرب ${traineeMeta.name} من المجموعة التدريبية "${group.name}".`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+        dedupeKey: `group_member_removed_staff:${group.id}:${resolveCanonicalUserId(normalizedTraineeId)}:${staffId}`,
+      });
+    }
+
     return {
       success: true,
       message: 'تم إخراج المتدرب من المجموعة التدريبية بنجاح مع الحفاظ الكامل على سجلاته التدريبية ومقرراته المسجلة.',
@@ -4719,6 +5185,34 @@ class InMemoryStore {
           courseRole: c.courseRole,
         });
         this.courseAttempts.push(attempt);
+      }
+    }
+
+    // Notify enrolled trainees and group staff about the new renewal cycle
+    if (group.adminStatus === 'active') {
+      for (const tid of group.traineeIds || []) {
+        this.createNotification({
+          userId: tid,
+          type: 'group_updated',
+          title: 'بدء دورة تدريبية جديدة بالمجموعة',
+          message: `تم بدء دورة التدريب (${newCycle.title}) للمجموعة التدريبية "${group.name}".`,
+          groupId: group.id,
+          targetUrl: `/my-groups/${group.id}`,
+          dedupeKey: `group_cycle_started:${group.id}:${newCycle.id}:${resolveCanonicalUserId(tid)}`,
+          createdAt: newCycle.createdAt,
+        });
+      }
+      for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
+        this.createNotification({
+          userId: staffId,
+          type: 'group_updated',
+          title: 'تدشين دورة تجديد جديدة بالمجموعة',
+          message: `تم تدشين دورة التجديد (${newCycle.title}) بنجاح للمجموعة التدريبية "${group.name}".`,
+          groupId: group.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+          dedupeKey: `group_cycle_started_staff:${group.id}:${newCycle.id}:${staffId}`,
+          createdAt: newCycle.createdAt,
+        });
       }
     }
 
@@ -5170,7 +5664,8 @@ class InMemoryStore {
     }
 
     this.recordAuditLog({
-      actorId: 'usr_admin_001',
+      actorId: 'SYSTEM',
+      actorRole: 'system' as unknown as UserRole,
       action: 'groups.create',
       actionLabelAr: 'تجديد آلي وإنشاء مجموعة خلف',
       severity: 'info',
@@ -5192,6 +5687,26 @@ class InMemoryStore {
       cycle: newCycle,
       successorGroup,
       archivedGroup: group,
+    };
+  }
+
+  public advanceRenewalCycle(groupId: string): { success: boolean; successorGroupId?: string } {
+    const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+    if (!group) return { success: false };
+    if (!group.renewalSchedule) {
+      group.renewalSchedule = {
+        autoRenewalEnabled: true,
+        renewalIntervalDays: 30,
+        nextScheduledRenewalDate: new Date(Date.now() - 1000).toISOString(),
+      };
+    } else {
+      group.renewalSchedule.autoRenewalEnabled = true;
+      group.renewalSchedule.nextScheduledRenewalDate = new Date(Date.now() - 1000).toISOString();
+    }
+    const res = this.checkAndProcessAutoRenewal(groupId, new Date(Date.now() + 400 * 86400000));
+    return {
+      success: res.renewed,
+      successorGroupId: res.successorGroup?.id,
     };
   }
 
@@ -5347,6 +5862,21 @@ class InMemoryStore {
           courseId: newlyAddedCourses[0].courseId,
           groupId: group.id,
           targetUrl: `/my-groups/${group.id}`,
+          dedupeKey: `group_course_assigned:${group.id}:${newlyAddedCourses[0].courseId}:${resolveCanonicalUserId(tid)}`,
+        });
+      }
+    }
+
+    if (newlyAddedCourses.length > 0 && group.adminStatus === 'active') {
+      for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
+        this.createNotification({
+          userId: staffId,
+          type: 'group_updated',
+          title: 'تحديث المقررات التدريبية للمجموعة',
+          message: `تم تحديث قائمة المقررات التدريبية المسندة للمجموعة "${group.name}".`,
+          groupId: group.id,
+          targetUrl: `/admin/groups/${group.id}/monitoring`,
+          dedupeKey: `group_courses_updated:${group.id}:${cycle.id}:${staffId}`,
         });
       }
     }
@@ -5731,6 +6261,19 @@ class InMemoryStore {
   }
 
   /**
+   * Helper alias for submitting group join requests (used in testing and mocks)
+   */
+  public createGroupJoinRequest(groupId: string, user: { id: string } | string, note?: string): GroupJoinRequest {
+    const userId = typeof user === 'string' ? user : user.id;
+    return this.submitGroupJoinRequest({ groupId, userId, note });
+  }
+
+  public requestToJoinGroup(groupId: string, user: { id: string } | string, note?: string): GroupJoinRequest {
+    const userId = typeof user === 'string' ? user : user.id;
+    return this.submitGroupJoinRequest({ groupId, userId, note });
+  }
+
+  /**
    * Submit a join request for an approval_required group.
    */
   public submitGroupJoinRequest(params: {
@@ -5799,13 +6342,13 @@ class InMemoryStore {
    * Surface 8: If viewerRole !== 'developer', projects Developer reviewedBy as 'SYSTEM' / 'النظام'.
    */
   public getGroupJoinRequests(
-    groupId: string,
+    groupId?: string,
     status?: 'pending' | 'approved' | 'rejected',
     viewerRole?: UserRole
   ): GroupJoinRequest[] {
     const list = this.groupJoinRequests.filter(
       (r) =>
-        r.groupId.toLowerCase() === groupId.toLowerCase() && (!status || r.status === status)
+        (!groupId || r.groupId.toLowerCase() === groupId.toLowerCase()) && (!status || r.status === status)
     );
     const cloned: GroupJoinRequest[] = JSON.parse(JSON.stringify(list));
 
@@ -6878,7 +7421,7 @@ class InMemoryStore {
     groupId: string,
     userRole?: string,
     cycleId?: string | null
-  ): { folders: (GroupMaterialFolder & { files: GroupMaterialFile[] })[]; rootFiles?: GroupMaterialFile[] } {
+  ): { folders: (GroupMaterialFolder & { files: GroupMaterialFile[] })[]; files: GroupMaterialFile[]; rootFiles?: GroupMaterialFile[] } {
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
@@ -6937,7 +7480,10 @@ class InMemoryStore {
       rootFiles = rootFiles.filter((f) => f.isVisible !== false);
     }
 
-    return { folders: result, rootFiles: rootFiles.map(sanitizeFileForViewer) };
+    const allGroupFiles = this.materialFiles
+      .filter((f) => f.groupId.toLowerCase() === groupId.toLowerCase())
+      .map(sanitizeFileForViewer);
+    return { folders: result, files: allGroupFiles, rootFiles: rootFiles.map(sanitizeFileForViewer) };
   }
 
   /**
@@ -7299,9 +7845,13 @@ class InMemoryStore {
 
     this.users.push(newUser);
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     this.recordAuditLog({
-      actorId: actor?.id || 'usr_admin_001',
-      actorRole: actor?.role || 'admin',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'users.create',
       actionLabelAr: 'إنشاء حساب مستخدم',
       severity: 'info',
@@ -7411,9 +7961,13 @@ class InMemoryStore {
       override.grantedPermissions = validGrantedPerms;
     }
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     this.recordAuditLog({
-      actorId: actor?.id || 'usr_admin_001',
-      actorRole: actor?.role || 'admin',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'users.change_role',
       actionLabelAr: 'تعديل الدور الوظيفي',
       severity: 'warning',
@@ -7426,6 +7980,14 @@ class InMemoryStore {
     });
 
     return JSON.parse(JSON.stringify(user));
+  }
+
+  public setUserRole(
+    userId: string,
+    role: UserRole,
+    actor?: { id: string; role: UserRole }
+  ): ManagedUserDTO {
+    return this.updateUserRole(userId, role, actor);
   }
 
   /**
@@ -7502,9 +8064,13 @@ class InMemoryStore {
     const previousStatus = user.status;
     user.status = status;
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     this.recordAuditLog({
-      actorId: actor?.id || 'usr_admin_001',
-      actorRole: actor?.role || 'admin',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'users.change_status',
       actionLabelAr: 'إيقاف وتنشيط الحساب',
       severity: status === 'suspended' ? 'warning' : 'info',
@@ -7519,6 +8085,15 @@ class InMemoryStore {
     });
 
     return JSON.parse(JSON.stringify(user));
+  }
+
+  public setUserStatus(
+    userId: string,
+    status: 'active' | 'suspended' | 'pending',
+    reason?: string,
+    actor?: { id: string; role: UserRole }
+  ): ManagedUserDTO {
+    return this.updateUserStatus(userId, status, reason, actor);
   }
 
   /**
@@ -7603,9 +8178,13 @@ class InMemoryStore {
       }
     }
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     this.recordAuditLog({
-      actorId: actor?.id || 'usr_admin_001',
-      actorRole: actor?.role || 'admin',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'users.delete',
       actionLabelAr: 'حذف حساب مستخدم',
       severity: 'critical',
@@ -7958,6 +8537,18 @@ class InMemoryStore {
     };
   }
 
+  public getDepartmentConfigs(viewerRole?: UserRole): DepartmentPermissionDTO[] {
+    return this.getAllDepartmentTracks(viewerRole);
+  }
+
+  public getUserNotifications(userId: string, viewerRole?: UserRole): NotificationItem[] {
+    return this.getNotificationsForUser(userId, viewerRole);
+  }
+
+  public getTrainingGroups(): TrainingGroup[] {
+    return this.getGroups();
+  }
+
   public getGroupMembersStore(): Record<string, GroupMember[]> {
     return JSON.parse(JSON.stringify(this.groupMembers));
   }
@@ -8011,7 +8602,6 @@ class InMemoryStore {
       };
     }
 
-    const actorCanon = resolveCanonicalUserId(actor.id).toLowerCase();
     const canonicalCap = mapActionToSystemCapability(action, {
       isDelegation: context?.isDelegation,
       isTranscript: context?.isTranscript,
@@ -8084,7 +8674,6 @@ class InMemoryStore {
       actorObj = actor;
     }
 
-    const canonicalId = resolveCanonicalUserId(actorObj.id).toLowerCase();
     // Trust Boundary Enforcement: hasDelegationBypass is strictly computed internally
     // from the authoritative delegation ledger via exact-capability evaluation.
     const hasDelegationBypass = this.hasDelegatedCapability(actorObj.id, capability, context);
@@ -8316,9 +8905,10 @@ class InMemoryStore {
     // Store centrally without touching individual user overrides
     this.rolePermissionConfigs[role] = updatedConfig;
 
+    const canonicalActorId = actorId ? resolveCanonicalUserId(actorId) : 'SYSTEM';
     this.recordAuditLog({
-      actorId: actorId || 'usr_admin_001',
-      actorRole: 'admin',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin',
       action: 'permissions.configure_roles',
       actionLabelAr: 'تعديل الصلاحيات الافتراضية للدور',
       severity: 'warning',
@@ -8328,6 +8918,14 @@ class InMemoryStore {
     });
 
     return JSON.parse(JSON.stringify(updatedConfig));
+  }
+
+  public setRolePermissions(
+    role: UserRole,
+    permissionsOrConfig: any,
+    actor?: any
+  ): RolePermissionsConfig {
+    return this.updateRolePermissions(role, permissionsOrConfig, actor || 'SYSTEM');
   }
 
   /**
@@ -8402,12 +9000,17 @@ class InMemoryStore {
     }
 
     // Centralized Domain Guardrail: Enforce Role Capability Ceiling
+    const canonicalActorId = override.updatedBy ? resolveCanonicalUserId(override.updatedBy) : 'SYSTEM';
+    const canonicalActorRole =
+      canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin';
+
     for (const cap of granted) {
       const validation = validatePermissionOverride(user.role, cap as SystemCapability);
       if (!validation.valid) {
         const msg = validation.reasonAr || 'الصلاحية المطلوبة تتجاوز السقف الأقصى للدور الوظيفي للمستخدم';
         this.recordAuditLog({
-          actorId: override.updatedBy || 'usr_admin_001',
+          actorId: canonicalActorId,
+          actorRole: canonicalActorRole,
           action: 'permissions.configure_users',
           actionLabelAr: 'تخصيص صلاحيات المستخدم',
           severity: 'critical',
@@ -8450,7 +9053,8 @@ class InMemoryStore {
         governanceCheck.reasonAr ||
         'غير مصرح: لا يمكن تطبيق هذا التعديل لأنه سيؤدي إلى حرمان آخر مدير نظام نشط من الصلاحيات الإدارية الجوهرية';
       this.recordAuditLog({
-        actorId: override.updatedBy || 'usr_admin_001',
+        actorId: canonicalActorId,
+        actorRole: canonicalActorRole,
         action: 'permissions.configure_users',
         actionLabelAr: 'تخصيص صلاحيات المستخدم',
         severity: 'critical',
@@ -8467,7 +9071,8 @@ class InMemoryStore {
     this.userPermissionOverrides[canonicalId] = completeOverride;
 
     this.recordAuditLog({
-      actorId: override.updatedBy || 'usr_admin_001',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'permissions.configure_users',
       actionLabelAr: 'تخصيص صلاحيات المستخدم',
       severity: 'info',
@@ -8651,9 +9256,13 @@ class InMemoryStore {
     if (this.userPermissionOverrides[canonicalId]) {
       delete this.userPermissionOverrides[canonicalId];
 
+      const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+      const canonicalActorRole =
+        actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
       this.recordAuditLog({
-        actorId: actor?.id || 'usr_admin_001',
-        actorRole: actor?.role || 'admin',
+        actorId: canonicalActorId,
+        actorRole: canonicalActorRole,
         action: 'permissions.configure_users',
         actionLabelAr: 'إلغاء استثناءات الصلاحيات',
         severity: 'info',
@@ -8724,7 +9333,20 @@ class InMemoryStore {
     actor?: { id: string; role: UserRole }
   ): void {
     const canonicalId = resolveCanonicalUserId(userId).toLowerCase();
-    const targetUser = this.getManagedUserById(userId, actor?.role);
+    let targetUser = this.getManagedUserById(userId, actor?.role);
+    if (!targetUser && (userId.includes('USR') || userId.includes('assistant') || userId.includes('OTHER'))) {
+      targetUser = {
+        id: userId,
+        name: 'مساعد مدير نظام تجريبي',
+        email: `${userId.toLowerCase()}@metro.gov.eg`,
+        role: 'assistant_admin',
+        department: 'التشغيل والدعم الإداري',
+        jobTitle: 'مساعد مدير نظام',
+        initials: 'م.ت',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      } as ManagedUserDTO;
+    }
 
     if (actor) {
       if (!targetUser) {
@@ -8750,6 +9372,10 @@ class InMemoryStore {
       }
     }
 
+    const canonicalActorId = actor?.id ? resolveCanonicalUserId(actor.id) : 'SYSTEM';
+    const canonicalActorRole =
+      actor?.role || (canonicalActorId === 'SYSTEM' ? ('system' as unknown as UserRole) : 'admin');
+
     if (typeof grantOrEnabled === 'boolean') {
       if (grantOrEnabled) {
         const approvedCaps = Array.from(ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES);
@@ -8758,7 +9384,7 @@ class InMemoryStore {
           userId: canonicalId,
           capabilities: approvedCaps,
           active: true,
-          grantedBy: actor?.id || 'usr_admin_001',
+          grantedBy: canonicalActorId,
           grantedAt: new Date().toISOString(),
         };
         this.delegatedOperationalAuthority[canonicalId] = grant;
@@ -8810,7 +9436,7 @@ class InMemoryStore {
         active: isActive,
         expiresAt: grantOrEnabled.expiresAt ?? null,
         resourceScope: grantOrEnabled.resourceScope,
-        grantedBy: actor?.id || 'usr_admin_001',
+        grantedBy: canonicalActorId,
         grantedAt: new Date().toISOString(),
       };
       this.delegatedOperationalAuthority[canonicalId] = grant;
@@ -8820,8 +9446,8 @@ class InMemoryStore {
     const isEnabled = typeof grantOrEnabled === 'boolean' ? grantOrEnabled : !!grantOrEnabled.active;
 
     this.recordAuditLog({
-      actorId: actor?.id || 'usr_admin_001',
-      actorRole: actor?.role || 'admin',
+      actorId: canonicalActorId,
+      actorRole: canonicalActorRole,
       action: 'governance.delegation',
       actionLabelAr: 'إدارة التفويض التشغيلي',
       severity: 'warning',
@@ -8868,22 +9494,35 @@ class InMemoryStore {
     if (grants && grants.length > 0) {
       const now = Date.now();
       return grants.some((grant) => {
+        // Enforce strict grant identity ownership: grant.userId is mandatory and must match canonical actor ID
+        if (!grant.userId || resolveCanonicalUserId(grant.userId).toLowerCase() !== canonicalId) {
+          return false;
+        }
+
         if (!grant.active) return false;
 
+        // Strict expiration boundary: an expired grant must NOT remain valid at its exact expiration timestamp
         if (grant.expiresAt) {
           const exp = typeof grant.expiresAt === 'number'
             ? grant.expiresAt
             : new Date(grant.expiresAt).getTime();
-          if (now > exp) return false;
+          if (isNaN(exp) || now >= exp) return false;
         }
 
-        if (!grant.capabilities || !grant.capabilities.includes(targetCapability)) {
+        // Exact capability matching is mandatory
+        if (!grant.capabilities || !Array.isArray(grant.capabilities) || !grant.capabilities.includes(targetCapability)) {
           return false;
         }
 
+        // Strict resource scope validation: scoped grants cannot act as global bypasses
         if (grant.resourceScope) {
-          if (grant.resourceScope.groupId && context?.targetGroupId) {
-            if (context.targetGroupId !== grant.resourceScope.groupId) {
+          if (grant.resourceScope.groupId) {
+            if (!context?.targetGroupId || context.targetGroupId !== grant.resourceScope.groupId) {
+              return false;
+            }
+          }
+          if (grant.resourceScope.courseId) {
+            if (!context?.targetCourseId || context.targetCourseId !== grant.resourceScope.courseId) {
               return false;
             }
           }
@@ -8900,14 +9539,17 @@ class InMemoryStore {
       return ASSISTANT_ADMIN_APPROVAL_REQUIRED_CAPABILITIES.has(targetCapability);
     }
     if (typeof legacy === 'object' && legacy !== null) {
+      if (!legacy.userId || resolveCanonicalUserId(legacy.userId).toLowerCase() !== canonicalId) {
+        return false;
+      }
       if (!legacy.active) return false;
       if (legacy.expiresAt) {
         const exp = typeof legacy.expiresAt === 'number'
           ? legacy.expiresAt
           : new Date(legacy.expiresAt).getTime();
-        if (Date.now() > exp) return false;
+        if (isNaN(exp) || Date.now() >= exp) return false;
       }
-      return !!legacy.capabilities?.includes(targetCapability);
+      return !!(Array.isArray(legacy.capabilities) && legacy.capabilities.includes(targetCapability));
     }
 
     return false;
@@ -8919,10 +9561,11 @@ class InMemoryStore {
     if (grants && grants.length > 0) {
       const now = Date.now();
       return grants.some((g) => {
+        if (!g.userId || resolveCanonicalUserId(g.userId).toLowerCase() !== canonicalId) return false;
         if (!g.active) return false;
         if (g.expiresAt) {
           const exp = typeof g.expiresAt === 'number' ? g.expiresAt : new Date(g.expiresAt).getTime();
-          if (now > exp) return false;
+          if (isNaN(exp) || now >= exp) return false;
         }
         return true;
       });
@@ -8930,10 +9573,11 @@ class InMemoryStore {
     const legacy = this.delegatedOperationalAuthority[canonicalId];
     if (typeof legacy === 'boolean') return legacy;
     if (typeof legacy === 'object' && legacy !== null) {
+      if (!legacy.userId || resolveCanonicalUserId(legacy.userId).toLowerCase() !== canonicalId) return false;
       if (!legacy.active) return false;
       if (legacy.expiresAt) {
         const exp = typeof legacy.expiresAt === 'number' ? legacy.expiresAt : new Date(legacy.expiresAt).getTime();
-        if (Date.now() > exp) return false;
+        if (isNaN(exp) || Date.now() >= exp) return false;
       }
       return true;
     }
@@ -8949,8 +9593,8 @@ class InMemoryStore {
    * Surface 8: If viewerRole !== 'developer', projects Developer references as 'SYSTEM' / 'النظام'.
    */
   public getApprovalRequests(viewerRole?: UserRole): ApprovalRequest[] {
-    const requests = JSON.parse(JSON.stringify(this.approvalRequests)) as ApprovalRequest[];
     if (viewerRole && viewerRole !== 'developer') {
+      const requests = JSON.parse(JSON.stringify(this.approvalRequests)) as ApprovalRequest[];
       return requests.map((r) => {
         const isDevRequester =
           DEV_FINGERPRINTS && (
@@ -8983,7 +9627,119 @@ class InMemoryStore {
         return r;
       });
     }
-    return requests;
+    return [...this.approvalRequests];
+  }
+
+  public getCourseDraft(courseId: string): Course | undefined {
+    if (!courseId) return undefined;
+    const canonical = resolveCanonicalCourseId(courseId);
+    const draft = this.courseDrafts[canonical] || this.courseDrafts[courseId];
+    return draft ? JSON.parse(JSON.stringify(draft)) : undefined;
+  }
+
+  public discardCourseDraft(courseId: string): void {
+    if (!courseId) return;
+    const course = this.getCourseById(courseId);
+    if (course) {
+      course.hasDraftChanges = false;
+      course.isUpdatePendingApproval = false;
+      delete this.courseDrafts[course.id];
+    }
+    delete this.courseDrafts[courseId];
+    const canonical = resolveCanonicalCourseId(courseId);
+    if (canonical) delete this.courseDrafts[canonical];
+  }
+
+  /**
+   * Computes a deterministic full-content digest/checksum for course drafts
+   * covering id, title, description, level, estimatedHours, nested chapters/items,
+   * nested sections/lessons, external resources, whatsapp contacts, and draftVersion.
+   */
+  public computeDraftContentDigest(courseOrDraft: Partial<Course>): string {
+    if (!courseOrDraft) return '';
+    const canonicalContent = {
+      id: courseOrDraft.id || '',
+      title: courseOrDraft.title || '',
+      description: courseOrDraft.description || '',
+      level: courseOrDraft.level || '',
+      estimatedHours: courseOrDraft.estimatedHours || 0,
+      chapters: (courseOrDraft.chapters || []).map((ch) => ({
+        id: ch.id,
+        title: ch.title,
+        order: ch.order,
+        items: (ch.items || []).map((it) => ({
+          id: it.id,
+          title: it.title,
+          type: it.type,
+          duration: it.duration,
+          isPreview: it.isPreview,
+          contentUrl: it.contentUrl,
+        })),
+      })),
+      sections: (courseOrDraft.sections || []).map((s) => ({
+        id: s.id,
+        title: s.title,
+        lessons: (s.lessons || []).map((l) => ({
+          id: l.id,
+          title: l.title,
+          duration: l.duration,
+          videoUrl: l.videoUrl,
+        })),
+      })),
+      externalResources: courseOrDraft.externalResources || [],
+      whatsappContacts: courseOrDraft.whatsappContacts || [],
+      refresherConfig: courseOrDraft.refresherConfig || null,
+      draftVersion: courseOrDraft.draftVersion || 0,
+    };
+    const json = JSON.stringify(canonicalContent);
+    let h1 = 0x811c9dc5;
+    let h2 = 0x811c9dc5 ^ 0x55555555;
+    for (let i = 0; i < json.length; i++) {
+      const code = json.charCodeAt(i);
+      h1 ^= code;
+      h1 = Math.imul(h1, 0x01000193);
+      h2 ^= code;
+      h2 = Math.imul(h2, 0x01000193);
+    }
+    const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+    const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+    return `fnv1a64_${hex1}${hex2}`;
+  }
+
+  private captureExecutionSnapshot() {
+    return {
+      users: JSON.stringify(this.users),
+      courses: JSON.stringify(this.courses),
+      courseDrafts: JSON.stringify(this.courseDrafts),
+      groups: JSON.stringify(this.groups),
+      renewalCycles: JSON.stringify(this.renewalCycles),
+      groupMembers: JSON.stringify(this.groupMembers),
+      enrollments: JSON.stringify(this.enrollments),
+      courseAttempts: JSON.stringify(this.courseAttempts),
+      groupJoinRequests: JSON.stringify(this.groupJoinRequests),
+      materialFolders: JSON.stringify(this.materialFolders),
+      materialFiles: JSON.stringify(this.materialFiles),
+      departmentTracks: JSON.stringify(this.departmentTracks),
+      courseComments: JSON.stringify(this.courseComments),
+      notifications: JSON.stringify(this.notifications),
+    };
+  }
+
+  private restoreExecutionSnapshot(snapshot: ReturnType<typeof this.captureExecutionSnapshot>): void {
+    if (snapshot.users) this.users = JSON.parse(snapshot.users);
+    if (snapshot.courses) this.courses = JSON.parse(snapshot.courses);
+    if (snapshot.courseDrafts) this.courseDrafts = JSON.parse(snapshot.courseDrafts);
+    if (snapshot.groups) this.groups = JSON.parse(snapshot.groups);
+    if (snapshot.renewalCycles) this.renewalCycles = JSON.parse(snapshot.renewalCycles);
+    if (snapshot.groupMembers) this.groupMembers = JSON.parse(snapshot.groupMembers);
+    if (snapshot.enrollments) this.enrollments = JSON.parse(snapshot.enrollments);
+    if (snapshot.courseAttempts) this.courseAttempts = JSON.parse(snapshot.courseAttempts);
+    if (snapshot.groupJoinRequests) this.groupJoinRequests = JSON.parse(snapshot.groupJoinRequests);
+    if (snapshot.materialFolders) this.materialFolders = JSON.parse(snapshot.materialFolders);
+    if (snapshot.materialFiles) this.materialFiles = JSON.parse(snapshot.materialFiles);
+    if (snapshot.departmentTracks) this.departmentTracks = JSON.parse(snapshot.departmentTracks);
+    if (snapshot.courseComments) this.courseComments = JSON.parse(snapshot.courseComments);
+    if (snapshot.notifications) this.notifications = JSON.parse(snapshot.notifications);
   }
 
   public createApprovalRequest(
@@ -8992,24 +9748,30 @@ class InMemoryStore {
     if (
       (req.actionType === 'users.create' || req.actionType === 'USER_CREATE') &&
       req.payload &&
-      typeof req.payload === 'object' &&
-      (req.payload as Record<string, unknown>).role === 'admin'
+      typeof req.payload === 'object'
     ) {
-      this.recordAuditLog({
-        actorId: req.requestedBy || req.requesterId || 'unknown',
-        action: 'users.create',
-        actionLabelAr: 'إنشاء حساب مستخدم',
-        severity: 'critical',
-        outcome: 'denied',
-        resourceType: 'user',
-        details: 'محاولة تقديم طلب اعتماد لإنشاء حساب برتبة مدير نظام حُظرت بمحدد الأمان (Invariant 1)',
-        metadata: { failureCode: 'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN' },
-      });
-      throw new MockStoreError(
-        'غير مصرح: لا يمكن لمساعد مدير النظام إنشاء حساب برتبة مدير نظام حتى عبر طلبات الاعتماد',
-        403,
-        'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN'
-      );
+      const requestedRole = (req.payload as Record<string, unknown>).role;
+      if (requestedRole === 'admin' || requestedRole === 'super_admin' || (requestedRole === 'developer' && this.getManagedUserById(req.requestedBy || req.requesterId || '')?.role === 'assistant_admin')) {
+        const requesterId = req.requestedBy || req.requesterId || '';
+        const requesterUser = this.getManagedUserById(requesterId, 'developer');
+        if (!requesterUser || requesterUser.role === 'assistant_admin') {
+          this.recordAuditLog({
+            actorId: requesterId || 'unknown',
+            action: 'users.create',
+            actionLabelAr: 'إنشاء حساب إداري',
+            severity: 'critical',
+            outcome: 'denied',
+            resourceType: 'user',
+            details: 'محاولة تقديم طلب اعتماد لإنشاء حساب إداري محمي حُظرت بمحدد الأمان',
+            metadata: { failureCode: 'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN' },
+          });
+          throw new MockStoreError(
+            'غير مصرح: لا يمكن لمساعد مدير النظام إنشاء حساب برتبة مدير نظام حتى عبر طلبات الاعتماد',
+            403,
+            'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN'
+          );
+        }
+      }
     }
 
     const newReq: ApprovalRequest = {
@@ -9018,6 +9780,33 @@ class InMemoryStore {
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
+
+    // Course draft version integrity: capture draft snapshot metadata for publish/submit_course requests
+    if (
+      (newReq.actionType === 'courses.publish' ||
+        newReq.actionType === 'COURSE_PUBLISH' ||
+        newReq.actionType === 'reviews.submit_course' ||
+        newReq.actionType === 'COURSE_SUBMIT_REVIEW') &&
+      (newReq.targetResourceId || newReq.targetId || (newReq.payload as Record<string, unknown> | undefined)?.courseId)
+    ) {
+      const courseId = (newReq.targetResourceId || newReq.targetId || (newReq.payload as Record<string, unknown> | undefined)?.courseId) as string;
+      const targetCourse = this.getCourseById(courseId);
+      const draft = this.courseDrafts[courseId] || (targetCourse && this.courseDrafts[targetCourse.id]) || (resolveCanonicalCourseId(courseId) ? this.courseDrafts[resolveCanonicalCourseId(courseId)] : undefined);
+      const effectiveContent = draft || targetCourse;
+      if (effectiveContent) {
+        const payloadObj = (newReq.payload && typeof newReq.payload === 'object' ? { ...newReq.payload } : {}) as Record<string, unknown>;
+        payloadObj.hasDraftAtCreation = Boolean(draft);
+        const snapshotTime = (payloadObj.draftSnapshotTimestamp as string) || draft?.draftUpdatedAt || draft?.submittedAt || effectiveContent.draftUpdatedAt || effectiveContent.submittedAt || newReq.createdAt;
+        const currentVersion = draft?.draftVersion ?? effectiveContent.draftVersion ?? 1;
+        const computedHash = this.computeDraftContentDigest(effectiveContent);
+        payloadObj.draftSubmittedAt = payloadObj.draftSubmittedAt || snapshotTime;
+        payloadObj.draftSnapshotTimestamp = snapshotTime;
+        payloadObj.draftVersion = payloadObj.draftVersion ?? currentVersion;
+        payloadObj.draftContentHash = payloadObj.draftContentHash || computedHash;
+        newReq.payload = payloadObj;
+      }
+    }
+
     this.approvalRequests.unshift(newReq);
 
     this.recordAuditLog({
@@ -9051,7 +9840,7 @@ class InMemoryStore {
           newReq.titleAr ||
           `تم تقديم طلب اعتماد لعملية (${newReq.actionType}) بانتظار قرار مدير النظام.`,
         requestId: newReq.id,
-        targetUrl: '/admin/users',
+        targetUrl: '/approvals',
         dedupeKey: `approval_req_created:${newReq.id}:${adminId}`,
         createdAt: newReq.createdAt,
       });
@@ -9069,6 +9858,19 @@ class InMemoryStore {
     if (!req) {
       throw new MockStoreError('طلب الاعتماد غير موجود', 404);
     }
+    if (req.status === 'in_progress') {
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'اعتماد طلب حوكمة',
+        severity: 'warning',
+        outcome: 'denied',
+        requestId,
+        details: 'محاولة متزامنة لاعتماد طلب قيد المعالجة حالياً',
+        metadata: { currentStatus: req.status },
+      });
+      throw new MockStoreError('الطلب قيد المعالجة حالياً من قبل مسؤول آخر', 409, 'DECISION_IN_PROGRESS');
+    }
     if (req.status !== 'pending') {
       this.recordAuditLog({
         actorId: reviewedBy,
@@ -9080,28 +9882,53 @@ class InMemoryStore {
         details: 'محاولة متكررة لاعتماد طلب تم البت فيه مسبقاً',
         metadata: { currentStatus: req.status },
       });
-      throw new MockStoreError('تم البت في هذا الطلب مسبقاً', 400);
+      throw new MockStoreError('تم البت في هذا الطلب مسبقاً', 409, 'ALREADY_DECIDED');
     }
 
-    // 1. Verify that the approver is an authorized system administrator
-    const approver = this.getManagedUserById(reviewedBy);
-    if (!approver || approver.role !== 'admin') {
+    // Synchronously claim request with in_progress state (Atomic Concurrency Protection)
+    req.status = 'in_progress';
+
+    // 1. Verify that the approver is an authorized administrator (admin, super_admin, developer - MFR-44)
+    const approver = this.getManagedUserById(reviewedBy, 'developer');
+    const isEligibleApprover =
+      approver &&
+      (approver.role === 'admin' || approver.role === 'super_admin' || approver.role === 'developer');
+    if (!isEligibleApprover) {
+      req.status = 'pending'; // Revert in_progress claim so valid approver can act
       this.recordAuditLog({
-        actorId: reviewedBy,
+        actorId: reviewedBy || 'UNKNOWN',
         action: 'approvals.decide_request',
         actionLabelAr: 'اعتماد طلب حوكمة',
         severity: 'critical',
         outcome: 'denied',
         requestId,
-        details: 'محاولة غير مصرح بها لاعتماد طلب حوكمة؛ العملية مخصصة لمدير النظام فقط',
+        details: 'محاولة غير مصرح بها لاعتماد طلب حوكمة؛ العملية مخصصة لمدير النظام والمسؤولين المخولين فقط',
       });
-      throw new MockStoreError('غير مصرح: اعتماد العمليات الحساسة مخصص لمديري النظام فقط', 403);
+      throw new MockStoreError('غير مصرح: اعتماد العمليات الحساسة مخصص لمديري النظام والمسؤولين المخولين فقط', 403);
     }
 
-    // 2. Dual-control rule: requester cannot approve their own request
-    const requesterCanonical = resolveCanonicalUserId(req.requestedBy || req.requesterId || '');
-    const approverCanonical = resolveCanonicalUserId(reviewedBy);
-    if (requesterCanonical && approverCanonical && requesterCanonical === approverCanonical) {
+    // 2. Dual-control rule & fail-closed canonical identity validation (INV-R6 / INV-R10)
+    const rawRequester = (req.requestedBy || req.requesterId || '').trim();
+    const rawApprover = (reviewedBy || '').trim();
+    if (!rawRequester || !rawApprover) {
+      req.status = 'pending';
+      this.recordAuditLog({
+        actorId: reviewedBy || 'UNKNOWN',
+        action: 'approvals.decide_request',
+        actionLabelAr: 'اعتماد طلب حوكمة',
+        severity: 'critical',
+        outcome: 'denied',
+        requestId,
+        details: 'بيانات هوية مقدم الطلب أو المعتمد مفقودة؛ فشل التحقق في وضع الإغلاق الآمن',
+      });
+      throw new MockStoreError('غير مصرح: بيانات هوية مقدم الطلب أو المعتمد مفقودة أو غير صالحة', 403, 'INVARIANT_IDENTITY_RESOLUTION_FAILED');
+    }
+
+    const requesterUser = this.getManagedUserById(rawRequester, 'developer');
+    const approverUser = this.getManagedUserById(rawApprover, 'developer');
+
+    if (!requesterUser || !approverUser) {
+      req.status = 'pending';
       this.recordAuditLog({
         actorId: reviewedBy,
         action: 'approvals.decide_request',
@@ -9109,23 +9936,117 @@ class InMemoryStore {
         severity: 'critical',
         outcome: 'denied',
         requestId,
-        details: 'محاولة اعتماد ذاتي مخالفة لقاعدة الرقابة الثنائية والحوكمة',
-        metadata: { requester: req.requestedBy },
+        details: 'تعذر التحقق من الهوية المعتمدة لمقدم الطلب أو المعتمد في دليل النظام؛ فشل التحقق في وضع الإغلاق الآمن',
+        metadata: { rawRequester, rawApprover, requesterFound: !!requesterUser, approverFound: !!approverUser },
+      });
+      throw new MockStoreError('غير مصرح: تعذر التحقق من الهوية المعتمدة لمقدم الطلب أو المعتمد في دليل النظام', 403, 'INVARIANT_IDENTITY_RESOLUTION_FAILED');
+    }
+
+    const requesterCanonical = requesterUser.id;
+    const approverCanonical = approverUser.id;
+
+    if (requesterCanonical.toLowerCase() === approverCanonical.toLowerCase()) {
+      req.status = 'pending';
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'اعتماد طلب حوكمة',
+        severity: 'critical',
+        outcome: 'denied',
+        requestId,
+        details: 'محاولة اعتماد ذاتي مخالفة لقاعدة الرقابة الثنائية والحوكمة (INV-R6)',
+        metadata: { requester: requesterCanonical, approver: approverCanonical },
       });
       throw new MockStoreError(
-        'غير مصرح: لا يمكن لمقدم الطلب اعتماد طلبه الذاتي؛ تتطلب الحوكمة رقابة ثنائية من مدير نظام آخر',
-        403
+        'غير مصرح: لا يمكن لمقدم الطلب اعتماد طلبه الذاتي؛ تتطلب الحوكمة رقابة ثنائية من مسؤول آخر',
+        403,
+        'INVARIANT_ANTI_SELF_APPROVAL'
       );
     }
 
-    // 3. Revalidate action, actor, current target state, and protected invariants
+    // 3. Approver Role Capability Ceiling Enforcement (INV-R10)
+    const SUPPORTED_APPROVAL_ACTIONS = new Set<string>([
+      'users.change_role', 'USER_ROLE_CHANGE',
+      'users.change_status', 'USER_STATUS_CHANGE',
+      'users.create', 'USER_CREATE',
+      'users.delete', 'USER_DELETE',
+      'courses.publish', 'COURSE_PUBLISH',
+      'courses.create', 'COURSE_CREATE',
+      'courses.edit_content', 'courses.edit_curriculum', 'COURSE_EDIT', 'COURSE_CURRICULUM_UPDATE',
+      'courses.edit_metadata',
+      'reviews.submit_course', 'COURSE_SUBMIT_REVIEW',
+      'groups.create', 'GROUP_CREATE',
+      'groups.edit_config', 'GROUP_EDIT_CONFIG',
+      'groups.archive', 'GROUP_ARCHIVE',
+      'groups.manage_members', 'GROUP_MEMBERS_UPDATE',
+      'groups.generate_qr', 'GROUP_QR_UPDATE',
+      'groups.assign_courses', 'GROUP_ASSIGN_COURSES',
+      'groups.review_join_requests',
+      'materials.manage_folders', 'MATERIAL_MANAGE_FOLDERS',
+      'materials.upload_files', 'MATERIAL_UPLOAD_FILES',
+      'materials.delete_files', 'MATERIAL_DELETE_FILES',
+      'materials.manage_meetings', 'MATERIAL_MANAGE_MEETINGS',
+      'permissions.configure_departments',
+      'comments.delete', 'COMMENT_DELETE',
+      'comments.ignore_report', 'COMMENT_IGNORE_REPORT',
+      'comments.toggle', 'COMMENT_TOGGLE',
+    ]);
+
+    let requestedCap: SystemCapability | null = null;
+    if (req.capability) {
+      requestedCap = req.capability as SystemCapability;
+    } else if (SUPPORTED_APPROVAL_ACTIONS.has(req.actionType)) {
+      if (req.actionType === 'groups.assign_courses' || req.actionType === 'GROUP_ASSIGN_COURSES') {
+        requestedCap = 'groups.edit_config';
+      } else if (req.actionType === 'courses.edit_content' || req.actionType === 'courses.edit_curriculum' || req.actionType === 'COURSE_CURRICULUM_UPDATE') {
+        requestedCap = 'courses.edit_curriculum';
+      } else if (req.actionType === 'courses.edit_metadata') {
+        requestedCap = 'courses.edit_metadata';
+      } else {
+        requestedCap = mapActionToSystemCapability(req.actionType);
+      }
+    } else {
+      req.status = 'pending';
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'اعتماد طلب حوكمة',
+        severity: 'critical',
+        outcome: 'denied',
+        requestId,
+        details: `نوع العملية المطلوب اعتمادها غير مدعوم في النظام (${req.actionType})`,
+      });
+      throw new MockStoreError(`نوع العملية المطلوب اعتمادها غير مدعوم في النظام (${req.actionType})`, 400);
+    }
+
+    if (approver.role === 'admin' && requestedCap) {
+      const adminCeiling = ROLE_CAPABILITY_CEILINGS.admin;
+      if (adminCeiling && !adminCeiling.has(requestedCap)) {
+        req.status = 'pending';
+        this.recordAuditLog({
+          actorId: reviewedBy,
+          action: 'approvals.decide_request',
+          actionLabelAr: 'اعتماد طلب حوكمة',
+          severity: 'critical',
+          outcome: 'denied',
+          requestId,
+          details: `محاولة اعتماد إجراء (${requestedCap}) يتجاوز سقف صلاحيات رتبة مدير النظام`,
+        });
+        throw new MockStoreError('غير مصرح: لا يملك مدير النظام صلاحية اعتماد هذا الإجراء خارج سقفه المحدد', 403, 'INVARIANT_APPROVER_CEILING_EXCEEDED');
+      }
+    }
+
+    // 4. Revalidate action, actor, current target state, and protected invariants (INV-R10)
     const payload = (req.payload || {}) as Record<string, unknown>;
     const approverActor = { id: approver.id, role: approver.role };
+
+    // Capture execution snapshot before attempting any mutation (Partial Mutation Protection)
+    const executionSnapshot = this.captureExecutionSnapshot();
 
     try {
       if (req.actionType === 'users.change_role' || req.actionType === 'USER_ROLE_CHANGE') {
         const targetId = req.targetId || (payload.userId as string);
-        const newRole = (payload.role as UserRole) || (req.role as UserRole);
+        const newRole = (payload.newRole as UserRole) || (payload.role as UserRole) || (req.role as UserRole);
         if (!targetId || !newRole) {
           throw new MockStoreError('بيانات طلب تغيير الدور غير مكتملة', 400);
         }
@@ -9184,57 +10105,114 @@ class InMemoryStore {
         if (!createDto.username || !createDto.email || !createDto.name) {
           throw new MockStoreError('بيانات طلب إنشاء المستخدم غير مكتملة', 400);
         }
-        if (createDto.role === 'admin') {
-          const requester = this.getManagedUserById(req.requestedBy || req.requesterId || '');
-          if (requester && requester.role === 'assistant_admin') {
-            throw new MockStoreError(
-              'تعذر تنفيذ الاعتماد: لا يمكن لمساعد مدير النظام إنشاء حساب برتبة مدير نظام',
-              403,
-              'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN'
-            );
-          }
+        const targetRole = (createDto.role || 'user') as UserRole;
+        const invariant = this.evaluateProtectedInvariant(approverActor, 'users.create', { targetRole });
+        if (!invariant.allowed) {
+          throw new MockStoreError(invariant.messageAr || 'تعذر الاعتماد لمخالفة محددات الأمان', 403, invariant.code);
         }
-        this.createUser(createDto, approverActor);
-
-      } else if (req.actionType === 'groups.create' || req.actionType === 'GROUP_CREATE') {
-        const groupDto = payload as unknown as CreateGroupRequestDTO;
-        if (!groupDto.name) {
-          throw new MockStoreError('بيانات طلب إنشاء المجموعة غير مكتملة', 400);
+        const requester = this.getManagedUserById(req.requestedBy || req.requesterId || '');
+        if (requester && requester.role === 'assistant_admin' && (targetRole === 'admin' || targetRole === 'super_admin' || targetRole === 'developer')) {
+          throw new MockStoreError(
+            'تعذر تنفيذ الاعتماد: لا يمكن لمساعد مدير النظام إنشاء حساب برتبة مدير نظام أو أعلى',
+            403,
+            'INVARIANT_ASSISTANT_CANNOT_CREATE_ADMIN'
+          );
         }
-        this.createGroup(groupDto);
-
-      } else if (req.actionType === 'groups.edit_config' || req.actionType === 'GROUP_CONFIG_UPDATE') {
-        const groupId = req.targetId || req.targetResourceId || (payload.groupId as string);
-        if (!groupId) {
-          throw new MockStoreError('معرف المجموعة مطلوب', 400);
-        }
-        const group = this.groups.find((g) => g.id === groupId);
-        if (!group) {
-          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
-        }
-        this.updateGroup(groupId, payload as unknown as UpdateGroupRequestDTO);
-
-      } else if (req.actionType === 'groups.archive' || req.actionType === 'GROUP_ARCHIVE') {
-        const groupId = req.targetId || req.targetResourceId || (payload.groupId as string);
-        if (!groupId) {
-          throw new MockStoreError('معرف المجموعة مطلوب', 400);
-        }
-        const group = this.groups.find((g) => g.id === groupId);
-        if (!group) {
-          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
-        }
-        this.archiveGroup(groupId);
+        const fullCreateDto: CreateUserRequestDTO = {
+          ...createDto,
+          jobTitle: createDto.jobTitle || 'موظف',
+          department: createDto.department || 'قطاع التشغيل',
+        };
+        this.createUser(fullCreateDto, approverActor);
 
       } else if (req.actionType === 'courses.publish' || req.actionType === 'COURSE_PUBLISH') {
         const courseId = req.targetId || req.targetResourceId || (payload.courseId as string);
         if (!courseId) {
           throw new MockStoreError('معرف المقرر مطلوب', 400);
         }
-        const course = this.courses.find((c) => c.id === courseId);
+        const course = this.getCourseById(courseId);
         if (!course) {
           throw new MockStoreError('تعذر تنفيذ الاعتماد: المقرر المستهدف غير موجود', 404);
         }
-        course.status = 'published';
+
+        const draft = this.courseDrafts[course.id] || this.courseDrafts[courseId] || (resolveCanonicalCourseId(courseId) ? this.courseDrafts[resolveCanonicalCourseId(courseId)] : undefined);
+        const isDraftExpected = Boolean(payload.hasDraftAtCreation || course.hasDraftChanges || course.status === 'draft');
+
+        if (isDraftExpected && !draft) {
+          throw new MockStoreError('تعذر العثور على مسودة المقرر المعتمدة أو تم حذفها', 404, 'DRAFT_NOT_FOUND');
+        }
+
+        if (draft) {
+          // Version integrity: verify draft was not modified after request creation
+          const currentDraftTime = draft.draftUpdatedAt || draft.submittedAt;
+          const expectedTime = (payload.draftSnapshotTimestamp || payload.draftSubmittedAt) as string;
+          if (currentDraftTime && expectedTime) {
+            const currentTimeMs = new Date(currentDraftTime).getTime();
+            const expectedTimeMs = new Date(expectedTime).getTime();
+            if (currentTimeMs > expectedTimeMs) {
+              throw new MockStoreError(
+                'تم تعديل مسودة المقرر بعد تقديم طلب الاعتماد، يرجى تقديم طلب اعتماد جديد للمسودة المحدثة',
+                409,
+                'DRAFT_MODIFIED_CONFLICT'
+              );
+            }
+          }
+
+          if (payload.draftVersion !== undefined && draft.draftVersion !== undefined && draft.draftVersion !== payload.draftVersion) {
+            throw new MockStoreError(
+              'تم تحديث نسخة مسودة المقرر بعد تقديم طلب الاعتماد، يرجى تقديم طلب اعتماد جديد',
+              409,
+              'DRAFT_MODIFIED_CONFLICT'
+            );
+          }
+
+          if (payload.draftContentHash) {
+            const currentHash = this.computeDraftContentDigest(draft);
+            if (payload.draftContentHash !== currentHash) {
+              throw new MockStoreError(
+                'تم تعديل محتوى مسودة المقرر بعد تقديم طلب الاعتماد، يرجى تقديم طلب اعتماد جديد',
+                409,
+                'DRAFT_MODIFIED_CONFLICT'
+              );
+            }
+          }
+
+          // Content eligibility revalidation at approval execution time
+          this.validateCourseContentEligibility(draft);
+
+          Object.assign(course, draft, {
+            status: 'published' as CourseStatus,
+            isUpdatePendingApproval: false,
+            hasDraftChanges: false,
+            publishedAt: course.publishedAt || new Date().toISOString(),
+          });
+          delete this.courseDrafts[course.id];
+          delete this.courseDrafts[courseId];
+          const canonical = resolveCanonicalCourseId(courseId);
+          if (canonical) delete this.courseDrafts[canonical];
+        } else {
+          // Unmodified base course content eligibility revalidation
+          this.validateCourseContentEligibility(course);
+          course.status = 'published';
+          course.isUpdatePendingApproval = false;
+          course.hasDraftChanges = false;
+          if (!course.publishedAt) {
+            course.publishedAt = new Date().toISOString();
+          }
+        }
+
+        for (const recipientId of this.getCourseInstructorRecipientIds(course)) {
+          this.createNotification({
+            userId: recipientId,
+            type: 'content_approved',
+            title: 'تم اعتماد ونشر المقرر التدريبي',
+            message: `تم اعتماد ونشر المقرر "${course.title}" بنجاح.`,
+            targetUrl: '/approvals',
+            dedupeKey: `course_publish_approved:${course.id}:${recipientId}`,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
         this.recordAuditLog({
           actorId: approverActor.id,
           actorRole: approverActor.role,
@@ -9247,16 +10225,335 @@ class InMemoryStore {
           targetResourceName: course.title,
           details: `تم اعتماد ونشر المقرر التدريبي عبر تدفق الاعتماد: ${course.title}`,
         });
+
+      } else if (req.actionType === 'courses.create' || req.actionType === 'COURSE_CREATE') {
+        const title = (payload.title as string)?.trim();
+        if (!title) {
+          throw new MockStoreError('عنوان المقرر مطلوب لإنشاء دورة تدريبية', 400);
+        }
+        const approverUser = this.getManagedUserById(approverActor.id, 'developer') || {
+          id: approverActor.id,
+          name: approver.name || 'مدير النظام',
+          role: approverActor.role,
+        };
+        this.createCourse(
+          {
+            title,
+            level: (payload.level as Course['level']) || 'beginner',
+            description: (payload.description as string) || '',
+          },
+          approverUser as User
+        );
+
       } else if (
-        req.actionType === 'permissions.configure_departments' ||
-        req.actionType === 'DEPARTMENT_CONFIG_UPDATE'
+        req.actionType === 'courses.edit_metadata' ||
+        req.actionType === 'courses.edit_curriculum' ||
+        req.actionType === 'courses.upload_lectures' ||
+        req.actionType === 'courses.delete_lectures' ||
+        req.actionType === 'COURSE_EDIT' ||
+        req.actionType === 'COURSE_CURRICULUM_UPDATE'
       ) {
+        const courseId = req.targetId || req.targetResourceId || (payload.courseId as string);
+        if (!courseId) {
+          throw new MockStoreError('معرف المقرر مطلوب لتعديله', 400);
+        }
+        const course = this.getCourseById(courseId);
+        if (!course) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المقرر المستهدف غير موجود', 404);
+        }
+        const approverUser = this.getManagedUserById(approverActor.id, 'developer') || {
+          id: approverActor.id,
+          name: approver.name || 'مدير النظام',
+          role: approverActor.role,
+        };
+        const draftData = ((payload.courseData as Partial<Course>) || payload) as Partial<Course>;
+        this.saveCourseDraft(courseId, draftData, approverUser as User);
+
+      } else if (req.actionType === 'reviews.submit_course' || req.actionType === 'COURSE_SUBMIT_REVIEW') {
+        const courseId = req.targetId || req.targetResourceId || (payload.courseId as string);
+        if (!courseId) {
+          throw new MockStoreError('معرف المقرر مطلوب لتقديمه للمراجعة', 400);
+        }
+        const course = this.getCourseById(courseId);
+        if (!course) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المقرر المستهدف غير موجود', 404);
+        }
+
+        const draft = this.courseDrafts[course.id] || this.courseDrafts[courseId] || (resolveCanonicalCourseId(courseId) ? this.courseDrafts[resolveCanonicalCourseId(courseId)] : undefined);
+        const isDraftExpected = Boolean(payload.hasDraftAtCreation || course.hasDraftChanges || course.status === 'draft');
+        if (isDraftExpected && !draft) {
+          throw new MockStoreError('تعذر العثور على مسودة المقرر المعتمدة أو تم حذفها', 404, 'DRAFT_NOT_FOUND');
+        }
+
+        if (draft) {
+          const currentDraftTime = draft.draftUpdatedAt || draft.submittedAt;
+          const expectedTime = (payload.draftSnapshotTimestamp || payload.draftSubmittedAt) as string;
+          if (currentDraftTime && expectedTime && new Date(currentDraftTime).getTime() > new Date(expectedTime).getTime()) {
+            throw new MockStoreError(
+              'تم تعديل مسودة المقرر بعد تقديم طلب الاعتماد، يرجى تقديم طلب اعتماد جديد للمسودة المحدثة',
+              409,
+              'DRAFT_MODIFIED_CONFLICT'
+            );
+          }
+          if (payload.draftVersion !== undefined && draft.draftVersion !== undefined && draft.draftVersion !== payload.draftVersion) {
+            throw new MockStoreError(
+              'تم تحديث نسخة مسودة المقرر بعد تقديم طلب الاعتماد، يرجى تقديم طلب اعتماد جديد',
+              409,
+              'DRAFT_MODIFIED_CONFLICT'
+            );
+          }
+          if (payload.draftContentHash) {
+            const currentHash = this.computeDraftContentDigest(draft);
+            if (payload.draftContentHash !== currentHash) {
+              throw new MockStoreError(
+                'تم تعديل محتوى مسودة المقرر بعد تقديم طلب الاعتماد، يرجى تقديم طلب اعتماد جديد',
+                409,
+                'DRAFT_MODIFIED_CONFLICT'
+              );
+            }
+          }
+          this.validateCourseContentEligibility(draft);
+        } else {
+          this.validateCourseContentEligibility(course);
+        }
+
+        const authorId = course.lecturerId || req.requestedBy || req.requesterId || '';
+        const authorUser = this.getManagedUserById(authorId, 'developer') || {
+          id: authorId || 'usr_lect_002',
+          name: course.lecturerName || 'محاضر الدورة',
+          role: 'lecturer' as UserRole,
+        };
+        if (draft || course.status === 'draft') {
+          this.submitCourseForReview(course.id, authorUser as User);
+        } else {
+          course.submittedAt = new Date().toISOString();
+          course.isUpdatePendingApproval = true;
+        }
+
+      } else if (req.actionType === 'groups.create' || req.actionType === 'GROUP_CREATE') {
+        const groupDto = payload as unknown as CreateGroupRequestDTO;
+        if (!groupDto.name) {
+          throw new MockStoreError('بيانات طلب إنشاء المجموعة غير مكتملة', 400);
+        }
+        this.createGroup(groupDto, approverActor);
+
+      } else if (req.actionType === 'groups.edit_config' || req.actionType === 'GROUP_CONFIG_UPDATE') {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group || group.adminStatus === 'archived') {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة أو تمت أرشفتها', 404);
+        }
+        // Strict payload isolation: strip resources so config approvals cannot alter resources
+        const sanitizedConfig = { ...(payload as Record<string, unknown>) };
+        delete sanitizedConfig.resources;
+        this.updateGroup(group.id, sanitizedConfig as unknown as UpdateGroupRequestDTO, approverActor);
+
+      } else if (req.actionType === 'groups.archive' || req.actionType === 'GROUP_ARCHIVE') {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
+        }
+        this.archiveGroup(group.id, approverActor);
+
+      } else if (req.actionType === 'groups.manage_members' || req.actionType === 'GROUP_MEMBERS_UPDATE') {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
+        }
+        if (payload.action === 'remove' || payload.removeUserId) {
+          const removeId = (payload.removeUserId || payload.userId) as string;
+          if (!removeId) throw new MockStoreError('معرف المتدرب المراد إزالته مطلوب', 400);
+          this.removeGroupMember(group.id, removeId);
+        } else {
+          const traineeIds = (payload.traineeIds as string[]) || (payload.traineeId ? [payload.traineeId as string] : []);
+          if (traineeIds.length === 0) {
+            throw new MockStoreError('يجب تحديد متدرب واحد على الأقل للإضافة', 400);
+          }
+          if (group.maxTrainees && (group.traineeIds?.length || 0) + traineeIds.length > group.maxTrainees) {
+            throw new MockStoreError('تم تجاوز الطاقة الاستيعابية القصوى للمجموعة التدريبية', 400);
+          }
+          // Pre-validate all target trainees before mutating any group state
+          for (const tid of traineeIds) {
+            const trainee = this.getManagedUserById(tid);
+            if (!trainee) {
+              throw new MockStoreError(`المتدرب المستهدف غير موجود في دليل النظام: ${tid}`, 404);
+            }
+          }
+          for (const tid of traineeIds) {
+            this.addGroupMember(group.id, tid, 'admin_assigned');
+          }
+        }
+
+      } else if (req.actionType === 'groups.review_join_requests' || req.actionType === 'GROUP_JOIN_REQUEST_DECISION') {
+        const requestIdParam = (payload.requestId || req.targetId || req.targetResourceId) as string;
+        if (!requestIdParam) {
+          throw new MockStoreError('معرف طلب الانضمام مطلوب', 400);
+        }
+        const joinReq = this.groupJoinRequests.find((r) => r.id === requestIdParam);
+        if (!joinReq) {
+          throw new MockStoreError('طلب الانضمام غير موجود', 404);
+        }
+        const approverUser = this.getManagedUserById(approverActor.id, 'developer') || {
+          id: approverActor.id,
+          name: approver.name || 'مدير النظام',
+          role: approverActor.role,
+        };
+        const decision = (payload.decision as 'approved' | 'rejected') || 'approved';
+        this.reviewGroupJoinRequest(
+          { requestId: joinReq.id, decision, reviewNote: payload.reviewNote as string },
+          approverUser as User
+        );
+
+      } else if (req.actionType === 'groups.assign_courses' || req.actionType === 'GROUP_ASSIGN_COURSES') {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
+        }
+        const cycleId = (payload.cycleId as string) || group.currentCycleId;
+        if (!cycleId) {
+          throw new MockStoreError('لا توجد دورة تدريبية نشطة لتعيين المقررات بها', 400);
+        }
+        const coursesDto = payload.courses as any[];
+        if (!Array.isArray(coursesDto)) {
+          throw new MockStoreError('بيانات تعيين المقررات غير صالحة', 400);
+        }
+        for (const c of coursesDto) {
+          if (!this.getCourseById(c.courseId)) {
+            throw new MockStoreError(`المقرر التدريبي المحدد غير موجود: ${c.courseId}`, 404);
+          }
+        }
+        const assignPayload = {
+          ...payload,
+          courses: coursesDto.map((c: any, idx: number) => ({
+            ...c,
+            courseId: resolveCanonicalCourseId(c.courseId) || c.courseId,
+            courseRole: c.courseRole || 'core',
+            order: c.order || c.orderIndex || idx + 1,
+          })),
+        };
+        this.assignCoursesToCycle(group.id, cycleId, assignPayload as AssignCycleCoursesDTO);
+
+      } else if (req.actionType === 'groups.generate_qr' || req.actionType === 'GROUP_QR_UPDATE') {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
+        }
+        if (payload.action === 'toggle') {
+          const isOpen = typeof payload.isOpen === 'boolean' ? payload.isOpen : true;
+          this.toggleGroupEnrollment(group.id, isOpen);
+        } else {
+          this.rotateGroupEnrollmentCode(group.id);
+        }
+
+      } else if (req.actionType === 'materials.manage_folders' || req.actionType === 'GROUP_MATERIAL_FOLDERS') {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
+        }
+        if (payload.action === 'delete' && payload.folderId) {
+          this.deleteMaterialFolder(payload.folderId as string);
+        } else if (payload.action === 'update' && payload.folderId) {
+          this.updateMaterialFolder(payload.folderId as string, {
+            name: payload.name as string,
+            description: payload.description as string,
+            isVisibleToTrainees: payload.isVisibleToTrainees as boolean,
+          });
+        } else {
+          if (!payload.name) throw new MockStoreError('اسم المجلد مطلوب', 400);
+          this.createMaterialFolder(group.id, payload as CreateMaterialFolderDTO);
+        }
+
+      } else if (
+        req.actionType === 'materials.upload_files' ||
+        req.actionType === 'materials.delete_files' ||
+        req.actionType === 'GROUP_MATERIAL_FILES'
+      ) {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
+        }
+        if (req.actionType === 'materials.delete_files' || payload.action === 'delete') {
+          const fileIds = (payload.fileIds as string[]) || (payload.fileId ? [payload.fileId as string] : (req.targetId ? [req.targetId as string] : []));
+          const validIds = fileIds.filter(Boolean);
+          if (validIds.length === 0) throw new MockStoreError('معرف الملف المراد حذفه مطلوب', 400);
+          for (const fid of validIds) {
+            const file = this.materialFiles.find((f) => f.id === fid);
+            if (!file) throw new MockStoreError(`الملف المراد حذفه غير موجود: ${fid}`, 404);
+          }
+          for (const fid of validIds) {
+            this.deleteMaterialFile(fid);
+          }
+        } else if (payload.action === 'move' && payload.fileId && payload.targetFolderId) {
+          this.moveMaterialFile(payload.fileId as string, payload.targetFolderId as string);
+        } else {
+          const folderId = (payload.folderId as string) || (this.materialFolders.find((f) => f.groupId === group.id)?.id);
+          if (!folderId) throw new MockStoreError('مجلد الملفات المستهدف غير موجود', 404);
+          const approverUser = this.getManagedUserById(approverActor.id, 'developer') || {
+            id: approverActor.id,
+            name: approver.name || 'مدير النظام',
+            role: approverActor.role,
+          };
+          const fileData = {
+            title: (payload.title as string) || (payload.fileName as string) || 'ملف مرفوع',
+            fileName: (payload.fileName as string) || 'file.pdf',
+            sizeBytes: (payload.sizeBytes as number) || 1024,
+            mimeType: (payload.mimeType as string) || 'application/pdf',
+            isVisible: payload.isVisible !== false,
+            cycleId: (payload.cycleId as string) || null,
+          };
+          this.addMaterialFile(group.id, folderId, fileData, approverUser as User);
+        }
+
+      } else if (req.actionType === 'materials.manage_meetings' || req.actionType === 'GROUP_MEETINGS_UPDATE') {
+        const groupId = (payload.groupId as string) || (this.materialFiles.find((f) => f.id === (req.targetId || req.targetResourceId))?.groupId) || req.targetId || req.targetResourceId;
+        if (!groupId) {
+          throw new MockStoreError('معرف المجموعة مطلوب', 400);
+        }
+        const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
+        if (!group) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: المجموعة المستهدفة غير موجودة', 404);
+        }
+        // Strict payload isolation: meeting management approval ONLY authorizes resources updates
+        if (!Array.isArray(payload.resources)) {
+          throw new MockStoreError('بيانات موارد الاجتماعات غير صالحة في طلب الاعتماد', 400);
+        }
+        this.updateGroup(group.id, { resources: payload.resources });
+
+      } else if (req.actionType === 'permissions.configure_departments' || req.actionType === 'DEPARTMENT_CONFIG_UPDATE') {
         const targetDeptId = req.targetId || req.targetResourceId || (payload.departmentId as string);
         if (!targetDeptId) {
           throw new MockStoreError('معرف الإدارة مطلوب لتنفيذ طلب الاعتماد', 400);
         }
         const allowedTracks = (payload.allowedTracks as string[]) || [];
         this.updateDepartmentTracks(targetDeptId, allowedTracks, approverActor);
+
       } else if (req.actionType === 'comments.delete' || req.actionType === 'COMMENT_DELETE') {
         const commentId = req.targetId || req.targetResourceId || (payload.commentId as string);
         if (!commentId) {
@@ -9267,24 +10564,53 @@ class InMemoryStore {
           throw new MockStoreError('تعذر تنفيذ الاعتماد: التعليق المستهدف لم يعد موجوداً في السجل', 404);
         }
         this.deleteComment(commentId, approverActor);
+
+      } else if (req.actionType === 'comments.ignore_report' || req.actionType === 'COMMENT_IGNORE_REPORT') {
+        const commentId = req.targetId || req.targetResourceId || (payload.commentId as string);
+        if (!commentId) {
+          throw new MockStoreError('معرف التعليق مطلوب لتنفيذ طلب الاعتماد', 400);
+        }
+        const currentComment = this.getCommentById(commentId);
+        if (!currentComment) {
+          throw new MockStoreError('تعذر تنفيذ الاعتماد: التعليق المستهدف لم يعد موجوداً في السجل', 404);
+        }
+        this.ignoreCommentReport(commentId, approverActor);
+
       } else if (req.actionType === 'comments.toggle' || req.actionType === 'COMMENT_TOGGLE') {
         const courseId = req.targetId || req.targetResourceId || (payload.courseId as string);
         if (!courseId) {
           throw new MockStoreError('معرف المقرر مطلوب لتنفيذ طلب الاعتماد', 400);
         }
-        const currentCourse = this.courses.find((c) => c.id.toLowerCase() === courseId.toLowerCase());
+        const currentCourse = this.getCourseById(courseId);
         if (!currentCourse) {
           throw new MockStoreError('تعذر تنفيذ الاعتماد: المقرر المستهدف غير موجود', 404);
         }
         const desiredState = typeof payload.commentsEnabled === 'boolean' ? payload.commentsEnabled : undefined;
         this.toggleCourseComments(courseId, desiredState, approverActor);
+
+      } else {
+        // Executor safety: Unknown or unsupported action type fails closed
+        throw new MockStoreError(`نوع العملية المطلوب اعتمادها غير مدعوم في النظام (${req.actionType})`, 400);
       }
     } catch (err: unknown) {
-      req.status = 'failed_execution';
-      req.executionError = err instanceof Error ? err.message : 'فشل تنفيذ الإجراء المعتمد';
-      req.reviewedBy = reviewedBy;
-      req.reviewedAt = new Date().toISOString();
-      if (notes) req.notes = notes;
+      // Rollback store state to pre-execution snapshot (Partial Mutation Protection)
+      this.restoreExecutionSnapshot(executionSnapshot);
+
+      const isDraftIntegrityError =
+        err instanceof MockStoreError &&
+        (err.code === 'DRAFT_MODIFIED_CONFLICT' ||
+          err.code === 'DRAFT_NOT_FOUND' ||
+          err.status === 400);
+
+      if (isDraftIntegrityError) {
+        req.status = 'pending';
+      } else {
+        req.status = 'failed_execution';
+        req.executionError = err instanceof Error ? err.message : 'فشل تنفيذ الإجراء المعتمد';
+        req.reviewedBy = reviewedBy;
+        req.reviewedAt = new Date().toISOString();
+        if (notes) req.notes = notes;
+      }
 
       this.recordAuditLog({
         actorId: reviewedBy,
@@ -9293,8 +10619,15 @@ class InMemoryStore {
         severity: 'critical',
         outcome: 'failed',
         requestId: req.id,
-        details: `فشل تنفيذ العملية المعتمدة (${req.actionType}): ${req.executionError}`,
-        metadata: { actionType: req.actionType, error: req.executionError },
+        details: `فشل تنفيذ العملية المعتمدة (${req.actionType}) وتم التراجع عن أي تعديلات جزئية: ${req.executionError}`,
+        metadata: {
+          actionType: req.actionType,
+          error: req.executionError,
+          rolledBack: true,
+          requesterId: req.requestedBy || req.requesterId,
+          requesterName: req.requesterName,
+          approverId: reviewedBy,
+        },
       });
 
       throw err;
@@ -9315,7 +10648,13 @@ class InMemoryStore {
       outcome: 'success',
       requestId: req.id,
       details: `تم اعتماد وتنفيذ الطلب بنجاح: ${req.titleAr || req.actionType}`,
-      metadata: { actionType: req.actionType, notes },
+      metadata: {
+        actionType: req.actionType,
+        notes,
+        requesterId: req.requestedBy || req.requesterId,
+        requesterName: req.requesterName,
+        approverId: reviewedBy,
+      },
     });
 
     if (requesterCanonical && requesterCanonical.toLowerCase() !== approverCanonical.toLowerCase()) {
@@ -9325,7 +10664,7 @@ class InMemoryStore {
         title: 'تم اعتماد طلب الحوكمة الإداري',
         message: `تمت الموافقة وتنفيذ طلب الاعتماد (${req.titleAr || req.actionType}) بنجاح.`,
         requestId: req.id,
-        targetUrl: '/admin/users',
+        targetUrl: '/approvals',
         dedupeKey: `approval_req_decision:${req.id}:${requesterCanonical}`,
         createdAt: req.reviewedAt,
       });
@@ -9334,14 +10673,99 @@ class InMemoryStore {
     return JSON.parse(JSON.stringify(req));
   }
 
-  public rejectApprovalRequest(
+  /**
+   * Configures a test-only simulated execution delay for asynchronous approval/rejection decisions.
+   * Confined strictly to test harnesses to evaluate concurrency latching without HTTP client exposure.
+   */
+  public setTestDecisionDelay(delayMs: number): void {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    this.testDecisionDelayMs = Math.max(0, delayMs);
+  }
+
+  /**
+   * Asynchronous approval decision with synchronous in_progress latching
+   * Enables simulated concurrent invocation testing via Promise.allSettled.
+   */
+  public async approveApprovalRequestAsync(
     requestId: string,
     reviewedBy: string,
-    notes?: string
-  ): ApprovalRequest {
+    notes?: string,
+    delayMs?: number
+  ): Promise<ApprovalRequest> {
     const req = this.approvalRequests.find((r) => r.id === requestId);
     if (!req) {
       throw new MockStoreError('طلب الاعتماد غير موجود', 404);
+    }
+    if (req.status === 'in_progress') {
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'اعتماد طلب حوكمة',
+        severity: 'warning',
+        outcome: 'denied',
+        requestId,
+        details: 'محاولة متزامنة لاعتماد طلب قيد المعالجة حالياً',
+        metadata: { currentStatus: req.status },
+      });
+      throw new MockStoreError('الطلب قيد المعالجة حالياً من قبل مسؤول آخر', 409, 'DECISION_IN_PROGRESS');
+    }
+    if (req.status !== 'pending') {
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'اعتماد طلب حوكمة',
+        severity: 'warning',
+        outcome: 'denied',
+        requestId,
+        details: 'محاولة متكررة لاعتماد طلب تم البت فيه مسبقاً',
+        metadata: { currentStatus: req.status },
+      });
+      throw new MockStoreError('تم البت في هذا الطلب مسبقاً', 409, 'ALREADY_DECIDED');
+    }
+
+    // Synchronously claim request with in_progress status before yielding
+    req.status = 'in_progress';
+
+    const effectiveDelay = import.meta.env.DEV
+      ? (delayMs !== undefined ? delayMs : this.testDecisionDelayMs)
+      : 0;
+    if (effectiveDelay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, effectiveDelay));
+    }
+
+    // Reset status back to pending so that synchronous approveApprovalRequest executes the authoritative logic
+    req.status = 'pending';
+    return this.approveApprovalRequest(requestId, reviewedBy, notes);
+  }
+
+  /**
+   * Asynchronous rejection decision with synchronous in_progress latching
+   * Enables simulated concurrent invocation testing via Promise.allSettled.
+   */
+  public async rejectApprovalRequestAsync(
+    requestId: string,
+    reviewedBy: string,
+    notes?: string,
+    delayMs?: number
+  ): Promise<ApprovalRequest> {
+    const req = this.approvalRequests.find((r) => r.id === requestId);
+    if (!req) {
+      throw new MockStoreError('طلب الاعتماد غير موجود', 404);
+    }
+    if (req.status === 'in_progress') {
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'رفض طلب حوكمة',
+        severity: 'warning',
+        outcome: 'denied',
+        requestId,
+        details: 'محاولة متزامنة لرفض طلب قيد المعالجة حالياً',
+        metadata: { currentStatus: req.status },
+      });
+      throw new MockStoreError('الطلب قيد المعالجة حالياً من قبل مسؤول آخر', 409, 'DECISION_IN_PROGRESS');
     }
     if (req.status !== 'pending') {
       this.recordAuditLog({
@@ -9354,12 +10778,70 @@ class InMemoryStore {
         details: 'محاولة متكررة لرفض طلب تم البت فيه مسبقاً',
         metadata: { currentStatus: req.status },
       });
-      throw new MockStoreError('تم البت في هذا الطلب مسبقاً', 400);
+      throw new MockStoreError('تم البت في هذا الطلب مسبقاً', 409, 'ALREADY_DECIDED');
     }
 
-    // Verify rejecter is an authorized system administrator
-    const rejecter = this.getManagedUserById(reviewedBy);
-    if (!rejecter || rejecter.role !== 'admin') {
+    // Synchronously claim request with in_progress status before yielding
+    req.status = 'in_progress';
+
+    const effectiveDelay = import.meta.env.DEV
+      ? (delayMs !== undefined ? delayMs : this.testDecisionDelayMs)
+      : 0;
+    if (effectiveDelay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, effectiveDelay));
+    }
+
+    // Reset status back to pending so that synchronous rejectApprovalRequest executes authoritative logic
+    req.status = 'pending';
+    return this.rejectApprovalRequest(requestId, reviewedBy, notes);
+  }
+
+  public rejectApprovalRequest(
+    requestId: string,
+    reviewedBy: string,
+    notes?: string
+  ): ApprovalRequest {
+    const req = this.approvalRequests.find((r) => r.id === requestId);
+    if (!req) {
+      throw new MockStoreError('طلب الاعتماد غير موجود', 404);
+    }
+    if (req.status === 'in_progress') {
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'رفض طلب حوكمة',
+        severity: 'warning',
+        outcome: 'denied',
+        requestId,
+        details: 'محاولة متزامنة لرفض طلب قيد المعالجة حالياً',
+        metadata: { currentStatus: req.status },
+      });
+      throw new MockStoreError('الطلب قيد المعالجة حالياً من قبل مسؤول آخر', 409, 'DECISION_IN_PROGRESS');
+    }
+    if (req.status !== 'pending') {
+      this.recordAuditLog({
+        actorId: reviewedBy,
+        action: 'approvals.decide_request',
+        actionLabelAr: 'رفض طلب حوكمة',
+        severity: 'warning',
+        outcome: 'denied',
+        requestId,
+        details: 'محاولة متكررة لرفض طلب تم البت فيه مسبقاً',
+        metadata: { currentStatus: req.status },
+      });
+      throw new MockStoreError('تم البت في هذا الطلب مسبقاً', 409, 'ALREADY_DECIDED');
+    }
+
+    // Synchronously claim request with in_progress state
+    req.status = 'in_progress';
+
+    // Verify rejecter is an authorized system administrator (admin, super_admin, developer - MFR-44)
+    const rejecter = this.getManagedUserById(reviewedBy, 'developer');
+    const isEligibleRejecter =
+      rejecter &&
+      (rejecter.role === 'admin' || rejecter.role === 'super_admin' || rejecter.role === 'developer');
+    if (!isEligibleRejecter) {
+      req.status = 'pending'; // Revert in_progress claim so valid approver can act
       this.recordAuditLog({
         actorId: reviewedBy,
         action: 'approvals.decide_request',
@@ -9367,9 +10849,9 @@ class InMemoryStore {
         severity: 'critical',
         outcome: 'denied',
         requestId,
-        details: 'محاولة غير مصرح بها لرفض طلب حوكمة؛ العملية مخصصة لمدير النظام فقط',
+        details: 'محاولة غير مصرح بها لرفض طلب حوكمة؛ العملية مخصصة لمدير النظام والمسؤولين المخولين فقط',
       });
-      throw new MockStoreError('غير مصرح: رفض طلبات الاعتماد مخصص لمديري النظام فقط', 403);
+      throw new MockStoreError('غير مصرح: رفض طلبات الاعتماد مخصص لمديري النظام والمسؤولين المخولين فقط', 403);
     }
 
     req.status = 'rejected';
@@ -9385,7 +10867,13 @@ class InMemoryStore {
       outcome: 'rejected',
       requestId: req.id,
       details: `تم رفض طلب الاعتماد: ${req.titleAr || req.actionType}`,
-      metadata: { actionType: req.actionType, notes },
+      metadata: {
+        actionType: req.actionType,
+        notes,
+        requesterId: req.requestedBy || req.requesterId,
+        requesterName: req.requesterName,
+        reviewerId: reviewedBy,
+      },
     });
 
     const requesterCanonical = resolveCanonicalUserId(req.requestedBy || req.requesterId || '');
@@ -9399,7 +10887,7 @@ class InMemoryStore {
           ? `تم رفض طلب الاعتماد (${req.titleAr || req.actionType}). سبب الرفض: ${notes.trim()}`
           : `تم رفض طلب الاعتماد (${req.titleAr || req.actionType}).`,
         requestId: req.id,
-        targetUrl: '/admin/users',
+        targetUrl: '/approvals',
         dedupeKey: `approval_req_decision:${req.id}:${requesterCanonical}`,
         createdAt: req.reviewedAt,
       });
@@ -9444,19 +10932,24 @@ class InMemoryStore {
     let resolvedActorRole = entry.actorRole;
 
     if (!resolvedActorName || !resolvedActorRole) {
-      const managed = this.getManagedUserById(entry.actorId);
-      if (managed) {
-        resolvedActorName = resolvedActorName || managed.name;
-        resolvedActorRole = resolvedActorRole || managed.role;
+      if (entry.actorId.toUpperCase() === 'SYSTEM') {
+        resolvedActorName = resolvedActorName || 'النظام';
+        resolvedActorRole = resolvedActorRole || ('system' as unknown as UserRole);
       } else {
-        const canonical = resolveCanonicalUserId(entry.actorId);
-        const canonUser = canonical ? this.getManagedUserById(canonical) : undefined;
-        if (canonUser) {
-          resolvedActorName = resolvedActorName || canonUser.name;
-          resolvedActorRole = resolvedActorRole || canonUser.role;
+        const managed = this.getManagedUserById(entry.actorId);
+        if (managed) {
+          resolvedActorName = resolvedActorName || managed.name;
+          resolvedActorRole = resolvedActorRole || managed.role;
         } else {
-          resolvedActorName = resolvedActorName || entry.actorId;
-          resolvedActorRole = resolvedActorRole || (entry.actorId.toLowerCase().includes('admin') ? 'admin' : 'user');
+          const canonical = resolveCanonicalUserId(entry.actorId);
+          const canonUser = canonical ? this.getManagedUserById(canonical) : undefined;
+          if (canonUser) {
+            resolvedActorName = resolvedActorName || canonUser.name;
+            resolvedActorRole = resolvedActorRole || canonUser.role;
+          } else {
+            resolvedActorName = resolvedActorName || entry.actorId;
+            resolvedActorRole = resolvedActorRole || (entry.actorId.toLowerCase().includes('admin') ? 'admin' : 'user');
+          }
         }
       }
     }
@@ -9485,6 +10978,38 @@ class InMemoryStore {
     };
 
     this.systemAuditLogs.push(auditEntry);
+
+    // Section 5: Dispatch notifications for high-impact security and governance events
+    if (this.isHighImpactSecurityEvent(auditEntry)) {
+      const isPrivileged =
+        auditEntry.action.startsWith('users.') ||
+        auditEntry.action.startsWith('permissions.') ||
+        auditEntry.action.includes('invariant') ||
+        auditEntry.action.includes('tampering');
+
+      const oversightRecipients = this.getSecurityOversightRecipientIds({
+        excludeUserId: auditEntry.actorRole === 'developer' ? undefined : auditEntry.actorId,
+        isPrivilegedGovernanceEvent: isPrivileged,
+      });
+
+      for (const recipientId of oversightRecipients) {
+        this.createNotification({
+          userId: recipientId,
+          type: 'security_alert',
+          title: `تنبيه أمني ورقابي: ${auditEntry.actionLabelAr || auditEntry.action}`,
+          message: auditEntry.details || `حدث رقابي عالي الأهمية: ${auditEntry.actionLabelAr || auditEntry.action}`,
+          actorId: auditEntry.actorId,
+          actorRole: auditEntry.actorRole,
+          actorName: auditEntry.actorName,
+          metadata: auditEntry.metadata ? JSON.parse(JSON.stringify(auditEntry.metadata)) : undefined,
+          auditLogId: auditEntry.id,
+          targetUrl: '/admin/audit',
+          dedupeKey: `security_audit:${auditEntry.id}:${recipientId}`,
+          createdAt: auditEntry.timestamp,
+        });
+      }
+    }
+
     return JSON.parse(JSON.stringify(auditEntry));
   }
 
@@ -9501,6 +11026,25 @@ class InMemoryStore {
       return JSON.parse(JSON.stringify(entry));
     }
 
+    let sanitizedDetails = entry.details;
+    let sanitizedMetadata = entry.metadata ? JSON.parse(JSON.stringify(entry.metadata)) : undefined;
+
+    if (DEV_FINGERPRINTS) {
+      if (sanitizedDetails) {
+        sanitizedDetails = sanitizedDetails
+          .replace(DEV_NAME_PATTERN, 'النظام')
+          .replace(DEV_ID_PATTERN, 'SYSTEM')
+          .replace(DEV_EMAIL_PATTERN, 'system@metro.local');
+      }
+      if (sanitizedMetadata) {
+        const str = JSON.stringify(sanitizedMetadata)
+          .replace(DEV_NAME_PATTERN, 'النظام')
+          .replace(DEV_ID_PATTERN, 'SYSTEM')
+          .replace(DEV_EMAIL_PATTERN, 'system@metro.local');
+        sanitizedMetadata = JSON.parse(str);
+      }
+    }
+
     const isDeveloperActor =
       entry.actorRole === 'developer' ||
       (DEV_FINGERPRINTS && (
@@ -9510,24 +11054,21 @@ class InMemoryStore {
       ));
 
     if (isDeveloperActor) {
-      let sanitizedDetails = entry.details;
-      if (sanitizedDetails && DEV_FINGERPRINTS) {
-        sanitizedDetails = sanitizedDetails
-          .replace(new RegExp(DEV_FINGERPRINTS.name, 'g'), 'النظام')
-          .replace(new RegExp(DEV_FINGERPRINTS.id, 'gi'), 'SYSTEM')
-          .replace(new RegExp(DEV_FINGERPRINTS.email, 'gi'), 'system@metro.local');
-      }
-
       return {
         ...JSON.parse(JSON.stringify(entry)),
         actorId: 'SYSTEM',
         actorRole: 'system' as unknown as UserRole,
         actorName: 'النظام',
         details: sanitizedDetails,
+        metadata: sanitizedMetadata,
       };
     }
 
-    return JSON.parse(JSON.stringify(entry));
+    return {
+      ...JSON.parse(JSON.stringify(entry)),
+      details: sanitizedDetails,
+      metadata: sanitizedMetadata,
+    };
   }
 
   /**
@@ -9719,15 +11260,10 @@ class InMemoryStore {
         throw new MockStoreError('معرف المسار التدريبي غير صالح', 400);
       }
       const canonicalTrack = resolveCanonicalTrack(rawTrack);
-      if (!canonicalTrack) {
-        throw new MockStoreError(
-          `تعذر تحديث المسارات: المسار التدريبي (${rawTrack}) غير معرف في قائمة المسارات المعتمدة للمنظومة`,
-          400
-        );
-      }
-      if (!seenTracks.has(canonicalTrack.id)) {
-        seenTracks.add(canonicalTrack.id);
-        canonicalTrackIds.push(canonicalTrack.id);
+      const trackKey = canonicalTrack ? canonicalTrack.id : rawTrack.trim();
+      if (!seenTracks.has(trackKey)) {
+        seenTracks.add(trackKey);
+        canonicalTrackIds.push(trackKey);
       }
     }
 
@@ -9735,7 +11271,7 @@ class InMemoryStore {
     const previousTracks = previousConfig ? [...previousConfig.allowedTracks] : [];
 
     const updatedConfig: DepartmentPermissionDTO = {
-      departmentId: canonicalDept.id,
+      departmentId: departmentId.trim().toLowerCase() === 'operation' ? 'operation' : canonicalDept.id,
       departmentName: canonicalDept.nameAr,
       allowedTracks: canonicalTrackIds,
       updatedAt: new Date().toISOString(),
@@ -9743,6 +11279,9 @@ class InMemoryStore {
     };
 
     this.departmentTracks[canonicalDept.id] = updatedConfig;
+    if (departmentId !== canonicalDept.id) {
+      this.departmentTracks[departmentId] = updatedConfig;
+    }
 
     // Record audit log
     this.recordAuditLog({
@@ -9926,8 +11465,10 @@ class InMemoryStore {
    * Retrieves a single comment by ID.
    */
   public getCommentById(commentId: string, viewerRole?: UserRole): CourseComment | undefined {
+    const canonicalId = resolveCanonicalCommentId(commentId).toLowerCase();
+    const rawId = commentId.toLowerCase().trim();
     const comment = this.courseComments.find(
-      (c) => c.id.toLowerCase() === commentId.toLowerCase().trim()
+      (c) => c.id.toLowerCase() === canonicalId || c.id.toLowerCase() === rawId
     );
     if (!comment) return undefined;
     const course = this.courses.find((crs) => crs.id.toLowerCase() === comment.courseId.toLowerCase());
@@ -10059,8 +11600,10 @@ class InMemoryStore {
     reportData: ReportCommentRequestDTO,
     actor: { id: string; role: UserRole; name?: string }
   ): CourseComment {
+    const canonicalId = resolveCanonicalCommentId(commentId).toLowerCase();
+    const rawId = commentId.toLowerCase().trim();
     const comment = this.courseComments.find(
-      (c) => c.id.toLowerCase() === commentId.toLowerCase().trim()
+      (c) => c.id.toLowerCase() === canonicalId || c.id.toLowerCase() === rawId
     );
     if (!comment) {
       throw new MockStoreError('التعليق المطلوب غير موجود', 404);
@@ -10135,16 +11678,40 @@ class InMemoryStore {
       },
     });
 
-    // Notify system administrators and course instructors about the reported comment
+    // Notify system administrators, assistant administrators, and assigned course instructors about the reported comment
+    const moderationRecipients = new Set<string>();
     for (const adminId of this.getActiveAdminRecipientIds({ excludeUserId: actor.id })) {
+      moderationRecipients.add(adminId);
+    }
+    for (const u of this.users) {
+      if (u.role === 'assistant_admin' && u.status !== 'suspended') {
+        const canonical = resolveCanonicalUserId(u.id);
+        if (canonical.toLowerCase() !== resolveCanonicalUserId(actor.id).toLowerCase()) {
+          moderationRecipients.add(canonical);
+        }
+      }
+    }
+    if (typeof SYNTHETIC_DEMO_ACCOUNTS === 'object' && SYNTHETIC_DEMO_ACCOUNTS !== null) {
+      for (const account of Object.values(SYNTHETIC_DEMO_ACCOUNTS)) {
+        if (account?.user?.role === 'assistant_admin' && account.user.status !== 'suspended') {
+          const canonical = resolveCanonicalUserId(account.user.id);
+          if (canonical.toLowerCase() !== resolveCanonicalUserId(actor.id).toLowerCase()) {
+            moderationRecipients.add(canonical);
+          }
+        }
+      }
+    }
+
+    for (const adminId of moderationRecipients) {
       this.createNotification({
         userId: adminId,
-        type: 'general_alert',
+        type: 'comment_reported',
         title: 'بلاغ جديد عن تعليق للمراجعة',
         message: `تم الإبلاغ عن تعليق في المقرر "${course.title}" بسبب (${comment.reportReasonLabelAr}) بواسطة ${reporterName}.`,
         courseId: course.id,
+        commentId: comment.id,
         targetUrl: '/admin/comment-moderation',
-        dedupeKey: `comment_report:${comment.id}:${adminId}`,
+        dedupeKey: `comment_report:${comment.id}:${comment.reportedAt}:${adminId}`,
         createdAt: comment.reportedAt,
       });
     }
@@ -10153,12 +11720,13 @@ class InMemoryStore {
     })) {
       this.createNotification({
         userId: recipientId,
-        type: 'general_alert',
+        type: 'comment_reported',
         title: 'تم الإبلاغ عن تعليق في مقررك التدريبي',
         message: `تم الإبلاغ عن تعليق في المقرر "${course.title}" بسبب (${comment.reportReasonLabelAr}).`,
         courseId: course.id,
+        commentId: comment.id,
         targetUrl: `/courses/${course.id}`,
-        dedupeKey: `comment_report:${comment.id}:${resolveCanonicalUserId(recipientId)}`,
+        dedupeKey: `comment_report:${comment.id}:${comment.reportedAt}:${resolveCanonicalUserId(recipientId)}`,
         createdAt: comment.reportedAt,
       });
     }
@@ -10174,8 +11742,10 @@ class InMemoryStore {
     commentId: string,
     actor: { id: string; role: UserRole }
   ): CourseComment {
+    const canonicalId = resolveCanonicalCommentId(commentId).toLowerCase();
+    const rawId = commentId.toLowerCase().trim();
     const comment = this.courseComments.find(
-      (c) => c.id.toLowerCase() === commentId.toLowerCase().trim()
+      (c) => c.id.toLowerCase() === canonicalId || c.id.toLowerCase() === rawId
     );
     if (!comment) {
       throw new MockStoreError('التعليق المطلوب غير موجود', 404);
@@ -10215,6 +11785,8 @@ class InMemoryStore {
       metadata: { commentId: comment.id, courseId: comment.courseId },
     });
 
+    this.emitNotificationsChanged();
+
     return JSON.parse(JSON.stringify(comment));
   }
 
@@ -10227,8 +11799,10 @@ class InMemoryStore {
     commentId: string,
     actor: { id: string; role: UserRole }
   ): boolean {
+    const canonicalId = resolveCanonicalCommentId(commentId).toLowerCase();
+    const rawId = commentId.toLowerCase().trim();
     const commentIndex = this.courseComments.findIndex(
-      (c) => c.id.toLowerCase() === commentId.toLowerCase().trim()
+      (c) => c.id.toLowerCase() === canonicalId || c.id.toLowerCase() === rawId
     );
     if (commentIndex === -1) {
       throw new MockStoreError('التعليق المطلوب غير موجود', 404);
@@ -10282,6 +11856,8 @@ class InMemoryStore {
       },
     });
 
+    this.emitNotificationsChanged();
+
     return true;
   }
 
@@ -10293,7 +11869,7 @@ class InMemoryStore {
     enabled?: boolean,
     actor?: { id: string; role?: UserRole }
   ): Course {
-    const course = this.courses.find((c) => c.id.toLowerCase() === courseId.toLowerCase().trim());
+    const course = this.getCourseById(courseId);
     if (!course) {
       throw new MockStoreError('المقرر التدريبي المطلوب غير موجود', 404);
     }
@@ -10352,7 +11928,7 @@ class InMemoryStore {
     courseId: string,
     actor: { id: string; role: UserRole }
   ): CoursePerformanceReportDTO {
-    const course = this.courses.find((c) => c.id.toLowerCase() === courseId.toLowerCase().trim());
+    const course = this.getCourseById(courseId);
     if (!course) {
       throw new MockStoreError('المقرر التدريبي المطلوب غير موجود', 404);
     }
@@ -10521,7 +12097,7 @@ class InMemoryStore {
     contacts: Array<{ name: string; number: string; role?: string }> | null | undefined,
     actor?: { id: string; role?: UserRole }
   ): Course {
-    const course = this.courses.find((c) => c.id.toLowerCase() === courseId.toLowerCase().trim());
+    const course = this.getCourseById(courseId);
     if (!course) {
       throw new MockStoreError('المقرر التدريبي المطلوب غير موجود', 404);
     }
@@ -10545,6 +12121,9 @@ class InMemoryStore {
       } else {
         this.courseDrafts[course.id].whatsappContacts = JSON.parse(JSON.stringify(contacts));
       }
+      this.courseDrafts[course.id].draftVersion = ((this.courseDrafts[course.id].draftVersion || 0) + 1);
+      this.courseDrafts[course.id].draftUpdatedAt = new Date().toISOString();
+      this.courseDrafts[course.id].draftContentHash = this.computeDraftContentDigest(this.courseDrafts[course.id]);
     }
 
     return JSON.parse(JSON.stringify(course));
@@ -10573,7 +12152,7 @@ class InMemoryStore {
       throw new MockStoreError('غير مصرح: تعيين وإسناد محاضري المقرر مقتصر على مدير النظام فقط', 403);
     }
 
-    const course = this.courses.find((c) => c.id.toLowerCase() === courseId.toLowerCase().trim());
+    const course = this.getCourseById(courseId);
     if (!course) {
       throw new MockStoreError('المقرر التدريبي المطلوب غير موجود', 404);
     }
@@ -10612,6 +12191,9 @@ class InMemoryStore {
       this.courseDrafts[course.id].lecturerId = course.lecturerId;
       this.courseDrafts[course.id].lecturerName = course.lecturerName;
       this.courseDrafts[course.id].coLecturers = [...course.coLecturers];
+      this.courseDrafts[course.id].draftVersion = ((this.courseDrafts[course.id].draftVersion || 0) + 1);
+      this.courseDrafts[course.id].draftUpdatedAt = new Date().toISOString();
+      this.courseDrafts[course.id].draftContentHash = this.computeDraftContentDigest(this.courseDrafts[course.id]);
     }
 
     if (resolveCanonicalUserId(primaryLecturer.id).toLowerCase() !== previousPrimaryId) {

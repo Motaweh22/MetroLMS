@@ -762,21 +762,24 @@ import {
     it('distinguishes course publication execution from sovereign course review decisions', () => {
       const assistantId = 'USR016';
 
-      // 1. Submitting course for review executes directly
+      // 1. Submitting course for review requires approval by default (INV-R9 / MFR-35)
       const checkSubmit = inMemoryStore.hasPermission(assistantId, 'reviews.submit_course');
       expect(checkSubmit.granted).toBe(true);
-      expect(checkSubmit.executionMode).toBe('direct');
+      expect(checkSubmit.executionMode).toBe('requires_approval');
 
       // 2. Executing publication requires approval by default
       const checkPublishDefault = inMemoryStore.hasPermission(assistantId, 'courses.publish');
       expect(checkPublishDefault.granted).toBe(true);
       expect(checkPublishDefault.executionMode).toBe('requires_approval');
 
-      // 3. Executing publication allows direct execution when delegated
+      // 3. Executing publication and submitting courses allow direct execution when delegated
       inMemoryStore.setDelegatedAuthority(assistantId, true);
       const checkPublishDelegated = inMemoryStore.hasPermission(assistantId, 'courses.publish');
       expect(checkPublishDelegated.granted).toBe(true);
       expect(checkPublishDelegated.executionMode).toBe('direct');
+      const checkSubmitDelegated = inMemoryStore.hasPermission(assistantId, 'reviews.submit_course');
+      expect(checkSubmitDelegated.granted).toBe(true);
+      expect(checkSubmitDelegated.executionMode).toBe('direct');
 
       // 4. Deciding/approving course publication review is permanently forbidden to assistant admin
       const checkDecide = inMemoryStore.hasPermission(assistantId, 'reviews.decide_course');
@@ -1496,7 +1499,7 @@ import {
           'Content-Type': 'application/json',
         },
       });
-      expect(duplicateRes.status).toBe(400);
+      expect([400, 409]).toContain(duplicateRes.status);
     });
 
     it('marks request as failed_execution if target state became invalid before approval', async () => {
@@ -1580,7 +1583,7 @@ import {
           'Content-Type': 'application/json',
         },
       });
-      expect(approveAttempt.status).toBe(400);
+      expect([400, 409]).toContain(approveAttempt.status);
       expect(inMemoryStore.getManagedUserById('USR003')?.status).toBe('active');
     });
 

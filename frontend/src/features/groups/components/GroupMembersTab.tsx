@@ -139,7 +139,15 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
 
     setIsRemovingMember(true);
     try {
-      await groupsApi.removeGroupMember(group.id, memberToRemove.userId);
+      const res = await groupsApi.removeGroupMember(group.id, memberToRemove.userId);
+      if ((res as any)?.approvalRequired) {
+        setMemberToRemove(null);
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب إزالة المتدرب للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       toast.success(`تمت إزالة المتدرب (${memberToRemove.name}) من المجموعة بنجاح`);
 
       // Update local state and parent group
@@ -164,6 +172,13 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
     setIsReviewing(true);
     try {
       const res = await groupsApi.reviewJoinRequest(group.id, request.id, 'approved');
+      if ((res as any)?.approvalRequired) {
+        toast.info(
+          (res as any).message ||
+            'تم إرسال قرار قبول طلب الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       toast.success(
         `تم قبول طلب (${request.userName}) بنجاح وتم تسجيله في مقررات المجموعة`
       );
@@ -191,12 +206,20 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
 
     setIsReviewing(true);
     try {
-      await groupsApi.reviewJoinRequest(
+      const res = await groupsApi.reviewJoinRequest(
         group.id,
         rejectingRequest.id,
         'rejected',
         rejectNote.trim() || undefined
       );
+      if ((res as any)?.approvalRequired) {
+        setRejectingRequest(null);
+        toast.info(
+          (res as any).message ||
+            'تم إرسال قرار رفض طلب الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       toast.info(`تم رفض طلب الانضمام المقدم من (${rejectingRequest.userName})`);
       setRejectingRequest(null);
       await fetchRequests();

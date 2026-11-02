@@ -294,6 +294,13 @@ export const GroupQRModal: React.FC<GroupQRModalProps> = ({
     try {
       const nextState = !localIsOpen;
       const res = await groupsApi.toggleQRCode(group.id, nextState);
+      if ((res as any)?.approvalRequired) {
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب تعديل حالة الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       const updatedGroup: TrainingGroup = {
         ...group,
         isEnrollmentOpen: res.isEnrollmentOpen,
@@ -323,6 +330,14 @@ export const GroupQRModal: React.FC<GroupQRModalProps> = ({
     setActionError(null);
     try {
       const res = await groupsApi.rotateQRCode(group.id);
+      if ((res as any)?.approvalRequired) {
+        setShowRotateConfirm(false);
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب إعادة توليد الرمز للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       const updatedGroup: TrainingGroup = {
         ...group,
         enrollmentCode: res.newEnrollmentCode,
@@ -359,6 +374,13 @@ export const GroupQRModal: React.FC<GroupQRModalProps> = ({
       };
 
       const updated = await groupsApi.updateGroup(group.id, dto);
+      if ((updated as any)?.approvalRequired) {
+        toast.info(
+          (updated as any).message ||
+            'تم إرسال طلب تعديل إعدادات الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       onEnrollmentPolicyChange?.(updated.enrollmentPolicy ?? localPolicy);
       onMaxTraineesChange?.(
         updated.maxTrainees !== null && updated.maxTrainees !== undefined

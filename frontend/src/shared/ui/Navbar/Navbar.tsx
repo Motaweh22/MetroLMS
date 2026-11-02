@@ -113,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="relative p-2 text-text-muted hover:text-text hover:bg-neutral-light rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary inline-flex items-center justify-center"
               aria-label={
                 unreadCount > 0
-                  ? `عرض التنبيهات (${unreadCount} تنبيه غير مقروء)`
+                  ? `عرض التنبيهات (${unreadCount > 99 ? 'أكثر من 99' : unreadCount} تنبيه غير مقروء)`
                   : 'عرض التنبيهات'
               }
               data-testid="navbar-notifications-link"
@@ -122,7 +122,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               {unreadCount > 0 && (
                 <span
                   data-testid="navbar-unread-badge"
-                  className="absolute top-1 right-1 min-w-[1.125rem] h-4.5 px-1 rounded-full bg-accent-coral text-white text-[10px] font-black flex items-center justify-center ring-2 ring-surface shadow-xs"
+                  role="status"
+                  aria-label={
+                    unreadCount > 99
+                      ? 'أكثر من 99 تنبيه غير مقروء'
+                      : `${unreadCount} تنبيه غير مقروء`
+                  }
+                  className="absolute top-0.5 end-0.5 min-w-[1.125rem] h-4.5 px-1 rounded-sm bg-danger text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-surface shadow-xs leading-none select-none pointer-events-none"
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>

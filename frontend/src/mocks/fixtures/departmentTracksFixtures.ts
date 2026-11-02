@@ -210,6 +210,9 @@ export const INITIAL_DEPARTMENT_TRACKS: Record<string, DepartmentPermissionDTO> 
 export function resolveCanonicalDepartment(idOrName: string): CanonicalDepartmentDTO | undefined {
   if (!idOrName) return undefined;
   const q = idOrName.trim().toLowerCase();
+  if (q === 'operation' || q === 'operations') {
+    return CANONICAL_DEPARTMENTS.find((d) => d.id === 'DEPT-OPERATIONS');
+  }
   return CANONICAL_DEPARTMENTS.find(
     (d) =>
       d.id.toLowerCase() === q ||

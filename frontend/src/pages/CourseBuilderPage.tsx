@@ -165,6 +165,13 @@ export const CourseBuilderPage: React.FC = () => {
 
     try {
       const res = await builderApi.saveCourseDraft(courseId, course);
+      if ((res as any)?.approvalRequired) {
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب حفظ تعديلات المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       setCourse(res.course);
       setInitialSnapshot(JSON.stringify(res.course));
 
@@ -260,6 +267,13 @@ export const CourseBuilderPage: React.FC = () => {
     setErrorMessage(null);
     try {
       const res = await reviewApi.submitCourse(courseId);
+      if ((res as any)?.approvalRequired) {
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب تقديم المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       setCourse(res.course);
       setInitialSnapshot(JSON.stringify(res.course));
       toast.success(res.message || 'تم تقديم المقرر للمراجعة والاعتماد بنجاح');

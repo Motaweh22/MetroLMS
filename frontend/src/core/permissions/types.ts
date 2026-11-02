@@ -219,13 +219,16 @@ export type ApprovalActionType =
   | 'comments.delete'
   | 'COMMENT_DELETE'
   | 'comments.toggle'
-  | 'COMMENT_TOGGLE';
+  | 'COMMENT_TOGGLE'
+  | SystemCapability
+  | (string & {});
 
 /**
  * Approval Request Status
  */
 export type ApprovalRequestStatus =
   | 'pending'
+  | 'in_progress'
   | 'approved'
   | 'rejected'
   | 'failed_execution';
@@ -236,6 +239,7 @@ export type ApprovalRequestStatus =
 export interface ApprovalRequest<TPayload = unknown> {
   id: string;
   actionType: ApprovalActionType;
+  capability?: SystemCapability;
   titleAr?: string;
   requesterId?: string;
   requesterName?: string;
@@ -245,6 +249,11 @@ export interface ApprovalRequest<TPayload = unknown> {
   targetResourceId?: string;
   targetResourceName?: string;
   targetId?: string;
+  resourceScope?: {
+    groupId?: string;
+    courseId?: string;
+    departmentId?: string;
+  };
   role?: string;
   status: ApprovalRequestStatus;
   createdAt?: string;

@@ -110,18 +110,23 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
   // Handle group-wide post-deadline policy change
   const handlePolicySelect = async (newPolicy: PostDeadlinePolicy) => {
     if (!isCurrentCycleActive) return;
-    const previousPolicy = selectedPolicy;
-    setSelectedPolicy(newPolicy);
     setSaveError(null);
 
     try {
       const updatedGroup = await groupsApi.updateGroup(group.id, {
         postDeadlinePolicy: newPolicy,
       });
+      if ((updatedGroup as any)?.approvalRequired) {
+        toast.info(
+          (updatedGroup as any).message ||
+            'تم إرسال طلب تعديل سياسة ما بعد الموعد للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
+      setSelectedPolicy(newPolicy);
       onPostDeadlinePolicyChange?.(newPolicy);
       onGroupUpdated(updatedGroup);
     } catch (err: unknown) {
-      setSelectedPolicy(previousPolicy);
       const msg = err instanceof Error ? err.message : 'تعذر تحديث سياسة ما بعد الموعد النهائي';
       setSaveError(msg);
       toast.error(msg);
@@ -264,6 +269,15 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
         postDeadlinePolicy: selectedPolicy,
         courses: cycleCourses,
       });
+
+      if ((updatedCycle as any)?.approvalRequired) {
+        setIsDirty(false);
+        toast.info(
+          (updatedCycle as any).message ||
+            'تم إرسال طلب تعيين المقررات للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
 
       // Update cycle in state
       setCycles((prev) =>

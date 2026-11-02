@@ -75,7 +75,8 @@ export const CourseReviewPage: React.FC = () => {
   const isOperationalAdmin =
     user?.role === 'admin' ||
     user?.role === 'super_admin' ||
-    user?.role === 'developer';
+    user?.role === 'developer' ||
+    user?.role === 'assistant_admin';
 
   // Load review data and working notes
   const loadReviewStudioData = useCallback(async () => {

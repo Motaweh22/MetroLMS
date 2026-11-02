@@ -138,15 +138,33 @@ export const GroupMaterialsTab: React.FC<GroupMaterialsTabProps> = ({
     setIsFolderSubmitting(true);
     try {
       if (folderToEdit) {
-        await groupsApi.updateMaterialFolder(groupId, folderToEdit.id, data);
+        const res = await groupsApi.updateMaterialFolder(groupId, folderToEdit.id, data);
+        if ((res as any)?.approvalRequired) {
+          toast.info(
+            (res as any).message ||
+              'تم إرسال طلب تعديل بيانات المجلد للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+          );
+          setIsFolderModalOpen(false);
+          setFolderToEdit(null);
+          return;
+        }
         toast.success(`تم تحديث بيانات المجلد: ${data.name}`);
       } else {
-        await groupsApi.createMaterialFolder(groupId, {
+        const res = await groupsApi.createMaterialFolder(groupId, {
           name: data.name,
           isVisibleToTrainees: data.isVisibleToTrainees,
           cycleId: group.currentCycleId,
           parentId: activeFolder ? activeFolder.id : null,
         });
+        if ((res as any)?.approvalRequired) {
+          toast.info(
+            (res as any).message ||
+              'تم إرسال طلب إنشاء المجلد للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+          );
+          setIsFolderModalOpen(false);
+          setFolderToEdit(null);
+          return;
+        }
         toast.success(`تم إنشاء المجلد بنجاح: ${data.name}`);
       }
       setIsFolderModalOpen(false);
@@ -160,7 +178,15 @@ export const GroupMaterialsTab: React.FC<GroupMaterialsTabProps> = ({
   const handleConfirmDeleteFolder = async () => {
     if (!folderToDelete) return;
     try {
-      await groupsApi.deleteMaterialFolder(groupId, folderToDelete.id);
+      const res = await groupsApi.deleteMaterialFolder(groupId, folderToDelete.id);
+      if ((res as any)?.approvalRequired) {
+        setFolderToDelete(null);
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب حذف المجلد للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       toast.success(`تم حذف المجلد: ${folderToDelete.name}`);
       if (selectedFolderId === folderToDelete.id) {
         setSelectedFolderId(folderToDelete.parentId || null);
@@ -176,7 +202,15 @@ export const GroupMaterialsTab: React.FC<GroupMaterialsTabProps> = ({
   const handleConfirmDeleteFile = async () => {
     if (!fileToDelete) return;
     try {
-      await groupsApi.deleteMaterialFile(groupId, fileToDelete.id);
+      const res = await groupsApi.deleteMaterialFile(groupId, fileToDelete.id);
+      if ((res as any)?.approvalRequired) {
+        setFileToDelete(null);
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب حذف الملف للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
       toast.success(`تم حذف الملف بنجاح: ${fileToDelete.title}`);
       setFileToDelete(null);
       await fetchMaterials();

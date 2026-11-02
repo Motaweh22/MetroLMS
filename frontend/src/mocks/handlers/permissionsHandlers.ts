@@ -531,9 +531,10 @@ export const permissionsHandlers = [
       );
     }
 
-    if (user.role !== 'admin') {
+    const isEligibleApprover = user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+    if (!isEligibleApprover) {
       return HttpResponse.json(
-        { message: 'غير مصرح: اعتماد العمليات الحساسة مخصص لمديري النظام فقط' },
+        { message: 'غير مصرح: البت في طلبات الاعتماد مخصص لمديري النظام فقط' },
         { status: 403 }
       );
     }
@@ -541,11 +542,11 @@ export const permissionsHandlers = [
     const id = params.id as string;
     try {
       const body = (await request.json().catch(() => ({}))) as { notes?: string };
-      const approved = inMemoryStore.approveApprovalRequest(id, user.id, body.notes);
+      const approved = await inMemoryStore.approveApprovalRequestAsync(id, user.id, body.notes);
       return HttpResponse.json(approved, { status: 200 });
     } catch (err: unknown) {
       if (err instanceof MockStoreError) {
-        return HttpResponse.json({ message: err.message }, { status: err.status });
+        return HttpResponse.json({ message: err.message, code: err.code }, { status: err.status });
       }
       return HttpResponse.json(
         { message: 'فشلت معالجة اعتماد الطلب' },
@@ -564,9 +565,10 @@ export const permissionsHandlers = [
       );
     }
 
-    if (user.role !== 'admin') {
+    const isEligibleApprover = user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
+    if (!isEligibleApprover) {
       return HttpResponse.json(
-        { message: 'غير مصرح: رفض طلبات الاعتماد مخصص لمديري النظام فقط' },
+        { message: 'غير مصرح: رفض طلبات الاعتماد مخصص لمديري النظام والمسؤولين المخولين فقط' },
         { status: 403 }
       );
     }
@@ -574,11 +576,11 @@ export const permissionsHandlers = [
     const id = params.id as string;
     try {
       const body = (await request.json().catch(() => ({}))) as { notes?: string };
-      const rejected = inMemoryStore.rejectApprovalRequest(id, user.id, body.notes);
+      const rejected = await inMemoryStore.rejectApprovalRequestAsync(id, user.id, body.notes);
       return HttpResponse.json(rejected, { status: 200 });
     } catch (err: unknown) {
       if (err instanceof MockStoreError) {
-        return HttpResponse.json({ message: err.message }, { status: err.status });
+        return HttpResponse.json({ message: err.message, code: err.code }, { status: err.status });
       }
       return HttpResponse.json(
         { message: 'فشلت معالجة رفض الطلب' },

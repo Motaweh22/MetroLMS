@@ -112,6 +112,15 @@ export const GroupMeetingsTab: React.FC<GroupMeetingsTabProps> = ({
         resources: updatedResources,
       });
 
+      if ((updated as any)?.approvalRequired) {
+        setIsAddModalOpen(false);
+        toast.info(
+          (updated as any).message ||
+            'تم إرسال طلب جدولة اللقاء للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
+
       if (onUpdateGroup) {
         onUpdateGroup(updated);
       }
@@ -135,6 +144,15 @@ export const GroupMeetingsTab: React.FC<GroupMeetingsTabProps> = ({
       const updated = await groupsApi.updateGroup(groupId, {
         resources: updatedResources,
       });
+
+      if ((updated as any)?.approvalRequired) {
+        setMeetingToDelete(null);
+        toast.info(
+          (updated as any).message ||
+            'تم إرسال طلب حذف اللقاء للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        return;
+      }
 
       if (onUpdateGroup) {
         onUpdateGroup(updated);

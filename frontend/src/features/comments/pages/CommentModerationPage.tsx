@@ -139,9 +139,23 @@ export const CommentModerationPage: React.FC = () => {
   const handleIgnoreReport = async (comment: CourseComment) => {
     setIsActionInProgress(true);
     try {
-      await commentsApi.ignoreCommentReport(comment.id);
-      toast.success('تم تجاهل البلاغ بنجاح وحفظ التعليق ضمن نقاشات المقرر.');
-      await loadModerationData();
+      const res = await commentsApi.ignoreCommentReport(comment.id);
+      if ((res as any)?.approvalRequired) {
+        setPendingApprovalNotice({
+          requestId: (res as any).requestId || 'REQ-UNKNOWN',
+          message:
+            (res as any).message ||
+            'تم إرسال طلب تجاهل البلاغ للاعتماد بنجاح؛ العملية بانتظار موافقة مدير النظام.',
+          actionLabel: `طلب تجاهل بلاغ تعليق (${comment.id})`,
+        });
+        toast.info(
+          `تم إرسال طلب تجاهل البلاغ للاعتماد (رقم الطلب: ${(res as any).requestId})؛ يظل البلاغ في قائمة المراجعة حتى الاعتماد.`
+        );
+      } else {
+        toast.success('تم تجاهل البلاغ بنجاح وحفظ التعليق ضمن نقاشات المقرر.');
+        setPendingApprovalNotice(null);
+        await loadModerationData();
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'فشلت معالجة تجاهل البلاغ';
       toast.error(msg);

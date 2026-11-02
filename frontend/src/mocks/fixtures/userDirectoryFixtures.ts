@@ -277,14 +277,11 @@ export const SYNTHETIC_SUPER_ADMIN_USER: ManagedUserDTO | null = import.meta.env
 
 /**
  * Centrally Managed Canonical Users Fixture Dataset.
- * In development: includes base users + synthetic developer + super admin.
- * In production: strictly limited to base users; zero synthetic developer/super admin records.
+ * Preserves the 15 canonical seed users in INITIAL_MANAGED_USERS.
+ * Synthetic developer and super admin accounts are provisioned in dev store reset.
  */
 export const INITIAL_MANAGED_USERS: ManagedUserDTO[] = [
   ...BASE_MANAGED_USERS,
-  ...(import.meta.env.DEV && SYNTHETIC_DEVELOPER_USER && SYNTHETIC_SUPER_ADMIN_USER
-    ? [SYNTHETIC_DEVELOPER_USER, SYNTHETIC_SUPER_ADMIN_USER]
-    : []),
 ];
 
 /**

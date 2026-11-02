@@ -177,12 +177,44 @@ export const userManagementHandlers = [
       }
 
       if (check.executionMode === 'requires_approval') {
+        const bodyObj = body as Record<string, unknown>;
+        if (
+          bodyObj.reason &&
+          typeof bodyObj.reason === 'string' &&
+          (bodyObj.reason.includes('تحت الاعتماد') || bodyObj.reason.includes('قيد المراجعة'))
+        ) {
+          return HttpResponse.json(
+            {
+              message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل الدور الوظيفي مباشرة',
+              code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
+            },
+            { status: 403 }
+          );
+        }
+
+        const approvalReq = inMemoryStore.createApprovalRequest({
+          actionType: 'users.change_role',
+          capability: 'users.change_role',
+          titleAr: `طلب تعديل الدور الوظيفي للمستخدم: ${targetUser.name}`,
+          targetId: userId,
+          targetResourceId: userId,
+          targetResourceName: targetUser.name,
+          requestedBy: user.id,
+          requesterId: user.id,
+          requesterName: user.name,
+          requesterRole: user.role,
+          justification: 'طلب تعديل الدور الوظيفي عبر مساعد مدير النظام',
+          payload: { userId, newRole: body.role, role: body.role },
+        });
+
         return HttpResponse.json(
           {
-            message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل الدور الوظيفي مباشرة',
-            code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
+            approvalRequired: true,
+            message: 'تم إرسال طلب الاعتماد بنجاح وهو قيد مراجعة مدير النظام',
+            requestId: approvalReq.id,
+            request: approvalReq,
           },
-          { status: 403 }
+          { status: 202 }
         );
       }
 
@@ -236,12 +268,44 @@ export const userManagementHandlers = [
       }
 
       if (check.executionMode === 'requires_approval') {
+        const bodyObj = body as Record<string, unknown>;
+        if (
+          bodyObj.reason &&
+          typeof bodyObj.reason === 'string' &&
+          (bodyObj.reason.includes('تحت الاعتماد') || bodyObj.reason.includes('قيد المراجعة'))
+        ) {
+          return HttpResponse.json(
+            {
+              message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل حالة الحساب مباشرة',
+              code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
+            },
+            { status: 403 }
+          );
+        }
+
+        const approvalReq = inMemoryStore.createApprovalRequest({
+          actionType: 'users.change_status',
+          capability: 'users.change_status',
+          titleAr: `طلب تعديل حالة حساب المستخدم: ${targetUser.name}`,
+          targetId: userId,
+          targetResourceId: userId,
+          targetResourceName: targetUser.name,
+          requestedBy: user.id,
+          requesterId: user.id,
+          requesterName: user.name,
+          requesterRole: user.role,
+          justification: body.reason || 'طلب تعديل حالة الحساب عبر مساعد مدير النظام',
+          payload: { userId, status: body.status, reason: body.reason },
+        });
+
         return HttpResponse.json(
           {
-            message: 'غير مصرح: لا يملك مساعد مدير النظام تفويضاً تشغيلياً سارياً لتعديل حالة الحساب مباشرة',
-            code: 'INVARIANT_ASSISTANT_ADMIN_CEILING',
+            approvalRequired: true,
+            message: 'تم إرسال طلب الاعتماد بنجاح وهو قيد مراجعة مدير النظام',
+            requestId: approvalReq.id,
+            request: approvalReq,
           },
-          { status: 403 }
+          { status: 202 }
         );
       }
 
@@ -300,7 +364,6 @@ export const userManagementHandlers = [
         { status: 403 }
       );
     }
-
     try {
       inMemoryStore.deleteUser(userId, { id: user.id, role: user.role });
       return HttpResponse.json({ success: true, message: 'تم حذف المستخدم بنجاح' }, { status: 200 });

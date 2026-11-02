@@ -1,8 +1,10 @@
 import { http, HttpResponse } from 'msw';
 import { inMemoryStore, MockStoreError } from '../store/inMemoryStore';
 import { resolveAuthenticatedUser } from './resolveUser';
+import { requireCapabilityOrApproval } from './utils/routeGuards';
 import type { User } from '@/core/auth/types';
 import type { TrainingGroup } from '@/core/groups/types';
+import type { SystemCapability } from '@/core/permissions/types';
 import type {
   CreateGroupRequestDTO,
   UpdateGroupRequestDTO,
@@ -341,7 +343,7 @@ export const groupHandlers = [
         );
       }
 
-      const created = inMemoryStore.createGroup(body);
+      const created = inMemoryStore.createGroup(body, { id: user.id, role: user.role });
       return HttpResponse.json(created, { status: 201 });
     } catch (err) {
       return handleStoreError(err);
@@ -697,7 +699,7 @@ export const groupHandlers = [
     }
   }),
 
-  // Rotate QR code enrollment token (Admin only)
+  // Rotate QR code enrollment token (Admin or Delegated Assistant Admin - INV-R9)
   http.post('/api/admin/groups/:groupId/qr-code/rotate', ({ request, params }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
@@ -707,14 +709,31 @@ export const groupHandlers = [
       );
     }
 
-    if (!isGroupAdmin(user)) {
+    const groupId = params.groupId as string;
+    const group = inMemoryStore.getGroupById(groupId);
+    if (!group) {
       return HttpResponse.json(
-        { message: 'إعادة توليد رمز الاستجابة السريعة يقتصر على مدراء النظام فقط' },
-        { status: 403 }
+        { message: 'المجموعة التدريبية المطلوبة غير موجودة' },
+        { status: 404 }
       );
     }
 
-    const groupId = params.groupId as string;
+    const guard = requireCapabilityOrApproval(user, 'groups.generate_qr', {
+      context: { targetGroupId: groupId },
+      targetId: groupId,
+      targetResourceId: groupId,
+      targetResourceName: group.name,
+      resourceScope: { groupId },
+      justification: 'إعادة توليد رمز الاستجابة السريعة (QR) للمجموعة',
+      payload: { groupId, action: 'rotate' },
+      custom202Message: 'تم إرسال طلب إعادة توليد رمز الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'إعادة توليد رمز الاستجابة السريعة يقتصر على مدراء النظام فقط',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
     try {
       const result = inMemoryStore.rotateGroupEnrollmentCode(groupId);
       return HttpResponse.json(result, { status: 200 });
@@ -723,7 +742,7 @@ export const groupHandlers = [
     }
   }),
 
-  // Toggle QR enrollment open/closed (Admin only)
+  // Toggle QR enrollment open/closed (Admin or Delegated Assistant Admin - INV-R9)
   http.post('/api/admin/groups/:groupId/qr-code/toggle', async ({ request, params }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
@@ -733,23 +752,48 @@ export const groupHandlers = [
       );
     }
 
-    if (!isGroupAdmin(user)) {
+    const groupId = params.groupId as string;
+    const group = inMemoryStore.getGroupById(groupId);
+    if (!group) {
       return HttpResponse.json(
-        { message: 'تغيير إعدادات الانضمام يقتصر على مدراء النظام فقط' },
-        { status: 403 }
+        { message: 'المجموعة التدريبية المطلوبة غير موجودة' },
+        { status: 404 }
       );
     }
 
-    const groupId = params.groupId as string;
+    let body: ToggleGroupEnrollmentDTO;
     try {
-      const body = (await request.json()) as ToggleGroupEnrollmentDTO;
+      body = (await request.json()) as ToggleGroupEnrollmentDTO;
       if (typeof body.isOpen !== 'boolean') {
         return HttpResponse.json(
           { message: 'قيمة حالة الانضمام غير صالحة' },
           { status: 400 }
         );
       }
+    } catch {
+      return HttpResponse.json(
+        { message: 'بيانات الطلب غير صالحة' },
+        { status: 400 }
+      );
+    }
 
+    const guard = requireCapabilityOrApproval(user, 'groups.generate_qr', {
+      context: { targetGroupId: groupId },
+      targetId: groupId,
+      targetResourceId: groupId,
+      targetResourceName: group.name,
+      resourceScope: { groupId },
+      justification: `تغيير حالة الانضمام عبر QR للمجموعة إلى: ${body.isOpen ? 'مفتوح' : 'مغلق'}`,
+      payload: { groupId, isOpen: body.isOpen, action: 'toggle' },
+      custom202Message: 'تم إرسال طلب تغيير إعدادات الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'تغيير إعدادات الانضمام يقتصر على مدراء النظام فقط',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
+    try {
       const updated = inMemoryStore.toggleGroupEnrollment(groupId, body.isOpen);
       return HttpResponse.json(
         { success: true, isEnrollmentOpen: updated.isEnrollmentOpen },
@@ -881,7 +925,7 @@ export const groupHandlers = [
     }
   }),
 
-  // Create material folder (Admin or Assigned Supervisor)
+  // Create material folder (Admin or Assigned Supervisor - INV-R9)
   http.post('/api/admin/groups/:groupId/materials/folders', async ({ request, params }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
@@ -900,7 +944,39 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group)) {
+    let body: CreateMaterialFolderDTO;
+    try {
+      body = (await request.json()) as CreateMaterialFolderDTO;
+      if (!body.name || !body.name.trim()) {
+        return HttpResponse.json(
+          { message: 'اسم المجلد مطلوب' },
+          { status: 422 }
+        );
+      }
+    } catch {
+      return HttpResponse.json(
+        { message: 'بيانات الطلب غير صالحة' },
+        { status: 400 }
+      );
+    }
+
+    const guard = requireCapabilityOrApproval(user, 'materials.manage_folders', {
+      context: { targetGroupId: groupId },
+      targetId: groupId,
+      targetResourceId: groupId,
+      targetResourceName: group.name,
+      resourceScope: { groupId },
+      justification: `إنشاء مجلد جديد "${body.name}" في المجموعة التدريبية`,
+      payload: { groupId, ...body },
+      custom202Message: 'تم إرسال طلب إنشاء المجلد للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'غير مصرح لك بإنشاء مجلدات في هذه المجموعة التدريبية',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
+    if (user.role === 'lecturer' && !isAssignedSupervisor(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك بإنشاء مجلدات في هذه المجموعة التدريبية' },
         { status: 403 }
@@ -908,14 +984,6 @@ export const groupHandlers = [
     }
 
     try {
-      const body = (await request.json()) as CreateMaterialFolderDTO;
-      if (!body.name || !body.name.trim()) {
-        return HttpResponse.json(
-          { message: 'اسم المجلد مطلوب' },
-          { status: 422 }
-        );
-      }
-
       const folder = inMemoryStore.createMaterialFolder(groupId, body);
       return HttpResponse.json(folder, { status: 201 });
     } catch (err) {
@@ -994,7 +1062,7 @@ export const groupHandlers = [
     }
   }),
 
-  // Add material file metadata (Admin or Assigned Supervisor)
+  // Add material file metadata (Admin or Assigned Supervisor - INV-R9)
   http.post('/api/admin/groups/:groupId/materials/files', async ({ request, params }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
@@ -1013,7 +1081,39 @@ export const groupHandlers = [
       );
     }
 
-    if (!isAssignedSupervisor(user, group)) {
+    let body: AddMaterialFileRequestDTO;
+    try {
+      body = (await request.json()) as AddMaterialFileRequestDTO;
+      if (!body.folderId || !body.fileName || body.sizeBytes === undefined || !body.mimeType) {
+        return HttpResponse.json(
+          { message: 'بيانات الملف غير مكتملة' },
+          { status: 400 }
+        );
+      }
+    } catch {
+      return HttpResponse.json(
+        { message: 'بيانات الطلب غير صالحة' },
+        { status: 400 }
+      );
+    }
+
+    const guard = requireCapabilityOrApproval(user, 'materials.upload_files', {
+      context: { targetGroupId: groupId },
+      targetId: groupId,
+      targetResourceId: groupId,
+      targetResourceName: group.name,
+      resourceScope: { groupId },
+      justification: `رفع ملف "${body.fileName}" إلى المجموعة التدريبية`,
+      payload: { groupId, ...body },
+      custom202Message: 'تم إرسال طلب رفع الملف للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'غير مصرح لك برفع ملفات إلى هذه المجموعة التدريبية',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
+    if (user.role === 'lecturer' && !isAssignedSupervisor(user, group)) {
       return HttpResponse.json(
         { message: 'غير مصرح لك برفع ملفات إلى هذه المجموعة التدريبية' },
         { status: 403 }
@@ -1021,14 +1121,6 @@ export const groupHandlers = [
     }
 
     try {
-      const body = (await request.json()) as AddMaterialFileRequestDTO;
-      if (!body.folderId || !body.fileName || body.sizeBytes === undefined || !body.mimeType) {
-        return HttpResponse.json(
-          { message: 'بيانات الملف غير مكتملة' },
-          { status: 400 }
-        );
-      }
-
       const file = inMemoryStore.addMaterialFile(groupId, body.folderId, body, user);
       return HttpResponse.json(file, { status: 201 });
     } catch (err) {
@@ -1337,44 +1429,122 @@ export const groupHandlers = [
     }
 
     const groupId = params.groupId as string;
-    const check = inMemoryStore.hasPermission(user, 'groups.edit_config', { targetGroupId: groupId });
-    if (!check.granted || check.executionMode === 'denied') {
+    const group = inMemoryStore.getGroupById(groupId);
+    if (!group) {
       return HttpResponse.json(
-        { message: check.reasonAr || 'تعديل إعدادات المجموعة التدريبية يقتصر على مدراء النظام ومساعديهم المصرح لهم' },
-        { status: 403 }
+        { message: 'المجموعة التدريبية المطلوبة غير موجودة' },
+        { status: 404 }
       );
     }
 
     try {
       const body = (await request.json()) as UpdateGroupRequestDTO;
 
-      if (check.executionMode === 'requires_approval') {
-        const approvalReq = inMemoryStore.createApprovalRequest({
-          actionType: 'groups.edit_config',
-          titleAr: `طلب تعديل إعدادات المجموعة: "${groupId}"`,
-          targetId: groupId,
-          targetResourceId: groupId,
-          requestedBy: user.id,
-          requesterId: user.id,
-          requesterName: user.name,
-          requesterRole: user.role,
-          justification: 'طلب تعديل إعدادات المجموعة التدريبية',
-          payload: { groupId, ...body },
-        });
+      const configKeys: (keyof UpdateGroupRequestDTO)[] = [
+        'name',
+        'description',
+        'adminStatus',
+        'enrollmentPolicy',
+        'startDateTime',
+        'deadlineDateTime',
+        'postDeadlinePolicy',
+        'primaryInstructorId',
+        'assistantLecturerIds',
+        'supervisorIds',
+        'isEnrollmentOpen',
+        'enrollmentExpiresAt',
+        'maxTrainees',
+        'renewalSchedule',
+      ];
+      const hasConfigChanges = configKeys.some((k) => body[k] !== undefined);
+      const hasResourceChanges = body.resources !== undefined;
 
+      // Reject mixed mutations: meeting / resource changes cannot be bundled with group configuration changes
+      if (hasConfigChanges && hasResourceChanges) {
         return HttpResponse.json(
           {
-            id: groupId,
-            approvalRequired: true,
-            requestId: approvalReq.id,
-            message: 'تم إرسال طلب تعديل المجموعة للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
-            request: approvalReq,
+            message:
+              'لا يمكن دمج تعديل إعدادات المجموعة التدريبية مع تحديث الموارد والاجتماعات في طلب واحد لدواعي الحوكمة وتدقيق الصلاحيات',
           },
-          { status: 202 }
+          { status: 400 }
         );
       }
 
-      const updated = inMemoryStore.updateGroup(groupId, body);
+      if (hasResourceChanges) {
+        // Pure resource / meeting update
+        const isMeetingUpdate =
+          Array.isArray(body.resources) &&
+          body.resources.some(
+            (r: unknown) =>
+              typeof r === 'object' &&
+              r !== null &&
+              'id' in r &&
+              typeof (r as { id?: unknown }).id === 'string' &&
+              ((r as { id: string }).id.startsWith('meeting-') ||
+                ('type' in r &&
+                  typeof (r as { type?: unknown }).type === 'string' &&
+                  ['zoom', 'meet', 'teams', 'link'].includes((r as { type: string }).type)))
+          );
+        const targetCapability: SystemCapability = isMeetingUpdate
+          ? 'materials.manage_meetings'
+          : 'groups.edit_config';
+
+        // Isolated payload strictly contains ONLY resources and groupId
+        const isolatedPayload = {
+          groupId,
+          resources: body.resources,
+        };
+
+        const guard = requireCapabilityOrApproval(user, targetCapability, {
+          context: { targetGroupId: groupId },
+          targetId: groupId,
+          targetResourceId: groupId,
+          targetResourceName: group.name,
+          resourceScope: { groupId },
+          justification: isMeetingUpdate
+            ? 'جدولة أو تعديل اجتماعات تدريبية تفاعلية للمجموعة'
+            : 'طلب تعديل موارد المجموعة التدريبية',
+          payload: isolatedPayload,
+          custom202Message: isMeetingUpdate
+            ? 'تم إرسال طلب جدولة الاجتماع للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+            : 'تم إرسال طلب تعديل موارد المجموعة للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+          customDeniedMessage: 'تعديل موارد المجموعة التدريبية يقتصر على مدراء النظام ومساعديهم المصرح لهم',
+        });
+
+        if (guard.response) {
+          return guard.response;
+        }
+
+        const updated = inMemoryStore.updateGroup(
+          groupId,
+          { resources: body.resources },
+          { id: user.id, role: user.role }
+        );
+        return HttpResponse.json(updated, { status: 200 });
+      }
+
+      // Pure configuration update
+      const { resources: _ignoredResources, ...cleanConfig } = body;
+      void _ignoredResources;
+      const isolatedConfigPayload = { groupId, ...cleanConfig };
+
+      const guard = requireCapabilityOrApproval(user, 'groups.edit_config', {
+        context: { targetGroupId: groupId },
+        targetId: groupId,
+        targetResourceId: groupId,
+        targetResourceName: group.name,
+        resourceScope: { groupId },
+        justification: 'طلب تعديل إعدادات المجموعة التدريبية',
+        payload: isolatedConfigPayload,
+        custom202Message: 'تم إرسال طلب تعديل المجموعة للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+        customDeniedMessage: 'تعديل إعدادات المجموعة التدريبية يقتصر على مدراء النظام ومساعديهم المصرح لهم',
+      });
+
+      if (guard.response) {
+        return guard.response;
+      }
+
+      const updated = inMemoryStore.updateGroup(groupId, cleanConfig, { id: user.id, role: user.role });
       return HttpResponse.json(updated, { status: 200 });
     } catch (err) {
       return handleStoreError(err);
@@ -1427,7 +1597,7 @@ export const groupHandlers = [
     }
 
     try {
-      const result = inMemoryStore.deleteGroup(groupId);
+      const result = inMemoryStore.deleteGroup(groupId, { id: user.id, role: user.role });
       return HttpResponse.json(result, { status: 200 });
     } catch (err) {
       return handleStoreError(err);

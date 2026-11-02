@@ -133,6 +133,14 @@ export const DirectAssignModal: React.FC<DirectAssignModalProps> = ({
     try {
       const traineeIds = Array.from(selectedIds);
       const res = await groupsApi.addGroupMembers(group.id, traineeIds);
+      if ((res as any)?.approvalRequired) {
+        toast.info(
+          (res as any).message ||
+            'تم إرسال طلب إضافة المتدربين للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        onClose();
+        return;
+      }
       toast.success(
         `تمت إضافة ${res.addedCount} متدرب بنجاح إلى المجموعة التدريبية`
       );

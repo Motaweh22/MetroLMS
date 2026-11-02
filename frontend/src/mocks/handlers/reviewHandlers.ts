@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { inMemoryStore, MockStoreError } from '../store/inMemoryStore';
 import { resolveAuthenticatedUser } from './resolveUser';
+import { requireCapabilityOrApproval } from './utils/routeGuards';
 import type {
   AdminStagedEditPayload,
   ReviewDecisionRequestDTO,
@@ -36,6 +37,38 @@ const handleSubmitCourse = async ({ request, params }: { request: Request; param
   }
 
   const { courseId } = params as { courseId: string };
+  const targetCourse = inMemoryStore.getCourseById(courseId);
+  if (!targetCourse) {
+    return HttpResponse.json(
+      { message: `تعذر العثور على الدورة التدريبية ${courseId}` },
+      { status: 404 }
+    );
+  }
+
+  // Intercept via requireCapabilityOrApproval (INV-R9 / MFR-35)
+  const draft = inMemoryStore.getCourseDraft(courseId) || targetCourse;
+  const draftSnapshotTimestamp = draft?.draftUpdatedAt || draft?.submittedAt || new Date().toISOString();
+  const guard = requireCapabilityOrApproval(user, 'reviews.submit_course', {
+    context: { targetCourseId: courseId },
+    targetId: courseId,
+    targetResourceId: courseId,
+    targetResourceName: targetCourse.title,
+    resourceScope: { courseId },
+    justification: 'تقديم دورة تدريبية للمراجعة والاعتماد',
+    payload: {
+      courseId,
+      draftSubmittedAt: draftSnapshotTimestamp,
+      draftSnapshotTimestamp,
+      draftVersion: draft?.draftVersion ?? 1,
+      draftContentHash: inMemoryStore.computeDraftContentDigest(draft),
+    },
+    custom202Message: 'تم إرسال طلب اعتماد تقديم المقرر للمراجعة بنجاح؛ بانتظار موافقة مدير النظام.',
+  });
+
+  if (guard.response) {
+    return guard.response;
+  }
+
   try {
     const result = inMemoryStore.submitCourseForReview(courseId, user);
     return HttpResponse.json(result, { status: 200 });
@@ -322,18 +355,46 @@ const handleExecuteDecision = async ({ request, params }: { request: Request; pa
       { status: 401 }
     );
   }
-  const isDecisionMaker =
-    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
-  if (!isDecisionMaker) {
+
+  const { courseId } = params as { courseId: string };
+  const targetCourse = inMemoryStore.getCourseById(courseId);
+  if (!targetCourse) {
     return HttpResponse.json(
-      { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
-      { status: 403 }
+      { message: `تعذر العثور على الدورة التدريبية ${courseId}` },
+      { status: 404 }
     );
   }
 
-  const { courseId } = params as { courseId: string };
   try {
     const body = (await request.json()) as ReviewDecisionRequestDTO;
+    const capability = body.outcome === 'approved' ? 'courses.publish' : 'reviews.submit_course';
+
+    const draft = inMemoryStore.getCourseDraft(courseId) || targetCourse;
+    const draftSnapshotTimestamp = draft?.draftUpdatedAt || draft?.submittedAt || new Date().toISOString();
+
+    const guard = requireCapabilityOrApproval(user, capability, {
+      context: { targetCourseId: courseId },
+      targetId: courseId,
+      targetResourceId: courseId,
+      targetResourceName: targetCourse.title,
+      resourceScope: { courseId },
+      justification: `تنفيذ قرار مراجعة المقرر (${body.outcome === 'approved' ? 'اعتماد ونشر' : 'إعادة/طلب تعديلات'})`,
+      payload: {
+        courseId,
+        ...body,
+        draftSubmittedAt: draftSnapshotTimestamp,
+        draftSnapshotTimestamp,
+        draftVersion: draft?.draftVersion ?? 1,
+        draftContentHash: inMemoryStore.computeDraftContentDigest(draft),
+      },
+      custom202Message: 'تم إرسال قرار مراجعة المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'اتخاذ قرار مراجعة المقرر يقتصر على مدراء النظام ومساعديهم المصرح لهم',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
     const result = inMemoryStore.executeReviewDecision(courseId, body, user);
     return HttpResponse.json(result, { status: 200 });
   } catch (err) {
@@ -350,16 +411,16 @@ const handleApprove = async ({ request, params }: { request: Request; params: Ha
       { status: 401 }
     );
   }
-  const isDecisionMaker =
-    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
-  if (!isDecisionMaker) {
+
+  const { courseId } = params as { courseId: string };
+  const targetCourse = inMemoryStore.getCourseById(courseId);
+  if (!targetCourse) {
     return HttpResponse.json(
-      { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
-      { status: 403 }
+      { message: `تعذر العثور على الدورة التدريبية ${courseId}` },
+      { status: 404 }
     );
   }
 
-  const { courseId } = params as { courseId: string };
   try {
     let body: ApproveCourseRequestDTO = {};
     try {
@@ -373,6 +434,33 @@ const handleApprove = async ({ request, params }: { request: Request; params: Ha
         body?.publishOption === 'with_staged_edits' ? 'with_staged_edits' : 'submitted_baseline',
       approvalNote: body?.approvalNote,
     };
+
+    const draft = inMemoryStore.getCourseDraft(courseId) || targetCourse;
+    const draftSnapshotTimestamp = draft?.draftUpdatedAt || draft?.submittedAt || new Date().toISOString();
+
+    const guard = requireCapabilityOrApproval(user, 'courses.publish', {
+      context: { targetCourseId: courseId },
+      targetId: courseId,
+      targetResourceId: courseId,
+      targetResourceName: targetCourse.title,
+      resourceScope: { courseId },
+      justification: 'اعتماد ونشر مقرر تدريبي',
+      payload: {
+        courseId,
+        ...decision,
+        draftSubmittedAt: draftSnapshotTimestamp,
+        draftSnapshotTimestamp,
+        draftVersion: draft?.draftVersion ?? 1,
+        draftContentHash: inMemoryStore.computeDraftContentDigest(draft),
+      },
+      custom202Message: 'تم إرسال قرار اعتماد ونشر المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'اعتماد ونشر المقررات التدريبية يقتصر على مدراء النظام ومساعديهم المصرح لهم',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
     const result = inMemoryStore.executeReviewDecision(courseId, decision, user);
     return HttpResponse.json(result, { status: 200 });
   } catch (err) {
@@ -389,16 +477,16 @@ const handleReturnWithEdits = async ({ request, params }: { request: Request; pa
       { status: 401 }
     );
   }
-  const isDecisionMaker =
-    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
-  if (!isDecisionMaker) {
+
+  const { courseId } = params as { courseId: string };
+  const targetCourse = inMemoryStore.getCourseById(courseId);
+  if (!targetCourse) {
     return HttpResponse.json(
-      { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
-      { status: 403 }
+      { message: `تعذر العثور على الدورة التدريبية ${courseId}` },
+      { status: 404 }
     );
   }
 
-  const { courseId } = params as { courseId: string };
   try {
     let body: ReturnCourseWithEditsRequestDTO = {};
     try {
@@ -412,6 +500,33 @@ const handleReturnWithEdits = async ({ request, params }: { request: Request; pa
       summaryMessage,
       items: body?.items || [],
     };
+
+    const draft = inMemoryStore.getCourseDraft(courseId) || targetCourse;
+    const draftSnapshotTimestamp = draft?.draftUpdatedAt || draft?.submittedAt || new Date().toISOString();
+
+    const guard = requireCapabilityOrApproval(user, 'reviews.submit_course', {
+      context: { targetCourseId: courseId },
+      targetId: courseId,
+      targetResourceId: courseId,
+      targetResourceName: targetCourse.title,
+      resourceScope: { courseId },
+      justification: 'إعادة المقرر للمحاضر مع تعديلات الإدارة',
+      payload: {
+        courseId,
+        ...decision,
+        draftSubmittedAt: draftSnapshotTimestamp,
+        draftSnapshotTimestamp,
+        draftVersion: draft?.draftVersion ?? 1,
+        draftContentHash: inMemoryStore.computeDraftContentDigest(draft),
+      },
+      custom202Message: 'تم إرسال قرار إعادة المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'إعادة المقرر للمحاضر تقتصر على مدراء النظام ومساعديهم المصرح لهم',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
     const result = inMemoryStore.executeReviewDecision(courseId, decision, user);
     return HttpResponse.json(result, { status: 200 });
   } catch (err) {
@@ -428,16 +543,16 @@ const handleReject = async ({ request, params }: { request: Request; params: Han
       { status: 401 }
     );
   }
-  const isDecisionMaker =
-    user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer';
-  if (!isDecisionMaker) {
+
+  const { courseId } = params as { courseId: string };
+  const targetCourse = inMemoryStore.getCourseById(courseId);
+  if (!targetCourse) {
     return HttpResponse.json(
-      { message: 'غير مصرح لك باتخاذ قرار المراجعة' },
-      { status: 403 }
+      { message: `تعذر العثور على الدورة التدريبية ${courseId}` },
+      { status: 404 }
     );
   }
 
-  const { courseId } = params as { courseId: string };
   try {
     let body: RejectCourseRequestDTO = {};
     try {
@@ -451,6 +566,33 @@ const handleReject = async ({ request, params }: { request: Request; params: Han
       summaryMessage,
       items: body?.items || [],
     };
+
+    const draft = inMemoryStore.getCourseDraft(courseId) || targetCourse;
+    const draftSnapshotTimestamp = draft?.draftUpdatedAt || draft?.submittedAt || new Date().toISOString();
+
+    const guard = requireCapabilityOrApproval(user, 'reviews.submit_course', {
+      context: { targetCourseId: courseId },
+      targetId: courseId,
+      targetResourceId: courseId,
+      targetResourceName: targetCourse.title,
+      resourceScope: { courseId },
+      justification: 'إعادة المقرر للمحاضر لطلب تعديلات',
+      payload: {
+        courseId,
+        ...decision,
+        draftSubmittedAt: draftSnapshotTimestamp,
+        draftSnapshotTimestamp,
+        draftVersion: draft?.draftVersion ?? 1,
+        draftContentHash: inMemoryStore.computeDraftContentDigest(draft),
+      },
+      custom202Message: 'تم إرسال قرار إعادة المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'إعادة المقرر للمحاضر تقتصر على مدراء النظام ومساعديهم المصرح لهم',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
     const result = inMemoryStore.executeReviewDecision(courseId, decision, user);
     return HttpResponse.json(result, { status: 200 });
   } catch (err) {

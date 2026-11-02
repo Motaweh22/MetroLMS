@@ -3,7 +3,7 @@
  * Strict schema derived directly from the Cairo Metro LMS dataset.
  */
 
-export type CourseLevel = 'مبتدئ' | 'متوسط' | 'متقدم';
+export type CourseLevel = 'مبتدئ' | 'متوسط' | 'متقدم' | 'beginner' | 'intermediate' | 'advanced';
 
 export type CourseStatus =
   | 'published'
@@ -37,12 +37,12 @@ export type CourseZipPolicy =
 export type VideoSourceType = 'upload' | 'youtube' | 'drive';
 
 export interface ExternalResource {
-  id: string;
+  id?: string;
   title: string;
   url: string;
   description?: string;
   icon?: string;
-  order: number;
+  order?: number;
 }
 
 export interface ChapterItem {
@@ -50,7 +50,7 @@ export interface ChapterItem {
   type: ContentItemType;
   title: string;
   url?: string;
-  duration?: string; // e.g. "18:30"
+  duration?: string | number; // e.g. "18:30" or 300 seconds
   pages?: number;    // Legacy schema only; omitted from builder/player UI per Increment 8 specs
   views?: number;
   opensCount?: number;
@@ -61,6 +61,8 @@ export interface ChapterItem {
   fileSizeBytes?: number;
   mimeType?: string;
   uploadedAt?: string;
+  isPreview?: boolean;
+  contentUrl?: string;
   requiresPrevious?: boolean;
   // Increment 8 Additions
   videoSourceType?: VideoSourceType;
@@ -127,8 +129,12 @@ export interface Course {
     role?: string;
   }>;
   courseZipPolicy?: CourseZipPolicy;
+  publishedAt?: string;
+  sections?: any;
   hasDraftChanges?: boolean;
   draftUpdatedAt?: string;
+  draftVersion?: number;
+  draftContentHash?: string;
   isTestLab?: boolean;
   // Refresher Course Version Configuration
   refresherConfig?: RefresherCourseConfig;

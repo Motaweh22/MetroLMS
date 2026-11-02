@@ -487,6 +487,15 @@ export const GroupEditorPage: React.FC = () => {
     try {
       if (isCreateMode && !loadedGroup) {
         const created = await groupsApi.createGroup(payload);
+        if ((created as any)?.approvalRequired) {
+          setIsDirty(false);
+          toast.info(
+            (created as any).message ||
+              'تم إرسال طلب إنشاء المجموعة للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+          );
+          navigate('/approvals');
+          return;
+        }
         toast.success(`تم إنشاء المجموعة التدريبية بنجاح: ${created.name}`);
         flushSync(() => {
           setIsDirty(false);
@@ -499,6 +508,14 @@ export const GroupEditorPage: React.FC = () => {
       } else if (loadedGroup || groupId) {
         const targetId = loadedGroup?.id || groupId!;
         const updated = await groupsApi.updateGroup(targetId, payload);
+        if ((updated as any)?.approvalRequired) {
+          setIsDirty(false);
+          toast.info(
+            (updated as any).message ||
+              'تم إرسال طلب تعديل إعدادات المجموعة للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+          );
+          return;
+        }
         setLoadedGroup((prev) => ({
           ...updated,
           metrics: prev?.metrics || null,

@@ -4,6 +4,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
+import { useToast } from '@/shared/ui/Toast';
 import { validateMaterialUpload, resolveMaterialFileType } from '@/core/domain/groups';
 import {
   formatBytes,
@@ -40,6 +41,7 @@ export const GroupUploadFilesModal: React.FC<GroupUploadFilesModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   if (!folder) return null;
 
@@ -110,6 +112,16 @@ export const GroupUploadFilesModal: React.FC<GroupUploadFilesModalProps> = ({
           isVisible: true,
           cycleId: folder.cycleId,
         });
+
+        if ((res as any)?.approvalRequired) {
+          toast.info(
+            (res as any).message ||
+              'تم إرسال طلب رفع الملف للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+          );
+          setStagedFiles([]);
+          onClose();
+          return;
+        }
 
         // Register the actual file Blob so subsequent downloads contain genuine bytes
         registerMaterialBlob(res.id, file);

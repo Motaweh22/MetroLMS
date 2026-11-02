@@ -211,7 +211,15 @@ export const GroupMonitoringPage: React.FC = () => {
     setIsReviewing(true);
     setRequestsError(null);
     try {
-      await groupsApi.reviewJoinRequest(groupId, req.id, 'approved');
+      const res = await groupsApi.reviewJoinRequest(groupId, req.id, 'approved');
+      if ((res as any)?.approvalRequired) {
+        setRequestsFeedback(
+          (res as any).message ||
+            'تم إرسال قرار قبول طلب الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        setTimeout(() => setRequestsFeedback(null), 5000);
+        return;
+      }
       await Promise.all([loadData(selectedCycleId), loadRequests()]);
       setRequestsFeedback(
         `تم قبول انضمام «${req.userName}» وتسجيله في المقررات التدريبية بنجاح.`
@@ -235,7 +243,7 @@ export const GroupMonitoringPage: React.FC = () => {
     setIsReviewing(true);
     setRequestsError(null);
     try {
-      await groupsApi.reviewJoinRequest(
+      const res = await groupsApi.reviewJoinRequest(
         groupId,
         rejectingRequest.id,
         'rejected',
@@ -244,6 +252,14 @@ export const GroupMonitoringPage: React.FC = () => {
       const rejectedName = rejectingRequest.userName;
       setRejectingRequest(null);
       setRejectNote('');
+      if ((res as any)?.approvalRequired) {
+        setRequestsFeedback(
+          (res as any).message ||
+            'تم إرسال قرار رفض طلب الانضمام للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+        );
+        setTimeout(() => setRequestsFeedback(null), 5000);
+        return;
+      }
       await Promise.all([loadData(selectedCycleId), loadRequests()]);
       setRequestsFeedback(`تم رفض طلب انضمام «${rejectedName}».`);
       setTimeout(() => setRequestsFeedback(null), 5000);

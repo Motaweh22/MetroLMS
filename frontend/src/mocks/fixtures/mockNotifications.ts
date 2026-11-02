@@ -62,6 +62,7 @@ export const INITIAL_MOCK_NOTIFICATIONS: NotificationItem[] = [
     courseId: null,
     groupId: 'GRP-101',
     targetUrl: '/my-groups/GRP-101',
+    dedupeKey: 'deadline_reminder:GRP-101:CYC-GRP-101-01:usr_trainee_003',
     read: false,
     createdAt: '2026-10-17T08:00:00Z',
   },

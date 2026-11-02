@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { inMemoryStore, MockStoreError } from '../store/inMemoryStore';
 import { resolveAuthenticatedUser } from './resolveUser';
+import { requireCapabilityOrApproval } from './utils/routeGuards';
 import type {
   CreateCommentRequestDTO,
   ReportCommentRequestDTO,
@@ -233,39 +234,24 @@ export const commentsHandlers = [
       );
     }
 
-    // Assistant admin dual-control interception: requires delegation for direct execution
-    if (user.role === 'assistant_admin') {
-      const hasDelegation = inMemoryStore.getDelegatedAuthority(user.id);
-      if (!hasDelegation) {
-        // Create pending approval request
-        const approvalReq = inMemoryStore.createApprovalRequest({
-          actionType: 'comments.delete',
-          titleAr: `طلب حذف تعليق في مقرر "${targetComment.courseTitle}"`,
-          targetId: targetComment.id,
-          targetResourceId: targetComment.id,
-          targetResourceName: targetComment.text.slice(0, 30),
-          requestedBy: user.id,
-          requesterId: user.id,
-          requesterName: user.name,
-          requesterRole: user.role,
-          justification: 'طلب حذف تعليق مخالف عبر إدارة التعليقات',
-          payload: {
-            commentId: targetComment.id,
-            courseId: targetComment.courseId,
-            author: targetComment.userName,
-          },
-        });
+    // Assistant admin dual-control interception: requires exact capability delegation for direct execution (INV-R9)
+    const guard = requireCapabilityOrApproval(user, 'comments.delete', {
+      titleAr: `طلب حذف تعليق في مقرر "${targetComment.courseTitle}"`,
+      targetId: targetComment.id,
+      targetResourceId: targetComment.id,
+      targetResourceName: targetComment.text.slice(0, 30),
+      justification: 'طلب حذف تعليق مخالف عبر إدارة التعليقات',
+      payload: {
+        commentId: targetComment.id,
+        courseId: targetComment.courseId,
+        author: targetComment.userName,
+      },
+      custom202Message: 'تم إرسال طلب حذف التعليق للاعتماد بنجاح؛ العملية بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'غير مصرح: حذف التعليقات مخصص للإدارة فقط',
+    });
 
-        return HttpResponse.json(
-          {
-            approvalRequired: true,
-            requestId: approvalReq.id,
-            message: 'تم إرسال طلب حذف التعليق للاعتماد بنجاح؛ العملية بانتظار موافقة مدير النظام.',
-            request: approvalReq,
-          },
-          { status: 202 }
-        );
-      }
+    if (guard.response) {
+      return guard.response;
     }
 
     // Direct deletion execution
@@ -374,6 +360,30 @@ export const commentsHandlers = [
     }
 
     const commentId = params.commentId as string;
+    const targetComment = inMemoryStore.getCommentById(commentId);
+    if (!targetComment) {
+      return HttpResponse.json(
+        { message: 'التعليق المطلوب غير موجود' },
+        { status: 404 }
+      );
+    }
+
+    // Assistant admin dual-control interception (INV-R9 / MFR-35)
+    const guard = requireCapabilityOrApproval(user, 'comments.ignore_report', {
+      titleAr: `طلب تجاهل بلاغ عن تعليق في مقرر "${targetComment.courseTitle}"`,
+      targetId: commentId,
+      targetResourceId: commentId,
+      targetResourceName: targetComment.text.slice(0, 30),
+      justification: 'طلب تجاهل بلاغ تعليق عبر إدارة التعليقات',
+      payload: { commentId, courseId: targetComment.courseId },
+      custom202Message: 'تم إرسال طلب تجاهل البلاغ للاعتماد بنجاح؛ العملية بانتظار موافقة مدير النظام.',
+      customDeniedMessage: 'غير مصرح: إدارة البلاغات المركزية مخصصة لمديري النظام فقط',
+    });
+
+    if (guard.response) {
+      return guard.response;
+    }
+
     try {
       const updated = inMemoryStore.ignoreCommentReport(commentId, { id: user.id, role: user.role });
       return HttpResponse.json(updated, { status: 200 });
@@ -423,36 +433,22 @@ export const commentsHandlers = [
       // Body is optional
     }
 
-    // Assistant admin dual-control check
-    if (user.role === 'assistant_admin') {
-      const hasDelegation = inMemoryStore.getDelegatedAuthority(user.id);
-      if (!hasDelegation) {
-        const approvalReq = inMemoryStore.createApprovalRequest({
-          actionType: 'comments.toggle',
-          titleAr: `طلب تعديل سياسة النقاشات للمقرر`,
-          targetId: courseId,
-          targetResourceId: courseId,
-          requestedBy: user.id,
-          requesterId: user.id,
-          requesterName: user.name,
-          requesterRole: user.role,
-          justification: 'طلب تعديل سياسة النقاشات للمقرر عبر إدارة التعليقات',
-          payload: {
-            courseId,
-            commentsEnabled: enabled,
-          },
-        });
+    // Assistant admin dual-control interception (INV-R9)
+    const guard = requireCapabilityOrApproval(user, 'comments.toggle', {
+      titleAr: `طلب تعديل سياسة النقاشات للمقرر`,
+      targetId: courseId,
+      targetResourceId: courseId,
+      justification: 'طلب تعديل سياسة النقاشات للمقرر عبر إدارة التعليقات',
+      payload: {
+        courseId,
+        commentsEnabled: enabled,
+      },
+      custom202Message: 'تم إرسال طلب تعديل سياسة النقاشات للاعتماد بنجاح.',
+      customDeniedMessage: 'غير مصرح: تعديل إعدادات المقرر مخصص للإدارة فقط',
+    });
 
-        return HttpResponse.json(
-          {
-            approvalRequired: true,
-            requestId: approvalReq.id,
-            message: 'تم إرسال طلب تعديل سياسة النقاشات للاعتماد بنجاح.',
-            request: approvalReq,
-          },
-          { status: 202 }
-        );
-      }
+    if (guard.response) {
+      return guard.response;
     }
 
     try {
