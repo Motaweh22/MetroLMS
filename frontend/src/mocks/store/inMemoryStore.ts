@@ -227,12 +227,12 @@ export function resolveCanonicalCommentId(commentId?: string | null): string {
 export const DEV_TEST_MEDIA = {
   video: {
     url: '/dev-media/test-video.mp4',
-    duration: '01:39',
-    durationSeconds: 99,
+    duration: '00:10',
+    durationSeconds: 10,
   },
   pdf: {
     url: '/dev-media/test-document.pdf',
-    pages: 6,
+    pages: 1,
   },
 } as const;
 
@@ -556,8 +556,8 @@ class InMemoryStore {
           groupId: group.id,
           cycleId: cycle1.id,
           title: 'دليل إجراءات الطوارئ والسلامة المعتمد',
-          originalFileName: 'test-document.pdf',
-          fileSizeBytes: 2048576,
+          originalFileName: 'cairo-metro-network-map.pdf',
+          fileSizeBytes: 18662,
           mimeType: 'application/pdf',
           fileType: 'pdf',
           url: '/dev-media/test-document.pdf',

@@ -16,13 +16,13 @@ function devTestMediaPlugin(): Plugin {
     name: 'dev-test-media-server',
     apply: 'serve', // Strictly development server only
     configureServer(server) {
-      const videoFilename = 'Inside Zoho Desk \uFF1A Product Overview.mp4';
-      const pdfFilename = 'sample-technical-guide.pdf';
+      const videoFilename = 'test.mp4';
+      const pdfFilename = 'cairo-metro-network-map.pdf';
       const videoPath = path.resolve(__dirname, 'src/test', videoFilename);
       const pdfPath = path.resolve(__dirname, 'src/test', pdfFilename);
 
       // Video streaming endpoint with full HTTP Range request support
-      server.middlewares.use('/dev-media/test-video.mp4', (req, res) => {
+      const handleVideoRequest = (req: IncomingMessage, res: ServerResponse) => {
         if (!fs.existsSync(videoPath)) {
           res.statusCode = 404;
           res.end('Test video file not found on disk');
@@ -54,7 +54,10 @@ function devTestMediaPlugin(): Plugin {
           });
           fs.createReadStream(videoPath).pipe(res);
         }
-      });
+      };
+
+      server.middlewares.use('/dev-media/test-video.mp4', handleVideoRequest);
+      server.middlewares.use('/dev-media/test.mp4', handleVideoRequest);
 
       // PDF document endpoint (supports both raw PDF stream and JSON base64 format)
       const handlePdfRequest = (req: IncomingMessage, res: ServerResponse) => {
@@ -82,7 +85,7 @@ function devTestMediaPlugin(): Plugin {
           res.writeHead(200, {
             'Content-Length': stat.size,
             'Content-Type': 'application/pdf',
-            'Content-Disposition': 'inline; filename="proposal.pdf"',
+            'Content-Disposition': 'inline; filename="cairo-metro-network-map.pdf"',
             'Accept-Ranges': 'bytes',
           });
           res.end();
@@ -92,13 +95,14 @@ function devTestMediaPlugin(): Plugin {
         res.writeHead(200, {
           'Content-Length': stat.size,
           'Content-Type': 'application/pdf',
-          'Content-Disposition': 'inline; filename="proposal.pdf"',
+          'Content-Disposition': 'inline; filename="cairo-metro-network-map.pdf"',
           'Accept-Ranges': 'bytes',
         });
         fs.createReadStream(pdfPath).pipe(res);
       };
 
       server.middlewares.use('/dev-media/test-document.pdf', handlePdfRequest);
+      server.middlewares.use('/dev-media/cairo-metro-network-map.pdf', handlePdfRequest);
       server.middlewares.use('/dev-media/test-document', handlePdfRequest);
       server.middlewares.use('/dev-media/test-document-data', handlePdfRequest);
 
