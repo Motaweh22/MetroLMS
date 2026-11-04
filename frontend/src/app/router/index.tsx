@@ -48,6 +48,7 @@ import { RouteErrorBoundary } from './RouteErrorBoundary';
 import { ErrorBoundary } from '@/shared/ui/Error';
 import { LoadingScreen } from '@/shared/ui/Loading';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 
 const AdminReviewParamRedirect: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -61,11 +62,13 @@ const AdminMonitoringParamRedirect: React.FC = () => {
 
 const GroupsAdaptiveRedirect: React.FC = () => {
   const { user } = useAuth();
+  const { effectiveUiRole, isPreviewing } = useRolePreview();
+  const currentRole = isPreviewing ? effectiveUiRole : user?.role;
   if (
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    user?.role === 'developer' ||
-    user?.role === 'assistant_admin'
+    currentRole === 'admin' ||
+    currentRole === 'super_admin' ||
+    currentRole === 'developer' ||
+    currentRole === 'assistant_admin'
   ) {
     return <Navigate to="/admin/groups" replace />;
   }

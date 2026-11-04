@@ -1,8 +1,9 @@
 import { http, HttpResponse } from 'msw';
 import { SYNTHETIC_DEMO_ACCOUNTS } from '../fixtures/mockUsers';
+import { SYNTHETIC_TEST_PERSONA_REGISTRY, personaToUser } from '@/core/auth/testPersonas';
 import { inMemoryStore } from '../store/inMemoryStore';
 import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
-import { CONTROLLED_TEST_FIXTURE_USERS } from './resolveUser';
+import { CONTROLLED_TEST_FIXTURE_USERS, isGenuineBrowserRuntime, isApprovedTestRunner } from './resolveUser';
 import { authStorage } from '@/core/auth/authStorage';
 import type { LoginCredentials, User } from '@/core/auth/types';
 
@@ -40,18 +41,40 @@ export const authHandlers = [
 
       const trimmedIdentifier = email.trim().toLowerCase();
 
-      // 1. Check against synthetic demo accounts
+      // 0. Check against synthetic test personas (Increment 5.3 / Decision D-10)
       let matchedUserId: string | null = null;
-      const matchedDemoAccount = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find(
-        (acc) =>
-          (acc.credentials.email.toLowerCase() === trimmedIdentifier ||
-            acc.user.id.toLowerCase() === trimmedIdentifier) &&
-          acc.credentials.password === password
-      );
+      let matchedTestPersona = null;
+      if (import.meta.env.DEV) {
+        matchedTestPersona =
+          Object.values(SYNTHETIC_TEST_PERSONA_REGISTRY).find(
+            (p) =>
+              (p.credentials.email.toLowerCase() === trimmedIdentifier ||
+                p.username.toLowerCase() === trimmedIdentifier ||
+                p.id.toLowerCase() === trimmedIdentifier) &&
+              p.credentials.password === password
+          ) || null;
+      }
 
-      if (matchedDemoAccount) {
-        matchedUserId = matchedDemoAccount.user.id;
-      } else {
+      if (matchedTestPersona) {
+        matchedUserId = matchedTestPersona.id;
+      }
+
+      // 1. Check against synthetic demo accounts
+      let matchedDemoAccount = null;
+      if (!matchedUserId) {
+        matchedDemoAccount = Object.values(SYNTHETIC_DEMO_ACCOUNTS).find(
+          (acc) =>
+            (acc.credentials.email.toLowerCase() === trimmedIdentifier ||
+              acc.user.id.toLowerCase() === trimmedIdentifier) &&
+            acc.credentials.password === password
+        );
+
+        if (matchedDemoAccount) {
+          matchedUserId = matchedDemoAccount.user.id;
+        }
+      }
+
+      if (!matchedUserId) {
         // 2. Check directory users and provisioned credentials
         const directoryUsers = inMemoryStore.getManagedUsers();
         const foundUser = directoryUsers.find(
@@ -90,15 +113,25 @@ export const authHandlers = [
       }
 
       // 4. Construct session user reflecting authoritative role and metadata
-      const sessionUser: User = {
-        id: authoritativeUser ? authoritativeUser.id : matchedUserId,
-        name: authoritativeUser ? authoritativeUser.name : (matchedDemoAccount?.user.name || 'مستخدم'),
-        email: authoritativeUser ? authoritativeUser.email : (matchedDemoAccount?.user.email || email.trim()),
-        role: authoritativeUser ? authoritativeUser.role : (matchedDemoAccount?.user.role || 'user'),
-        department: authoritativeUser ? authoritativeUser.department : (matchedDemoAccount?.user.department || 'قطاع التشغيل'),
-        jobTitle: authoritativeUser ? authoritativeUser.jobTitle : (matchedDemoAccount?.user.jobTitle || 'موظف'),
-        initials: authoritativeUser ? computeInitials(authoritativeUser.name) : (matchedDemoAccount?.user.initials || 'م.م'),
-      };
+      const sessionUser: User = matchedTestPersona
+        ? {
+            id: matchedTestPersona.id,
+            name: matchedTestPersona.name,
+            email: matchedTestPersona.email,
+            role: matchedTestPersona.role,
+            department: matchedTestPersona.department,
+            jobTitle: matchedTestPersona.jobTitle,
+            initials: matchedTestPersona.initials,
+          }
+        : {
+            id: authoritativeUser ? authoritativeUser.id : matchedUserId,
+            name: authoritativeUser ? authoritativeUser.name : (matchedDemoAccount?.user.name || 'مستخدم'),
+            email: authoritativeUser ? authoritativeUser.email : (matchedDemoAccount?.user.email || email.trim()),
+            role: authoritativeUser ? authoritativeUser.role : (matchedDemoAccount?.user.role || 'user'),
+            department: authoritativeUser ? authoritativeUser.department : (matchedDemoAccount?.user.department || 'قطاع التشغيل'),
+            jobTitle: authoritativeUser ? authoritativeUser.jobTitle : (matchedDemoAccount?.user.jobTitle || 'موظف'),
+            initials: authoritativeUser ? computeInitials(authoritativeUser.name) : (matchedDemoAccount?.user.initials || 'م.م'),
+          };
 
       const token = `mock_jwt_${sessionUser.id}_${Date.now()}`;
       const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
@@ -143,10 +176,25 @@ export const authHandlers = [
     }
 
     // 1. Check active session storage if available
+    const mustEnforceBrowser =
+      request.headers.get('X-Enforce-Browser-Session') === 'true' ||
+      isGenuineBrowserRuntime();
+
     try {
       const session = authStorage.getSession();
-      if (session && session.token === token && session.user) {
-        if (!session.user.id || typeof session.user.id !== 'string' || !session.user.id.trim()) {
+
+      if (session) {
+        // Case B: Browser storage is available and an active session exists, but bearer token does NOT match.
+        // Critical Security Rule: Must fail closed and return 401. It must NOT fall through to token decoding!
+        if (session.token !== token) {
+          return HttpResponse.json(
+            { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
+            { status: 401 }
+          );
+        }
+
+        // Case A: Browser storage is available, active session exists, and bearer token matches.
+        if (!session.user || !session.user.id || typeof session.user.id !== 'string' || !session.user.id.trim()) {
           return HttpResponse.json(
             { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
             { status: 401 }
@@ -231,16 +279,61 @@ export const authHandlers = [
           });
         }
 
+        // Check explicitly registered synthetic test personas (Increment 5.3 / Decision D-10)
+        if (import.meta.env.DEV) {
+          const matchedTestPersona =
+            SYNTHETIC_TEST_PERSONA_REGISTRY[canonicalId] ||
+            SYNTHETIC_TEST_PERSONA_REGISTRY[session.user.id];
+          if (matchedTestPersona && matchedTestPersona.status === 'active') {
+            return HttpResponse.json({
+              user: {
+                ...session.user,
+                id: matchedTestPersona.id,
+                role: matchedTestPersona.role,
+              },
+            });
+          }
+        }
+
         return HttpResponse.json(
           { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },
           { status: 401 }
         );
       }
+
+      // Case C: Browser storage is available, but no active session exists.
+      // In the browser runtime (or when enforced), an absent active browser session must fail closed
+      // and cannot enable fallback token impersonation.
+      if (mustEnforceBrowser) {
+        return HttpResponse.json(
+          { message: 'لا توجد جلسة نشطة مسجلة في المتصفح' },
+          { status: 401 }
+        );
+      }
     } catch {
-      // Storage restricted or node environment
+      // Critical Security Rule: A browser storage exception in an environment requiring browser-session enforcement
+      // must fail closed immediately (401) and NEVER fall through to candidate token decoding.
+      if (mustEnforceBrowser) {
+        return HttpResponse.json(
+          { message: 'لا توجد جلسة نشطة مسجلة في المتصفح' },
+          { status: 401 }
+        );
+      }
+      // Storage restricted or headless node environment; proceed to controlled token resolution
     }
 
-    // 2. Determine candidate user ID from token
+    // 2. Controlled Fallback Token Resolution (Case D)
+    // Strictly permitted ONLY inside the approved Vitest test runner when browser session enforcement is NOT required.
+    // In all other environments (genuine browser, arbitrary Node/SSR outside the approved test runner,
+    // or when browser session is enforced), execution must fail closed (401) and NEVER permit token impersonation.
+    if (mustEnforceBrowser || !isApprovedTestRunner()) {
+      return HttpResponse.json(
+        { message: 'لا توجد جلسة نشطة مسجلة في المتصفح' },
+        { status: 401 }
+      );
+    }
+
+    // 3. Determine candidate user ID from token
     let candidateUserId: string | null = null;
 
     if (token.startsWith('mock_jwt_')) {
@@ -336,6 +429,14 @@ export const authHandlers = [
         );
       }
       user = fixtureUser;
+    } else if (
+      import.meta.env.DEV &&
+      (SYNTHETIC_TEST_PERSONA_REGISTRY[canonicalId] ||
+        (candidateUserId ? SYNTHETIC_TEST_PERSONA_REGISTRY[candidateUserId] : null))
+    ) {
+      const p = (SYNTHETIC_TEST_PERSONA_REGISTRY[canonicalId] ||
+        SYNTHETIC_TEST_PERSONA_REGISTRY[candidateUserId!])!;
+      user = personaToUser(p);
     } else {
       return HttpResponse.json(
         { message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' },

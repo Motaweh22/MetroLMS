@@ -32,8 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (item.id === 'design-system') {
       return user?.role === 'developer' && !isPreviewing;
     }
-    // Group-scoped Assistant Lecturer: scoped strictly to assigned group, does not expose full course-builder
-    if (previewRole === 'assistant_lecturer' && item.id === 'course-builder') {
+    // Group-scoped Assistant Lecturer: scoped strictly to assigned group, does not expose full course-builder or trainee personal courses
+    if (previewRole === 'assistant_lecturer' && (item.id === 'course-builder' || item.id === 'my-courses')) {
       return false;
     }
     return isNavItemVisibleForRole(item, effectiveRole);

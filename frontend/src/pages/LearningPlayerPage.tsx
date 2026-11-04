@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { useCourseDetail } from '@/features/courses/hooks/useCourseDetail';
 import { useEnrollment } from '@/features/courses/hooks/useEnrollment';
 import {
@@ -28,8 +29,10 @@ export const LearningPlayerPage: React.FC = () => {
   const { courseId, itemId } = useParams<{ courseId: string; itemId?: string }>();
   const navigate = useNavigate();
 
+  const { previewRole } = useRolePreview();
+  const effectiveCourseId = previewRole === 'assistant_lecturer' ? undefined : courseId;
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const { course, isLoading: courseLoading, isNotFound } = useCourseDetail(courseId);
+  const { course, isLoading: courseLoading, isNotFound } = useCourseDetail(effectiveCourseId);
   const { isEnrolledInCourse, isLoading: enrollmentLoading } = useEnrollment();
   const {
     progress,
@@ -38,7 +41,7 @@ export const LearningPlayerPage: React.FC = () => {
     completeLesson,
     isSubmitting,
     updateLocalActivity,
-  } = useCourseProgress(courseId);
+  } = useCourseProgress(effectiveCourseId);
 
   const [celebrationOpen, setCelebrationOpen] = useState<boolean>(false);
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
@@ -127,6 +130,31 @@ export const LearningPlayerPage: React.FC = () => {
   if (!authLoading && !isAuthenticated) {
     const returnUrl = courseId ? `/courses/${courseId}/learn` : '/courses';
     return <Navigate to={`/login?redirect=${encodeURIComponent(returnUrl)}`} replace />;
+  }
+
+  // Assistant Lecturer Scope Guard: Trainee player interface is out of scope for group assistant lecturers
+  if (previewRole === 'assistant_lecturer') {
+    return (
+      <div className="learning-player-page" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', padding: '2rem', maxWidth: '480px' }} data-testid="player-assistant-denied">
+          <Icon name="shield" size={48} className="text-primary-dark" style={{ margin: '0 auto 1rem' }} />
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', color: '#FFFFFF' }}>
+            مشغل الدروس مخصص للمتدربين فقط
+          </h2>
+          <p style={{ color: '#94A3B8', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+            بصفتك مشرف تدريب / مدرس مساعد للمجموعة، يقتصر نطاق عملك على متابعة أداء المتدربين من شاشة مراقبة المجموعة التدريبية المخصصة.
+          </p>
+          <button
+            type="button"
+            className="speed-dropdown-btn"
+            onClick={() => navigate('/my-groups')}
+            style={{ padding: '0.5rem 1.25rem', fontSize: '0.9rem' }}
+          >
+            العودة لمجموعاتي التدريبية
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // 2. Loading State: Wait for course, progress, and enrollment queries
@@ -247,7 +275,7 @@ export const LearningPlayerPage: React.FC = () => {
                   itemId={currentItem.id}
                   courseId={course.id}
                   title={currentItem.title}
-                  duration={currentItem.duration}
+                  duration={currentItem.duration !== undefined ? String(currentItem.duration) : undefined}
                   completionPolicy={currentItem.completionPolicy}
                   isCompleted={currentItem.isCompleted}
                   initialEligibleSeconds={currentItem.progress?.eligibleViewingSeconds || 0}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { groupsApi, type EnrichedTrainingGroup } from '@/features/groups/services/groupsApi';
 import { useAuth } from '@/features/auth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { Card, CardHeader, CardTitle } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
@@ -11,9 +12,20 @@ import { Alert } from '@/shared/ui/Alert';
 
 export const TraineeGroupsPage: React.FC = () => {
   const { user } = useAuth();
+  const { previewRole, scopedAssignmentPreview } = useRolePreview();
   const [groups, setGroups] = useState<EnrichedTrainingGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Scoped Assistant Lecturer: limit visible groups strictly to the assigned group
+  const visibleGroups = React.useMemo(() => {
+    if (previewRole === 'assistant_lecturer' && scopedAssignmentPreview?.groupId) {
+      return groups.filter(
+        (g) => g.id.toLowerCase() === scopedAssignmentPreview.groupId.toLowerCase()
+      );
+    }
+    return groups;
+  }, [groups, previewRole, scopedAssignmentPreview]);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -51,7 +63,7 @@ export const TraineeGroupsPage: React.FC = () => {
         <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-lg border border-border text-xs font-bold text-text-heading">
           <Icon name="trainingGroups" size="sm" className="text-primary" />
           <span>إجمالي المجموعات:</span>
-          <span className="text-primary font-extrabold">{groups.length}</span>
+          <span className="text-primary font-extrabold">{visibleGroups.length}</span>
         </div>
       </div>
 
@@ -81,15 +93,21 @@ export const TraineeGroupsPage: React.FC = () => {
       )}
 
       {/* Empty State */}
-      {!isLoading && !error && groups.length === 0 && (
+      {!isLoading && !error && visibleGroups.length === 0 && (
         <Card variant="default" className="text-center py-12 px-4 sm:px-8 border-dashed">
           <div className="max-w-md mx-auto space-y-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner">
               <Icon name="trainingGroups" size="xl" />
             </div>
-            <h2 className="text-xl font-bold text-text-heading">لا توجد مجموعات تدريبية مخصصة لك حالياً</h2>
+            <h2 className="text-xl font-bold text-text-heading">
+              {previewRole === 'assistant_lecturer'
+                ? 'المجموعة التدريبية المخصصة للمعاينة غير متوفرة'
+                : 'لا توجد مجموعات تدريبية مخصصة لك حالياً'}
+            </h2>
             <p className="text-sm text-text-muted leading-relaxed">
-              أنت غير مدرج في أي مجموعة تدريبية حالياً. سيتم إدراجك من خلال إدارة التدريب عند بدء البرامج الميدانية والدفعات المشتركة.
+              {previewRole === 'assistant_lecturer'
+                ? 'لم يتم العثور على المجموعة المحددة لتكليف المحاضر المساعد في السجل الحالي.'
+                : 'أنت غير مدرج في أي مجموعة تدريبية حالياً. سيتم إدراجك من خلال إدارة التدريب عند بدء البرامج الميدانية والدفعات المشتركة.'}
             </p>
             <div className="pt-2">
               <Link to="/courses">
@@ -103,9 +121,9 @@ export const TraineeGroupsPage: React.FC = () => {
       )}
 
       {/* Groups List */}
-      {!isLoading && !error && groups.length > 0 && (
+      {!isLoading && !error && visibleGroups.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {groups.map((grp) => {
+          {visibleGroups.map((grp) => {
             const metrics = grp.metrics;
             const statusKey = metrics?.status || 'active';
 

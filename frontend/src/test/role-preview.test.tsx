@@ -735,7 +735,7 @@ describe('Increment 5.2: Visual Role Preview Architecture (MFR-40, D-10)', () =>
     // Available is false, previewing is false, effectiveUiRole matches actual admin role
     expect(screen.getByTestId('is-available')).toHaveTextContent('false');
     expect(screen.getByTestId('is-previewing')).toHaveTextContent('false');
-    expect(screen.getByTestId('effective-role')).toHaveTextContent('admin');
+    expect(screen.getByTestId('effective-ui-role')).toHaveTextContent('admin');
     expect(isRolePreviewMutationBlocked()).toBe(false);
   });
 });

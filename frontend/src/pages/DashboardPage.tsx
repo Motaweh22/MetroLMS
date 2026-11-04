@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { dashboardApi } from '@/features/dashboard/services/dashboardApi';
 import type {
   DashboardData,
@@ -491,6 +492,7 @@ const AdminDashboard: React.FC<{ data: AdminDashboardData }> = ({ data }) => {
  * Main Role-Adaptive Dashboard Page
  */
 export const DashboardPage: React.FC = () => {
+  const { previewRole } = useRolePreview();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -509,8 +511,15 @@ export const DashboardPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+    if (previewRole !== 'assistant_lecturer') {
+      loadDashboard();
+    }
+  }, [loadDashboard, previewRole]);
+
+  // Assistant Lecturer Scope Guard: Work area is strictly restricted to assigned group
+  if (previewRole === 'assistant_lecturer') {
+    return <Navigate to="/my-groups" replace />;
+  }
 
   if (isLoading) {
     return (

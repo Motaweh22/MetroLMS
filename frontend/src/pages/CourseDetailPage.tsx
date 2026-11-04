@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useCourseDetail } from '@/features/courses/hooks/useCourseDetail';
 import { useEnrollCourse } from '@/features/courses/hooks/useEnrollCourse';
 import { useAuth } from '@/features/auth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { CourseHero } from '@/features/courses/components/CourseHero';
 import { CourseCurriculum } from '@/features/courses/components/CourseCurriculum';
 import { Button } from '@/shared/ui/Button';
@@ -17,6 +18,7 @@ import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
 export const CourseDetailPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const { user } = useAuth();
+  const { previewRole } = useRolePreview();
   const { course, isLoading, error, isNotFound, refetch } = useCourseDetail(courseId);
   const enrollmentResult = useEnrollCourse(courseId);
   const {
@@ -371,8 +373,25 @@ export const CourseDetailPage: React.FC = () => {
               </div>
             ) : null}
 
-            {/* State: Lecturer or Administrator */}
-            {user?.role !== 'user' && (
+            {/* State: Assistant Lecturer Visual Preview */}
+            {previewRole === 'assistant_lecturer' ? (
+              <div className="bg-neutral-light rounded-lg p-3.5 space-y-2 text-xs text-text-muted" data-testid="assistant-lecturer-course-notice">
+                <div className="flex items-center gap-1.5 text-text font-bold">
+                  <Icon name="shield" size="sm" className="text-primary-dark" />
+                  <span>معاينة مدرس مساعد للمجموعة</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  استعراض المحتوى والمنهج التدريبي العام متاح للقراءة والاطلاع. التسجيل الذاتي ومشغل الدروس مقتصران على المتدربين المسجلين بالمجموعات.
+                </p>
+                <div className="pt-1">
+                  <Link to="/my-groups">
+                    <Button variant="outline" size="sm" leftIcon="trainingGroups" className="w-full justify-center font-bold text-xs">
+                      العودة للمجموعات المخصصة
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : user?.role !== 'user' ? (
               <div className="bg-neutral-light rounded-lg p-3.5 space-y-2 text-xs text-text-muted">
                 <div className="flex items-center gap-1.5 text-text font-bold">
                   <Icon
@@ -398,7 +417,7 @@ export const CourseDetailPage: React.FC = () => {
                   </Button>
                 </Link>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

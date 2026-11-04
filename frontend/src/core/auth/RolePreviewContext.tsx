@@ -89,24 +89,31 @@ export const RolePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const { user } = useAuthContext();
   const [previewRole, setPreviewRole] = useState<PreviewRole | null>(null);
   const [scopedAssignment, setScopedAssignment] = useState<ScopedAssignmentPreview | null>(null);
+  const [previewOwnerId, setPreviewOwnerId] = useState<string | null>(null);
 
   // Invariant 1: Only an actually authenticated Developer can access or activate Role Preview
   const isAvailable = Boolean(user && user.role === 'developer');
 
+  // Verify that active preview strictly belongs to the current Developer's authenticated user ID
+  const isOwnerSessionValid = Boolean(
+    isAvailable && previewOwnerId && user?.id === previewOwnerId
+  );
+
   // Synchronous identity isolation: If the user is not an authenticated Developer,
-  // preview is synchronously neutralized during render to prevent even one stale frame.
-  const activePreviewRole = isAvailable ? previewRole : null;
-  const activeScopedAssignment = isAvailable ? scopedAssignment : null;
+  // or if the identity has transitioned to a different user, preview is synchronously neutralized
+  const activePreviewRole = isOwnerSessionValid ? previewRole : null;
+  const activeScopedAssignment = isOwnerSessionValid ? scopedAssignment : null;
   const isPreviewing = activePreviewRole !== null;
 
-  // Automatic reset on logout, user change, or loss of Developer identity
+  // Actual React state clearing: On logout, user change, or loss of Developer identity
   useEffect(() => {
-    if (!isAvailable) {
+    if (!isAvailable || (user?.id && previewOwnerId && user.id !== previewOwnerId)) {
       if (previewRole !== null) setPreviewRole(null);
       if (scopedAssignment !== null) setScopedAssignment(null);
+      if (previewOwnerId !== null) setPreviewOwnerId(null);
       setRolePreviewMutationBarrier(false);
     }
-  }, [isAvailable, previewRole, scopedAssignment]);
+  }, [isAvailable, user?.id, previewRole, scopedAssignment, previewOwnerId]);
 
   // Synchronize Mutation Barrier: blocks state-changing API operations while previewing
   useEffect(() => {
@@ -136,12 +143,14 @@ export const RolePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
         setScopedAssignment(scoped);
         setPreviewRole('assistant_lecturer');
+        setPreviewOwnerId(user.id);
         return true;
       }
 
       // Global Role Preview
       setScopedAssignment(null);
       setPreviewRole(role);
+      setPreviewOwnerId(user.id);
       return true;
     },
     [user]
@@ -150,6 +159,7 @@ export const RolePreviewProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const stopPreview = useCallback(() => {
     setPreviewRole(null);
     setScopedAssignment(null);
+    setPreviewOwnerId(null);
     setRolePreviewMutationBarrier(false);
   }, []);
 

@@ -3,5 +3,7 @@ export * from './components/DemoAccountPicker';
 export * from './components/RolePreviewBanner';
 export * from './components/RolePreviewModal';
 export * from './components/RolePreviewControl';
+export * from './components/IsolatedSessionBanner';
+export * from './components/IsolatedSessionModal';
 export * from './hooks/useAuth';
 export * from './api/authApi';

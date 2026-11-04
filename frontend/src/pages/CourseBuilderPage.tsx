@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { builderApi } from '@/features/course-builder/services/builderApi';
 import { MetadataEditor } from '@/features/course-builder/components/MetadataEditor';
 import { CurriculumTreeEditor } from '@/features/course-builder/components/CurriculumTreeEditor';
@@ -25,6 +26,7 @@ export const CourseBuilderPage: React.FC = () => {
   const toast = useToast();
   const { courseId } = useParams<{ courseId: string }>();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { previewRole } = useRolePreview();
   const navigate = useNavigate();
 
   const [course, setCourse] = useState<Course | null>(null);
@@ -152,10 +154,11 @@ export const CourseBuilderPage: React.FC = () => {
   }, [courseId]);
 
   useEffect(() => {
-    if (isAuthenticated && (user?.role === 'lecturer' || user?.role === 'admin')) {
+    if (previewRole === 'assistant_lecturer') return;
+    if (isAuthenticated && (user?.role === 'lecturer' || user?.role === 'admin' || user?.role === 'developer')) {
       loadCourseData();
     }
-  }, [isAuthenticated, user?.role, loadCourseData]);
+  }, [isAuthenticated, user?.role, previewRole, loadCourseData]);
 
   // Handle Save Draft
   const handleSaveDraft = async () => {
@@ -286,8 +289,8 @@ export const CourseBuilderPage: React.FC = () => {
     }
   };
 
-  // 1. Unauthenticated or Trainee Guard
-  if (!authLoading && (!isAuthenticated || user?.role === 'user')) {
+  // 1. Unauthenticated, Trainee, or Scoped Assistant Lecturer Guard
+  if (!authLoading && (!isAuthenticated || user?.role === 'user' || previewRole === 'assistant_lecturer')) {
     return (
       <div className="max-w-2xl mx-auto py-16 px-4 text-center space-y-4" data-testid="builder-access-denied">
         <div className="w-16 h-16 rounded-full bg-danger/10 text-danger flex items-center justify-center mx-auto">
@@ -295,10 +298,16 @@ export const CourseBuilderPage: React.FC = () => {
         </div>
         <h1 className="text-xl font-bold text-text-heading">غير مصرح بالدخول إلى منشئ المحتوى</h1>
         <p className="text-sm text-text-muted leading-relaxed">
-          هذا القسم مخصص للمحاضرين والمدربين المعتمدين ومديري النظام لإعداد وتعديل المقررات التدريبية.
+          {previewRole === 'assistant_lecturer'
+            ? 'منشئ المحتوى التدريبي غير متاح أثناء معاينة المحاضر المساعد؛ تنحصر الصلاحيات في متابعة المجموعة المكلف بها.'
+            : 'هذا القسم مخصص للمحاضرين والمدربين المعتمدين ومديري النظام لإعداد وتعديل المقررات التدريبية.'}
         </p>
-        <Button variant="primary" size="sm" onClick={() => navigate('/dashboard')}>
-          العودة للرئيسية
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => navigate(previewRole === 'assistant_lecturer' ? '/my-groups' : '/dashboard')}
+        >
+          {previewRole === 'assistant_lecturer' ? 'العودة لمجموعاتي التدريبية' : 'العودة للرئيسية'}
         </Button>
       </div>
     );

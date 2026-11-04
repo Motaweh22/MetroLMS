@@ -24,7 +24,7 @@ const roleBadgeVariants: Record<string, 'primary' | 'warning' | 'info'> = {
 export const DashboardPreviewPage: React.FC = () => {
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
   const [dismissedNotice, setDismissedNotice] = useState(false);
-  const { user, switchDemoUser, logout, isLoading } = useAuth();
+  const { user, logout, isLoading } = useAuth();
 
   const increments = [
     { num: '0', title: 'الأساس التقني والرموز', status: 'completed', badge: 'مكتمل' },
@@ -124,38 +124,12 @@ export const DashboardPreviewPage: React.FC = () => {
           <CardContent className="pt-2 border-t border-border/50">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
               <span className="font-semibold text-text-heading flex items-center gap-1.5">
-                <Icon name="refresh" size="sm" className="text-primary" />
-                <span>التبديل الفوري بين الحسابات التجريبية (Quick Persona Swapper):</span>
+                <Icon name="shield" size="sm" className="text-primary" />
+                <span>تبديل الحسابات التجريبية (Decommissioned per D-10 / MFR-40):</span>
               </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant={user.role === 'admin' ? 'primary' : 'outline'}
-                  size="sm"
-                  disabled={isLoading || user.role === 'admin'}
-                  onClick={() => switchDemoUser('admin')}
-                  className="text-xs"
-                >
-                  {ROLE_CANONICAL_LABELS_AR.admin}
-                </Button>
-                <Button
-                  variant={user.role === 'lecturer' ? 'primary' : 'outline'}
-                  size="sm"
-                  disabled={isLoading || user.role === 'lecturer'}
-                  onClick={() => switchDemoUser('lecturer')}
-                  className="text-xs"
-                >
-                  {ROLE_CANONICAL_LABELS_AR.lecturer}
-                </Button>
-                <Button
-                  variant={user.role === 'user' ? 'primary' : 'outline'}
-                  size="sm"
-                  disabled={isLoading || user.role === 'user'}
-                  onClick={() => switchDemoUser('user')}
-                  className="text-xs"
-                >
-                  {ROLE_CANONICAL_LABELS_AR.user}
-                </Button>
-              </div>
+              <p className="text-xs text-text-muted">
+                تم إلغاء التبديل المباشر غير المحمي واستبداله بـ «جلسات اختبار الصلاحيات المعزولة» لحفظ وتأمين جلسة المطور.
+              </p>
             </div>
           </CardContent>
         </Card>

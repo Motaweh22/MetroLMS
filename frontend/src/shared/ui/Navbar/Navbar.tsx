@@ -29,6 +29,8 @@ export interface NavbarProps {
   unreadCount?: number;
   /** Optional callback to open Role Preview modal for Developer */
   onOpenRolePreview?: () => void;
+  /** Optional callback to open Isolated Role Testing modal for Developer (Increment 5.3) */
+  onOpenIsolatedSession?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -40,6 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   unreadCount = 0,
   onOpenRolePreview,
+  onOpenIsolatedSession,
 }) => {
   const location = useLocation();
   const isDesignSystemActive = location.pathname.startsWith('/design-system');
@@ -124,6 +127,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <span className="hidden xs:inline">معاينة الأدوار</span>
               <span className="xs:hidden">المعاينة</span>
+            </Button>
+          )}
+
+          {/* Developer Isolated Role Testing Modal Trigger (Increment 5.3 / Decision D-10) */}
+          {user?.role === 'developer' && onOpenIsolatedSession && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon="shield"
+              onClick={onOpenIsolatedSession}
+              className="text-xs sm:text-sm font-semibold border-amber-600/40 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+              data-testid="navbar-isolated-session-btn"
+              aria-label="اختبار الصلاحيات بجلسة معزولة"
+            >
+              <span className="hidden xs:inline">اختبار الصلاحيات</span>
+              <span className="xs:hidden">الاختبار</span>
             </Button>
           )}
 

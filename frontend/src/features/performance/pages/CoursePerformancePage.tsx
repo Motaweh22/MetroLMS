@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { performanceApi } from '../services/performanceApi';
 import type { CoursePerformanceReportDTO } from '@/core/performance/types';
 import { Card, CardContent } from '@/shared/ui/Card';
@@ -9,6 +10,7 @@ import { Alert } from '@/shared/ui/Alert';
 
 export const CoursePerformancePage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
+  const { previewRole } = useRolePreview();
   const [report, setReport] = useState<CoursePerformanceReportDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +32,12 @@ export const CoursePerformancePage: React.FC = () => {
   }, [courseId]);
 
   useEffect(() => {
-    loadReport();
-  }, [loadReport]);
+    if (previewRole !== 'assistant_lecturer') {
+      loadReport();
+    } else {
+      setIsLoading(false);
+    }
+  }, [loadReport, previewRole]);
 
   const filteredTrainees = (report?.trainees || []).filter((t) => {
     if (!searchQuery.trim()) return true;
@@ -43,6 +49,27 @@ export const CoursePerformancePage: React.FC = () => {
       (t.phone && t.phone.includes(q))
     );
   });
+
+  if (previewRole === 'assistant_lecturer') {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6" data-testid="performance-access-denied">
+        <Card variant="default" className="text-center py-12 px-6 border-warning/40 bg-warning/5">
+          <div className="w-16 h-16 rounded-full bg-warning/10 text-warning flex items-center justify-center mx-auto mb-4">
+            <Icon name="alertTriangle" size="xl" />
+          </div>
+          <h1 className="text-2xl font-bold text-text-heading mb-2">تقرير الأداء العام خارج نطاق المعاينة</h1>
+          <p className="text-sm text-text-muted max-w-md mx-auto leading-relaxed mb-6">
+            تقارير أداء المقررات التدريبية العامة مقصورة على مؤلفي المقررات ومديري النظام. تقتصر متابعة المحاضر المساعد على لوحة متابعة المجموعة التدريبية المخصصة.
+          </p>
+          <Link to="/my-groups">
+            <Button variant="primary" size="md">
+              الرجوع إلى المجموعة التدريبية
+            </Button>
+          </Link>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

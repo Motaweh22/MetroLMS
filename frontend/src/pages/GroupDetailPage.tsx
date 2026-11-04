@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { groupsApi, type EnrichedTrainingGroup } from '@/features/groups/services/groupsApi';
 import { GroupMaterialsTab, ManageGroupAssistantsModal } from '@/features/groups/components';
 import { useAuth } from '@/features/auth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { Card, CardContent } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
@@ -26,6 +27,7 @@ export const GroupDetailPage: React.FC = () => {
   const toast = useToast();
   const { groupId } = useParams<{ groupId: string }>();
   const { user } = useAuth();
+  const { previewRole, scopedAssignmentPreview } = useRolePreview();
   const [group, setGroup] = useState<EnrichedTrainingGroup | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +35,17 @@ export const GroupDetailPage: React.FC = () => {
   const [isInstructorsModalOpen, setIsInstructorsModalOpen] = useState(false);
   const [isManageAssistantsOpen, setIsManageAssistantsOpen] = useState(false);
 
+  const isOutOfScope = Boolean(
+    previewRole === 'assistant_lecturer' &&
+    scopedAssignmentPreview?.groupId &&
+    groupId &&
+    groupId.toLowerCase() !== scopedAssignmentPreview.groupId.toLowerCase()
+  );
+
   const canManageAssistants = useMemo(() => {
     if (!user || !group) return false;
+    // Assistant Lecturer cannot manage assistant assignments
+    if (previewRole === 'assistant_lecturer') return false;
     if (user.role === 'admin') return true;
     if (user.role === 'lecturer') {
       const uid = user.id.toLowerCase();
@@ -44,7 +55,7 @@ export const GroupDetailPage: React.FC = () => {
       return Boolean(group.supervisorIds?.[0]?.toLowerCase() === uid);
     }
     return false;
-  }, [user, group]);
+  }, [user, group, previewRole]);
 
   const loadGroupDetails = useCallback(async () => {
     if (!groupId) return;
@@ -70,8 +81,39 @@ export const GroupDetailPage: React.FC = () => {
   }, [groupId]);
 
   useEffect(() => {
+    if (isOutOfScope) {
+      setIsLoading(false);
+      return;
+    }
     loadGroupDetails();
-  }, [loadGroupDetails]);
+  }, [loadGroupDetails, isOutOfScope]);
+
+  // Scoped Assistant Lecturer Out-of-Scope Protection
+  if (isOutOfScope) {
+    return (
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6" data-testid="group-out-of-scope">
+        <Link to="/my-groups">
+          <Button variant="ghost" size="sm" leftIcon="arrowRight" className="text-text-muted hover:text-text">
+            ← العودة إلى مجموعات التدريب المعتمدة
+          </Button>
+        </Link>
+        <Card variant="default" className="text-center py-12 px-6 border-warning/40 bg-warning/5">
+          <div className="w-16 h-16 rounded-full bg-warning/10 text-warning flex items-center justify-center mx-auto mb-4">
+            <Icon name="alertTriangle" size="xl" />
+          </div>
+          <h1 className="text-2xl font-bold text-text-heading mb-2">المجموعة خارج نطاق المعاينة المحدد</h1>
+          <p className="text-sm text-text-muted max-w-md mx-auto leading-relaxed mb-6">
+            المجموعة التدريبية المطلوبة تقع خارج نطاق تكليف المحاضر المساعد المحدد للمعاينة الحالية ({scopedAssignmentPreview?.groupName || scopedAssignmentPreview?.groupId}).
+          </p>
+          <Link to="/my-groups">
+            <Button variant="primary" size="md">
+              الرجوع إلى المجموعة المحددة للمعاينة
+            </Button>
+          </Link>
+        </Card>
+      </div>
+    );
+  }
 
   // 403 Forbidden State
   if (isForbidden) {
@@ -227,6 +269,20 @@ export const GroupDetailPage: React.FC = () => {
                   إدارة المحاضرين المساعدين
                 </Button>
               )}
+              {previewRole === 'assistant_lecturer' && (
+                <Link to={`/admin/groups/${group.id}/monitoring`}>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    leftIcon="dashboard"
+                    className="font-bold text-xs shrink-0"
+                    data-testid="assistant-group-monitoring-btn"
+                  >
+                    لوحة متابعة المجموعة
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
 
@@ -238,23 +294,25 @@ export const GroupDetailPage: React.FC = () => {
             </div>
           )}
 
-          {/* Overall Program Progress Bar */}
-          <div className="pt-2 border-t border-border/60 space-y-2">
-            <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-text-heading">
-              <span className="flex items-center gap-2">
-                <Icon name="checkmark" size="sm" className="text-success" />
-                <span>إجمالي تقدمك في مقررات المجموعة</span>
-              </span>
-              <span className="font-bold text-primary">
-                {programPercent}% ({completedLessonsTotal} من أصل {totalRequiredLessons} درساً)
-              </span>
+          {/* Overall Program Progress Bar (Trainees only) */}
+          {previewRole !== 'assistant_lecturer' && (
+            <div className="pt-2 border-t border-border/60 space-y-2">
+              <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-text-heading">
+                <span className="flex items-center gap-2">
+                  <Icon name="checkmark" size="sm" className="text-success" />
+                  <span>إجمالي تقدمك في مقررات المجموعة</span>
+                </span>
+                <span className="font-bold text-primary">
+                  {programPercent}% ({completedLessonsTotal} من أصل {totalRequiredLessons} درساً)
+                </span>
+              </div>
+              <ProgressBar
+                value={programPercent}
+                variant={programPercent === 100 ? 'success' : 'primary'}
+                size="lg"
+              />
             </div>
-            <ProgressBar
-              value={programPercent}
-              variant={programPercent === 100 ? 'success' : 'primary'}
-              size="lg"
-            />
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -568,16 +626,29 @@ export const GroupDetailPage: React.FC = () => {
                     />
                   </div>
 
-                  <Link to={`/courses/${ac.courseId}/learn`} className="block w-full">
-                    <Button
-                      variant={isCompleted ? 'outline' : 'primary'}
-                      size="sm"
-                      className="w-full font-bold text-xs"
-                      rightIcon={isCompleted ? 'courses' : 'arrowLeft'}
-                    >
-                      {isCompleted ? 'مراجعة محتوى المقرر' : coursePercent > 0 ? 'متابعة الدورة التدريبية' : 'بدء المقرر الآن'}
-                    </Button>
-                  </Link>
+                  {previewRole === 'assistant_lecturer' ? (
+                    <Link to={`/courses/${ac.courseId}`} className="block w-full">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full font-bold text-xs"
+                        rightIcon="courses"
+                      >
+                        استعراض تفاصيل المقرر
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link to={`/courses/${ac.courseId}/learn`} className="block w-full">
+                      <Button
+                        variant={isCompleted ? 'outline' : 'primary'}
+                        size="sm"
+                        className="w-full font-bold text-xs"
+                        rightIcon={isCompleted ? 'courses' : 'arrowLeft'}
+                      >
+                        {isCompleted ? 'مراجعة محتوى المقرر' : coursePercent > 0 ? 'متابعة الدورة التدريبية' : 'بدء المقرر الآن'}
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               </Card>
             );

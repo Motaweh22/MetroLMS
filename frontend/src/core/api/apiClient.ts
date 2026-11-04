@@ -163,9 +163,11 @@ export async function apiClient<T>(
   const method = (customConfig.method || 'GET').toUpperCase();
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
   
-  // Authentication Lifecycle Exemption: Session termination (/api/auth/logout) must never be blocked
+  // Authentication Lifecycle Exemption: Session termination (POST /api/auth/logout) must never be blocked
   // by Visual Role Preview, ensuring the Developer can safely log out and terminate their session.
-  const isSessionTermination = url.includes('/api/auth/logout');
+  // Gated strictly to method === 'POST' and exact normalized path '/api/auth/logout'.
+  const normalizedPath = url.split('?')[0].replace(/\/+$/, '');
+  const isSessionTermination = method === 'POST' && normalizedPath === '/api/auth/logout';
 
   if (isMutation && isRolePreviewMutationBlocked()) {
     if (isSessionTermination) {

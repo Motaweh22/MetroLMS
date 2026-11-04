@@ -6,8 +6,11 @@ import { MobileDrawer } from '@/shared/ui/MobileDrawer';
 import { Footer } from '@/shared/ui/Footer';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
+import { useIsolatedSession } from '@/core/auth/useIsolatedSession';
 import { RolePreviewBanner } from '@/features/auth/components/RolePreviewBanner';
 import { RolePreviewModal } from '@/features/auth/components/RolePreviewModal';
+import { IsolatedSessionBanner } from '@/features/auth/components/IsolatedSessionBanner';
+import { IsolatedSessionModal } from '@/features/auth/components/IsolatedSessionModal';
 import { EnrollmentProvider } from '@/features/courses';
 import { NotificationProvider, useNotifications } from '@/features/notifications';
 import { useAutoRenewalScheduler } from '@/features/groups/hooks/useAutoRenewalScheduler';
@@ -17,9 +20,11 @@ const AppLayoutInner: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isIsolatedModalOpen, setIsIsolatedModalOpen] = useState(false);
   const { user, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const { effectiveUiRole, isPreviewing, previewLabelAr } = useRolePreview();
+  const { isIsolatedSession } = useIsolatedSession();
 
   const previewRoleLabel = isPreviewing
     ? (previewLabelAr || ROLE_CANONICAL_LABELS_AR[effectiveUiRole] || effectiveUiRole)
@@ -36,8 +41,13 @@ const AppLayoutInner: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bg text-text flex flex-col antialiased selection:bg-primary/20">
-      {/* Visual Role Preview Persistent Top Banner (D-10 / MFR-40) */}
-      <RolePreviewBanner onOpenSelector={() => setIsPreviewModalOpen(true)} />
+      {/* Isolated Role Test Session Persistent Warning Banner (Increment 5.3 / Decision D-10) */}
+      <IsolatedSessionBanner />
+
+      {/* Visual Role Preview Persistent Top Banner (D-10 / MFR-40) - only shown when not in isolated test session */}
+      {!isIsolatedSession && (
+        <RolePreviewBanner onOpenSelector={() => setIsPreviewModalOpen(true)} />
+      )}
 
       {/* Skip to Main Content Link for Keyboard Accessibility */}
       <a
@@ -56,6 +66,7 @@ const AppLayoutInner: React.FC = () => {
         onLogout={logout}
         unreadCount={unreadCount}
         onOpenRolePreview={() => setIsPreviewModalOpen(true)}
+        onOpenIsolatedSession={() => setIsIsolatedModalOpen(true)}
       />
 
       {/* Primary Shell Container */}
@@ -89,6 +100,12 @@ const AppLayoutInner: React.FC = () => {
       <RolePreviewModal
         isOpen={isPreviewModalOpen}
         onClose={() => setIsPreviewModalOpen(false)}
+      />
+
+      {/* Isolated Role Test Session Selector Modal (Increment 5.3) */}
+      <IsolatedSessionModal
+        isOpen={isIsolatedModalOpen}
+        onClose={() => setIsIsolatedModalOpen(false)}
       />
     </div>
   );

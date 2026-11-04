@@ -7,3 +7,5 @@ export * from './AuthContext';
 export * from './useAuthContext';
 export * from './ProtectedRoute';
 export * from './canonicalIdentity';
+export * from './testPersonas';
+export * from './useIsolatedSession';

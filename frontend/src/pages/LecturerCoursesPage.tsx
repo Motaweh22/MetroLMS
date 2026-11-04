@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { builderApi } from '@/features/course-builder/services/builderApi';
 import { CourseCreationModal } from '@/features/course-builder/components/CourseCreationModal';
 import type { Course, CourseLevel } from '@/core/courses/types';
@@ -14,6 +15,7 @@ import { QRCodeModal } from '@/shared/ui/QRCodeModal';
 
 export const LecturerCoursesPage: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { previewRole } = useRolePreview();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -57,15 +59,16 @@ export const LecturerCoursesPage: React.FC = () => {
 
   useEffect(() => {
     const isAuthorized =
-      user?.role === 'lecturer' ||
-      user?.role === 'admin' ||
-      user?.role === 'super_admin' ||
-      user?.role === 'developer' ||
-      user?.role === 'assistant_admin';
+      previewRole !== 'assistant_lecturer' &&
+      (user?.role === 'lecturer' ||
+        user?.role === 'admin' ||
+        user?.role === 'super_admin' ||
+        user?.role === 'developer' ||
+        user?.role === 'assistant_admin');
     if (isAuthenticated && isAuthorized) {
       fetchCourses();
     }
-  }, [isAuthenticated, user?.role, fetchCourses]);
+  }, [isAuthenticated, user?.role, previewRole, fetchCourses]);
 
   // Handle course creation submission
   const handleCreateCourse = async (data: {
@@ -115,8 +118,8 @@ export const LecturerCoursesPage: React.FC = () => {
     [user]
   );
 
-  // 1. Unauthenticated or Trainee Guard
-  if (!authLoading && (!isAuthenticated || user?.role === 'user')) {
+  // 1. Unauthenticated, Trainee, or Scoped Assistant Lecturer Guard
+  if (!authLoading && (!isAuthenticated || user?.role === 'user' || previewRole === 'assistant_lecturer')) {
     return (
       <div className="max-w-2xl mx-auto py-16 px-4 text-center space-y-4" data-testid="lecturer-access-denied">
         <div className="w-16 h-16 rounded-full bg-danger/10 text-danger flex items-center justify-center mx-auto">
@@ -124,10 +127,16 @@ export const LecturerCoursesPage: React.FC = () => {
         </div>
         <h1 className="text-xl font-bold text-text-heading">غير مصرح بالدخول إلى مساحة المحاضرين</h1>
         <p className="text-sm text-text-muted leading-relaxed">
-          هذه الصفحة مخصصة للمحاضرين والمدربين المعتمدين ومديري النظام لإعداد وتعديل المقررات التدريبية.
+          {previewRole === 'assistant_lecturer'
+            ? 'معاينة المحاضر المساعد مقصورة على المجموعة التدريبية المخصصة، ولا تشمل صلاحيات إدارة أو تأليف المقررات العامة.'
+            : 'هذه الصفحة مخصصة للمحاضرين والمدربين المعتمدين ومديري النظام لإعداد وتعديل المقررات التدريبية.'}
         </p>
-        <Button variant="primary" size="sm" onClick={() => navigate('/dashboard')}>
-          العودة للرئيسية
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => navigate(previewRole === 'assistant_lecturer' ? '/my-groups' : '/dashboard')}
+        >
+          {previewRole === 'assistant_lecturer' ? 'العودة لمجموعاتي التدريبية' : 'العودة للرئيسية'}
         </Button>
       </div>
     );

@@ -20,6 +20,10 @@ export function useAuthContext(): AuthContextValue {
       logout: async () => {},
       switchDemoUser: async () => {},
       clearError: () => {},
+      isIsolatedSession: false,
+      isolatedPersona: null,
+      launchIsolatedTestSession: async () => false,
+      returnToDeveloperSession: async () => false,
     };
   }
   return context;

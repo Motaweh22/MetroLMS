@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { groupsApi } from '@/features/groups/services/groupsApi';
 import type {
   GroupMetrics,
@@ -26,6 +27,14 @@ export const GroupMonitoringPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
+  const { previewRole, scopedAssignmentPreview } = useRolePreview();
+
+  const isOutOfScope = Boolean(
+    previewRole === 'assistant_lecturer' &&
+    scopedAssignmentPreview?.groupId &&
+    groupId &&
+    groupId.toLowerCase() !== scopedAssignmentPreview.groupId.toLowerCase()
+  );
 
   const cycleIdParam = searchParams.get('cycleId') || undefined;
   const tabParam = searchParams.get('tab');
@@ -117,9 +126,13 @@ export const GroupMonitoringPage: React.FC = () => {
   }, [groupId]);
 
   useEffect(() => {
+    if (isOutOfScope) {
+      setLoading(false);
+      return;
+    }
     loadData(selectedCycleId);
     loadRequests();
-  }, [loadData, loadRequests, selectedCycleId]);
+  }, [loadData, loadRequests, selectedCycleId, isOutOfScope]);
 
   // Authorization check
   const isAuthorized = useMemo(() => {
@@ -143,6 +156,8 @@ export const GroupMonitoringPage: React.FC = () => {
 
   const canManageAssistants = useMemo(() => {
     if (!user || !metrics?.group) return false;
+    // Assistant Lecturer cannot manage assistant assignments
+    if (previewRole === 'assistant_lecturer') return false;
     if (
       user.role === 'admin' ||
       user.role === 'super_admin' ||
@@ -159,7 +174,7 @@ export const GroupMonitoringPage: React.FC = () => {
       return Boolean(metrics.group.supervisorIds?.[0]?.toLowerCase() === uid);
     }
     return false;
-  }, [user, metrics?.group]);
+  }, [user, metrics?.group, previewRole]);
 
   // Filtered trainees
   const filteredTrainees = useMemo(() => {
@@ -276,6 +291,22 @@ export const GroupMonitoringPage: React.FC = () => {
       <div className="min-h-[50vh] flex flex-col items-center justify-center gap-3" data-testid="monitoring-loading-spinner">
         <Icon name="clock" size="lg" className="animate-spin text-primary mb-2" />
         <span className="text-sm text-text-muted">جاري تحميل لوحة المتابعة والمؤشرات...</span>
+      </div>
+    );
+  }
+
+  // Scoped Assistant Lecturer Out-of-Scope Protection
+  if (isOutOfScope) {
+    return (
+      <div className="container mx-auto p-6 max-w-5xl" dir="rtl" data-testid="monitoring-out-of-scope">
+        <Alert variant="warning" icon="alert">
+          المجموعة التدريبية المطلوبة تقع خارج نطاق تكليف المحاضر المساعد المحدد للمعاينة الحالية ({scopedAssignmentPreview?.groupName || scopedAssignmentPreview?.groupId}).
+        </Alert>
+        <div className="mt-4">
+          <Button variant="outline" onClick={() => navigate('/my-groups')}>
+            العودة إلى مجموعاتي المعتمدة
+          </Button>
+        </div>
       </div>
     );
   }

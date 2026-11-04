@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { groupsApi, type AdminEnrichedTrainingGroup } from '@/features/groups/services/groupsApi';
 import {
   GroupCoursesTab,
@@ -111,10 +112,13 @@ export const GroupEditorPage: React.FC = () => {
     setSearchParams(newParams, { replace: true });
   };
 
+  const { previewRole } = useRolePreview();
+
   const isAdmin =
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    user?.role === 'developer';
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer');
 
   // Loaded group in Edit mode
   const [loadedGroup, setLoadedGroup] = useState<AdminEnrichedTrainingGroup | null>(null);

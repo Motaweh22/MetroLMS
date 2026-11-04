@@ -1,4 +1,5 @@
 import { SYNTHETIC_DEMO_ACCOUNTS } from '../fixtures/mockUsers';
+import { SYNTHETIC_TEST_PERSONA_REGISTRY, personaToUser } from '@/core/auth/testPersonas';
 import { authStorage } from '@/core/auth/authStorage';
 import type { User } from '@/core/auth/types';
 import { inMemoryStore } from '../store/inMemoryStore';
@@ -132,12 +133,52 @@ export function mapManagedUserToAuthUser(managedUser: {
   };
 }
 
+export interface ResolveUserOptions {
+  /**
+   * When true, explicitly enforces browser session presence and rejects requests
+   * if no active session is found in storage (simulates browser runtime in tests).
+   */
+  enforceBrowserSession?: boolean;
+}
+
+/**
+ * Determines whether the current execution context is the approved Vitest test runner environment.
+ * The test runner sets process.env.VITEST in its runtime.
+ */
+export function isApprovedTestRunner(): boolean {
+  return typeof process !== 'undefined' && Boolean(process.env.VITEST);
+}
+
+/**
+ * Determines whether the code is executing in a genuine browser application runtime
+ * where sessionStorage represents active browser tab state.
+ * Returns false when executing in Vitest or in non-browser Node environments.
+ */
+export function isGenuineBrowserRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (isApprovedTestRunner()) return false;
+  return true;
+}
+
 /**
  * Resolves the authenticated User from the Authorization Bearer token header.
  * Strictly prevents hardcoding client-supplied identities.
  * Authoritative single resolver across all MSW mock handlers.
+ *
+ * Session Validation & Fallback Matrix (Increment 5.3):
+ * - Case A: Browser storage is available, an active session exists, and the bearer token matches.
+ *           -> Resolves the authoritative active session user.
+ * - Case B: Browser storage is available, an active session exists, but the bearer token does NOT match.
+ *           -> Fails closed immediately (returns null). NEVER falls through to token decoding!
+ * - Case C: Browser storage is available, but no active session exists (in browser runtime or enforced).
+ *           -> Fails closed immediately (returns null). Absent active session cannot impersonate via token.
+ * - Case D: Browser storage is genuinely unavailable (or controlled Node/headless test environment).
+ *           -> Narrowly scoped fallback token resolution retained for headless unit tests.
  */
-export function resolveAuthenticatedUser(request: Request): User | null {
+export function resolveAuthenticatedUser(
+  request: Request,
+  options: ResolveUserOptions = {}
+): User | null {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
@@ -146,11 +187,24 @@ export function resolveAuthenticatedUser(request: Request): User | null {
   const token = authHeader.replace('Bearer ', '').trim();
   if (!token) return null;
 
+  const mustEnforceBrowserSession =
+    options.enforceBrowserSession === true ||
+    request.headers.get('X-Enforce-Browser-Session') === 'true' ||
+    isGenuineBrowserRuntime();
+
   // 1. Check active session storage if available
   try {
     const session = authStorage.getSession();
-    if (session && session.token === token && session.user) {
-      if (!session.user.id || typeof session.user.id !== 'string' || !session.user.id.trim()) {
+
+    if (session) {
+      // Case B: Browser storage is available and an active session exists, but bearer token does NOT match.
+      // Critical Security Rule: Must fail closed and return null. It must NOT fall through to token decoding!
+      if (session.token !== token) {
+        return null;
+      }
+
+      // Case A: Browser storage is available, active session exists, and bearer token matches.
+      if (!session.user || !session.user.id || typeof session.user.id !== 'string' || !session.user.id.trim()) {
         return null;
       }
 
@@ -209,14 +263,49 @@ export function resolveAuthenticatedUser(request: Request): User | null {
         };
       }
 
+      // Check explicitly registered synthetic test personas (Increment 5.3 / Decision D-10)
+      if (import.meta.env.DEV) {
+        const matchedTestPersona =
+          SYNTHETIC_TEST_PERSONA_REGISTRY[canonicalId] ||
+          SYNTHETIC_TEST_PERSONA_REGISTRY[session.user.id];
+        if (matchedTestPersona && matchedTestPersona.status === 'active') {
+          return {
+            ...session.user,
+            id: matchedTestPersona.id,
+            role: matchedTestPersona.role,
+          };
+        }
+      }
+
       // Unknown, deleted, or unverified session identity: reject strictly
       return null;
     }
+
+    // Case C: Browser storage is available, but no active session exists.
+    // In the browser runtime (or when enforced), an absent active browser session must fail closed
+    // and cannot enable fallback token impersonation.
+    if (mustEnforceBrowserSession) {
+      return null;
+    }
   } catch {
-    // Non-browser or storage restricted environment; proceed to token resolution
+    // Critical Security Rule: A browser storage exception (e.g. SecurityError in iframe, private mode,
+    // or storage quota restriction) in an environment requiring browser-session enforcement
+    // must fail closed immediately and NEVER fall through to token impersonation.
+    if (mustEnforceBrowserSession) {
+      return null;
+    }
+    // Allow controlled headless/Node fallback only when browser session enforcement is not required.
   }
 
-  // 2. Determine user identity from token
+  // 2. Controlled Fallback Token Resolution (Case D)
+  // Strictly permitted ONLY inside the approved Vitest test runner when browser session enforcement is NOT required.
+  // In all other environments (genuine browser, arbitrary Node/SSR outside the approved test runner,
+  // or when browser session is enforced), execution must fail closed and NEVER permit token impersonation.
+  if (mustEnforceBrowserSession || !isApprovedTestRunner()) {
+    return null;
+  }
+
+  // 3. Determine user identity from token
   let candidateUserId: string | null = null;
 
   if (token.startsWith('mock_jwt_')) {
@@ -293,6 +382,16 @@ export function resolveAuthenticatedUser(request: Request): User | null {
       return null;
     }
     return fixtureAccount;
+  }
+
+  // 7. Match explicitly registered synthetic test personas (Increment 5.3 / Decision D-10)
+  if (import.meta.env.DEV) {
+    const testPersona =
+      SYNTHETIC_TEST_PERSONA_REGISTRY[canonicalId] ||
+      (candidateUserId ? SYNTHETIC_TEST_PERSONA_REGISTRY[candidateUserId] : null);
+    if (testPersona && testPersona.status === 'active') {
+      return personaToUser(testPersona);
+    }
   }
 
   // Unknown tokens must strictly return null - NEVER silently fall back to trainee!

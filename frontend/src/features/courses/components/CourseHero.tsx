@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '@/shared/ui/Icon';
 import { useAuth } from '@/features/auth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { useEnrollCourse } from '../hooks/useEnrollCourse';
 import type { Course } from '@/core/courses/types';
 import type { UseEnrollCourseResult } from '../hooks/useEnrollCourse';
@@ -14,6 +15,7 @@ export interface CourseHeroProps {
 
 export const CourseHero: React.FC<CourseHeroProps> = ({ course, enrollmentState }) => {
   const { user } = useAuth();
+  const { previewRole } = useRolePreview();
   const fallbackHook = useEnrollCourse(enrollmentState ? undefined : course.id);
   const { isEnrolled, isSubmitting, isSuccess, enroll } = enrollmentState || fallbackHook;
   const initial = course.lecturerName ? course.lecturerName.trim()[0] : 'م';
@@ -143,6 +145,11 @@ export const CourseHero: React.FC<CourseHeroProps> = ({ course, enrollmentState 
             <div className="bg-black/30 backdrop-blur-md border border-white/20 rounded-lg px-3.5 py-2 text-white text-xs font-semibold flex items-center gap-2">
               <Icon name="user" size="sm" />
               <span>حساب محاضر معتمد — استعراض المنهج</span>
+            </div>
+          ) : previewRole === 'assistant_lecturer' ? (
+            <div className="bg-black/30 backdrop-blur-md border border-white/20 rounded-lg px-3.5 py-2 text-white text-xs font-semibold flex items-center gap-2" data-testid="hero-assistant-lecturer-badge">
+              <Icon name="shield" size="sm" />
+              <span>معاينة مدرس مساعد — استعراض المنهج</span>
             </div>
           ) : (
             <div className="bg-black/30 backdrop-blur-md border border-white/20 rounded-lg px-3.5 py-2 text-white text-xs font-semibold flex items-center gap-2">

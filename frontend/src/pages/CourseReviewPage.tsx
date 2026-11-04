@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { reviewApi } from '@/features/course-review/api/reviewApi';
 import { useStagedEditsAutosave } from '@/features/course-review/hooks/useStagedEditsAutosave';
 import { ConflictResolutionModal } from '@/features/course-review/components/ConflictResolutionModal';
@@ -44,6 +45,7 @@ export const CourseReviewPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { previewRole } = useRolePreview();
 
   const [reviewData, setReviewData] = useState<CourseReviewDataResponseDTO | null>(null);
   const [workingNotes, setWorkingNotes] = useState<ReviewerWorkingNotes | null>(null);
@@ -67,16 +69,18 @@ export const CourseReviewPage: React.FC = () => {
   });
 
   const isReviewViewer =
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    user?.role === 'developer' ||
-    user?.role === 'assistant_admin';
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer' ||
+      user?.role === 'assistant_admin');
 
   const isOperationalAdmin =
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    user?.role === 'developer' ||
-    user?.role === 'assistant_admin';
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer' ||
+      user?.role === 'assistant_admin');
 
   // Load review data and working notes
   const loadReviewStudioData = useCallback(async () => {

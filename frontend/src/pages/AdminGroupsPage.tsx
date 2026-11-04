@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { groupsApi } from '@/features/groups/services/groupsApi';
 import type { GroupSummaryDTO } from '@/core/groups/dtos';
 import type { GroupAdminStatus, GroupEnrollmentPolicy, GroupStatus } from '@/core/groups/types';
@@ -92,16 +93,20 @@ export const AdminGroupsPage: React.FC = () => {
   const [isArchiving, setIsArchiving] = useState<boolean>(false);
   const [manageAssistantsGroup, setManageAssistantsGroup] = useState<GroupSummaryDTO | null>(null);
 
+  const { previewRole } = useRolePreview();
+
   const isAdministrativeViewer =
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    user?.role === 'developer' ||
-    user?.role === 'assistant_admin';
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer' ||
+      user?.role === 'assistant_admin');
   const isOperationalAdmin =
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    user?.role === 'developer';
-  const isSupervisor = user?.role === 'lecturer';
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer');
+  const isSupervisor = previewRole !== 'assistant_lecturer' && user?.role === 'lecturer';
   const isAuthorized = isAdministrativeViewer || isSupervisor;
 
   // Load group summaries

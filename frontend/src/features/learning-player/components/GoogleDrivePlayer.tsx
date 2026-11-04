@@ -16,7 +16,7 @@ export interface GoogleDrivePlayerProps {
   itemId?: string;
   courseId?: string;
   title: string;
-  duration?: string;
+  duration?: string | number;
   completionPolicy?: LessonCompletionPolicy;
   isCompleted?: boolean;
   initialEligibleSeconds?: number;

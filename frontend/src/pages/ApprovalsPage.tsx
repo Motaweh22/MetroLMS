@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { reviewApi } from '@/features/course-review/api/reviewApi';
 import type {
   ReviewQueueItemDTO,
@@ -38,6 +39,7 @@ function formatSubmissionDate(dateStr?: string | null): string {
 
 export const ApprovalsPage: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { previewRole } = useRolePreview();
   const navigate = useNavigate();
 
   // Admin Queue state
@@ -56,11 +58,12 @@ export const ApprovalsPage: React.FC = () => {
   const [lecturerTab, setLecturerTab] = useState<'all' | 'pending' | 'needs_revision' | 'approved'>('all');
 
   const isAdmin =
-    user?.role === 'admin' ||
-    user?.role === 'super_admin' ||
-    user?.role === 'developer' ||
-    user?.role === 'assistant_admin';
-  const isLecturer = user?.role === 'lecturer';
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer' ||
+      user?.role === 'assistant_admin');
+  const isLecturer = previewRole !== 'assistant_lecturer' && user?.role === 'lecturer';
   const isAuthorized = isAdmin || isLecturer;
 
   const loadData = useCallback(async () => {

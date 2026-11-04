@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
+import { useRolePreview } from '@/core/auth/useRolePreview';
 import { coursesApi } from '@/features/courses/services/coursesApi';
 import type { EnrolledCourseDetail } from '@/core/courses/types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/shared/ui/Card';
@@ -17,6 +18,7 @@ const THUMB_GRADIENTS = [
 ];
 
 export const MyCoursesPage: React.FC = () => {
+  const { previewRole } = useRolePreview();
   const [courses, setCourses] = useState<EnrolledCourseDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,8 +39,15 @@ export const MyCoursesPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadEnrolledCourses();
-  }, [loadEnrolledCourses]);
+    if (previewRole !== 'assistant_lecturer') {
+      loadEnrolledCourses();
+    }
+  }, [loadEnrolledCourses, previewRole]);
+
+  // Assistant Lecturer Scope Guard: Trainee personal enrolled courses out of scope
+  if (previewRole === 'assistant_lecturer') {
+    return <Navigate to="/my-groups" replace />;
+  }
 
   const filteredCourses = useMemo(() => {
     return courses.filter((c) => {

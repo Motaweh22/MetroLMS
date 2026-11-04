@@ -169,15 +169,18 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * Parses a duration string (e.g. "18:30" or "01:15:30") into total seconds.
+ * Parses a duration string (e.g. "18:30" or "01:15:30") or number into total seconds.
  * Returns 0 for invalid, non-finite, empty, or negative inputs.
  */
-export function parseDurationToSeconds(durationStr?: string): number {
-  if (!durationStr || typeof durationStr !== 'string') {
+export function parseDurationToSeconds(durationInput?: string | number): number {
+  if (typeof durationInput === 'number') {
+    return Number.isFinite(durationInput) && durationInput > 0 ? Math.floor(durationInput) : 0;
+  }
+  if (!durationInput || typeof durationInput !== 'string') {
     return 0;
   }
 
-  const trimmed = durationStr.trim();
+  const trimmed = durationInput.trim();
   if (!trimmed) {
     return 0;
   }
