@@ -20,7 +20,7 @@ This document specifies the multi-tier system topology, network boundaries, and 
 ### 1.2 Core Architectural Principles
 1. **Engine Invariance (`D-DB-01`):** Microsoft SQL Server is the sole relational database engine.
 2. **Session Security (`D-AUTH-01`):** Server-side sessions; HttpOnly/Secure cookies; zero browser JWTs.
-3. **Media Decoupling (`D-MEDIA-01`):** Raw video binaries stream directly from enterprise storage; application server handles only metadata.
+1. **Media Decoupling (`D-MEDIA-01`):** Logical media references and Storage Abstraction decouple business logic/APIs from physical storage; Phase 1 uses Django-mediated session-authenticated streaming, while direct client streaming (`ADR-004`) via `CL-03` signed URLs is preserved as the future delivery direction.
 4. **Defense-in-Depth (`D-SEC-01`):** Strict DMZ boundary, reverse proxy SSL/TLS termination, and centralized DOMPurify HTML sanitization.
 
 ---
@@ -52,7 +52,7 @@ flowchart TD
     end
 
     subgraph MediaTier["Decoupled Media Storage Tier (D-MEDIA-01)"]
-        MediaStorage["Enterprise Media Storage / CDN Endpoint"]
+        MediaStorage["Decoupled Media Storage & Delivery Tier<br/>(Provider / Delivery Mechanism DEFERRED under API-REC-06)"]
     end
 
     %% Network Flows
@@ -64,8 +64,8 @@ flowchart TD
     Django --> DomainServices
     Django -->|pyodbc / mssql-django (ODBC Driver 18)| SQLServer
     SQLServer --- RCSI
-    Player -.->|Direct Signed URL Streaming (HTTP 206)| MediaStorage
-    Django -.->|Pre-Signed Streaming URL Generation| MediaStorage
+    Player -.->|Phase 1: Django-Mediated Auth Stream / Future: Direct Signed URL (CL-03 Deferred)| MediaStorage
+    Django -.->|Phase 1: Storage Abstraction Stream / Future: Signed URL Issuance (CL-03)| MediaStorage
 ```
 
 ---
@@ -89,10 +89,12 @@ flowchart TD
 - Cookies are marked `HttpOnly`, `Secure`, `SameSite=Lax`.
 - Mutation requests require an `X-CSRFToken` header matching the active CSRF session cookie.
 
-### 4.2 Media Integration Boundary (`D-MEDIA-01`, `ADR-004`)
-- Application servers **never** buffer or proxy video binary streams.
-- The Django backend validates access permissions and issues signed or direct media streaming URLs.
-- The browser client connects directly to the media endpoint for byte-range playback (`HTTP 206 Partial Content`).
+### 4.2 Media Integration Boundary (`D-MEDIA-01`, `ADR-004`, `CL-02`, `CL-03` & `API-REC-06`)
+- **Phase 1 Media Delivery (`OWNER APPROVED`, `2026-11-13`):** Initial production uses **Django-mediated, session-authenticated media delivery**: trainee requests media -> Django authenticates (`D-AUTH-01`) -> Django independently validates `D-SEC-01` authorization (enrollment, group membership, visibility, cycle access) -> Django retrieves via the Storage Abstraction (private storage, stable asset IDs; public physical paths, SMB shares, and unauthenticated URLs prohibited) -> Django streams the response, preserving HTTP `Range`, `206 Partial Content`, `416`, repeated Range requests, and native seeking (with authorization on Range requests; not yet implemented/verified). No separate Media Delivery Service is required in Phase 1 (and no Starlette, Uvicorn, ASP.NET Core, S3, MinIO, CDN, Redis, Celery, or silent ASGI change is introduced). **Known Risk:** Media transfer passes through Django app infrastructure, increasing worker occupancy, bandwidth consumption, and resource pressure under concurrent video playback; throughput/capacity assumptions must not be invented and require representative concurrent workload validation.
+- **Initial Storage Deployment Direction (`INV-DOM21-06` — `OWNER APPROVED — INITIAL STORAGE DEPLOYMENT DIRECTION`, `2026-11-13`):** Initial production deployment uses a dedicated media storage location on the existing Windows Server hosting Django and SQL Server, logically and operationally separated from application source/deployment, logs/temp runtime, and SQL Server data/transaction-log directories (illustrative example only: `D:\MetroLMSMedia\`; actual drive/path confirmed during deployment planning). Access MUST go through the Storage Abstraction (`INV-DOM21-05`, `INV-DOM21-06`) so future migration to a separate Media Server requires zero changes to business logic, logical asset IDs, or core API contracts. Exact disk allocation, capacity, backup/retention, DR design, AV scanning, and the future server's exact role remain unapproved/unverified.
+- **Network Exposure (`CL-02` — `OWNER APPROVED`, `2026-11-13`):** Authorized platform and media access must support both Cairo Metro's internal corporate network and external internet access (home/mobile devices) securely over HTTPS with Django session/authorization enforcement—never exposing Windows file shares, SMB paths, or physical storage locations, and without approving public buckets, public binary URLs, or a CDN.
+- **Future `CL-03` Signed-URL Direction (`OWNER APPROVED`, `2026-11-13` — Implementation Deferred):** Short-Lived Signed URLs and `ADR-004` direct client streaming (bypassing Django WSGI) remain preserved as the **future** media authorization and delivery direction when measured traffic/performance justifies a separate media delivery layer (bearer-expiry limits apply; distinct from Google Drive `Anyone with the link` external references).
+- **Deferred Delivery & Technical Details (`API-REC-06` remains `DEFERRED`):** Signed URL implementation & `CL-03` technical details (exact TTL, signature algorithm/key management/rotation, URL scope, Range reuse, replay mitigation, delivery validation, post-change invalidation, external streaming ops), separate delivery server (IIS, Nginx, S3, MinIO), CDN, malware scanning, production size limits, chunked upload, and backup/retention remain **`DEFERRED`** under `API-REC-06`.
 
 ### 4.3 Security & Role Ceiling Boundary (`D-SEC-01`, `ADR-003`)
 - All user-generated rich text routes through DOMPurify sanitization before DOM mounting.
@@ -111,4 +113,4 @@ flowchart TD
 > 
 > Both architectural variants are fully supported by Python 3.12, Django 5, and the Microsoft ODBC Driver 18 for SQL Server. Final selection will be determined during Phase 7 operational staging based on Cairo Metro IT infrastructure facilities.
 >
-> **Approved Background Renewal Execution (`API-REC-01` & `Domain 20 / D4` — `OWNER APPROVED`, `2026-11-13`):** Initial production automatic renewal execution uses **Windows Server -> Windows Task Scheduler -> planned Django Management Command (`process_due_group_renewals`, not yet implemented) -> Django Renewal Services -> Microsoft SQL Server**. Celery, Celery Beat, Redis, RabbitMQ, and SQL Server Agent are explicitly not required in the initial approved architecture.
+> **Approved Background Renewal Execution (`API-REC-01` & `Domain 20 / D4` — `OWNER APPROVED`, `2026-11-13`):** Initial production automatic renewal execution uses **Windows Server -> Windows Task Scheduler (every 6 hours) -> planned Django Management Command (`process_due_group_renewals`, not yet implemented) -> Django Renewal Services -> Microsoft SQL Server**. Celery, Celery Beat, Redis, RabbitMQ, and SQL Server Agent are explicitly not required in the initial approved architecture.
