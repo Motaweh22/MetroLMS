@@ -38,6 +38,11 @@ export const worker = setupWorker(
 // Dev helpers for inspecting or resetting mock store during verification
 // Hard-gated strictly to development environment (dead-code-eliminated in production builds)
 if (import.meta.env.DEV && typeof window !== 'undefined' && import.meta.env.MODE !== 'production') {
+  // Pre-seed development mock CSRF cookie on window/main thread if not already present
+  if (typeof document !== 'undefined' && !/(?:^|;\s*)csrftoken=([^;]+)/.test(document.cookie)) {
+    document.cookie = 'csrftoken=mock-dev-csrftoken; path=/; SameSite=Lax';
+  }
+
   // Pre-seed Increment 10 rich demo cohorts for manual UI audit in development
   inMemoryStore.seedIncrement10DemoFixtures();
 

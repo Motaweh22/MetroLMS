@@ -1,8 +1,9 @@
-import type { AuthSession, User } from './types';
+import type { AuthSession, User, LogoutStatus } from './types';
 import { getSyntheticTestPersona } from './testPersonas';
 
 const SESSION_STORAGE_KEY = 'metro_lms_auth_session';
 const DEVELOPER_ORIGIN_STORAGE_KEY = 'metro_lms_developer_origin_session';
+const LOGOUT_STATUS_STORAGE_KEY = 'metro_lms_logout_status';
 
 /**
  * Diagnostic Quarantine Storage Key (Increment 5.4 / Decision A & Decision D)
@@ -47,83 +48,138 @@ export interface SessionContinuityDescriptor {
 }
 
 /**
- * Developer Origin Session Snapshot Schema (Increment 5.3 / Decision D-10)
+ * A. Runtime / MSW Mock Interface (Increment 5.3 / Decision D-10)
  *
- * PROTOTYPE SECURITY LIMITATION NOTICE:
- * window.sessionStorage is a browser-side development prototype storage mechanism,
- * not a cryptographically secured hardware token vault. In the future production
- * architecture (Phase 12), session separation must be controlled by server-side sessions
- * and HttpOnly SameSite cookies rather than browser-accessible storage.
+ * Represents the in-memory runtime input shape used by simulated authentication
+ * workflows and historical test specifications.
+ *
+ * STRICT SECURITY BOUNDARY (T-1.1.1 Security Correction):
+ * An existing mock interface may include `developerToken` for runtime MSW simulation,
+ * but `developerToken` (and any other credential) MUST NEVER be serialized to
+ * `metro_lms_developer_origin_session` in browser storage in ANY state.
  */
-export interface DeveloperOriginSession {
+export interface RuntimeDeveloperOriginSession {
   schemaVersion: 1;
   savedAt: string;
   developerUser: User;
-  developerToken: string;
+  /**
+   * Runtime-only MSW mock token. Retained strictly in volatile runtime closure memory
+   * when provided; NEVER serialized to sessionStorage or localStorage.
+   */
+  developerToken?: string;
   developerExpiresAt: number;
   personaId: string;
+  snapshotState?: 'active_origin' | 'inert';
 }
 
 /**
- * In-memory fallback in case window.sessionStorage is unavailable or restricted
+ * Compatibility type alias for runtime callers and deferred test specifications.
  */
-let inMemorySession: AuthSession | null = null;
-let inMemoryDeveloperOriginSession: DeveloperOriginSession | null = null;
+export type DeveloperOriginSession = RuntimeDeveloperOriginSession;
 
 /**
- * Same-Tab Mutation Detection Counter & Listener Registry (Increment 5.4 / WP-5.4.1 Final Source Audit)
- * Tracks mutations to the Developer origin snapshot within the current browser tab.
- * Per-tab only: does not perform cross-tab synchronization or global epochs.
+ * Explicit allowlisted non-credential Developer profile fields permitted in persisted storage.
  */
-let originSnapshotVersion = 0;
-const originChangeListeners = new Set<() => void>();
-
-export function getDeveloperOriginSnapshotVersion(): number {
-  return originSnapshotVersion;
-}
-
-export function subscribeToDeveloperOriginChanges(listener: () => void): () => void {
-  originChangeListeners.add(listener);
-  return () => {
-    originChangeListeners.delete(listener);
-  };
-}
-
-function notifyDeveloperOriginChanged(): void {
-  originSnapshotVersion++;
-  originChangeListeners.forEach((listener) => {
-    try {
-      listener();
-    } catch (e) {
-      console.warn('Error in origin snapshot listener:', e);
-    }
-  });
-}
-
-function isStorageAvailable(): boolean {
-  try {
-    return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
-  } catch {
-    return false;
-  }
+export interface SanitizedDeveloperUserMetadata {
+  id: 'USR_DEV_001';
+  email: string;
+  name: string;
+  role: 'developer';
+  department: string;
+  jobTitle: string;
+  initials: string;
 }
 
 /**
- * Strict validator for Developer Origin Session Snapshots (Increment 5.3 / Decision D-10).
+ * B. Persisted Developer Origin Snapshot (T-1.1.1 Credential-Free Persistence Representation)
  *
- * Enforces all required invariants:
- * - schemaVersion === 1
- * - developerUser.id === 'USR_DEV_001'
- * - developerUser.role === 'developer'
- * - Non-empty developerToken
- * - Valid ISO timestamp string for savedAt
- * - Valid personaId from the approved synthetic personas list
+ * STRICT SECURITY REQUIREMENT (D-AUTH-01 & Decision C):
+ * Serialized to `metro_lms_developer_origin_session` using an explicit allowlist ONLY.
+ * Across ALL persisted states (`active_origin` in S3/S4/S6 and `inert` in S7), this record
+ * MUST NEVER contain:
+ * - developerToken
+ * - Session IDs
+ * - Bearer tokens
+ * - Access tokens
+ * - Refresh tokens
+ * - Passwords
+ * - Authorization credentials
+ * - Any other reusable authentication secret
  */
-export function isValidDeveloperOriginSession(origin: unknown): origin is DeveloperOriginSession {
+export interface PersistedDeveloperOriginSnapshot {
+  schemaVersion: 1;
+  savedAt: string;
+  developerUser: SanitizedDeveloperUserMetadata;
+  developerExpiresAt: number;
+  personaId: string;
+  snapshotState?: 'active_origin' | 'inert';
+}
+
+/**
+ * C. Inert S7 Snapshot (Owner Decision C: S8 -> S7 Real-User Logout)
+ *
+ * Preserves non-credential Developer origin metadata in an inert state after real-user logout
+ * until browser tab termination. Must never independently restore authentication or expose
+ * Developer return controls.
+ */
+export interface InertDeveloperOriginSnapshot extends PersistedDeveloperOriginSnapshot {
+  snapshotState: 'inert';
+}
+
+const ALLOWED_PERSISTED_SNAPSHOT_KEYS = new Set<string>([
+  'schemaVersion',
+  'savedAt',
+  'developerUser',
+  'developerExpiresAt',
+  'personaId',
+  'snapshotState',
+]);
+
+const ALLOWED_DEVELOPER_USER_KEYS = new Set<string>([
+  'id',
+  'email',
+  'name',
+  'role',
+  'department',
+  'jobTitle',
+  'initials',
+]);
+
+const PROHIBITED_SNAPSHOT_CREDENTIAL_KEYS = [
+  'developerToken',
+  'token',
+  'rawToken',
+  'personaToken',
+  'sessionId',
+  'accessToken',
+  'refreshToken',
+  'password',
+  'authorization',
+] as const;
+
+const VALID_SYNTHETIC_PERSONA_IDS = [
+  'USR_TEST_SUPER_001',
+  'USR_TEST_ADMIN_001',
+  'USR_TEST_AST_001',
+  'USR_TEST_LEC_001',
+  'USR_TEST_TRN_001',
+] as const;
+
+/**
+ * Validates whether an input object (either a RuntimeDeveloperOriginSession input or a
+ * PersistedDeveloperOriginSnapshot) satisfies structural and canonical identity invariants.
+ *
+ * Note: If `developerToken` is present on a runtime input passed to `saveDeveloperOriginSession()`,
+ * it must be a non-empty string (preserving P5-T18-3 input validation), and is then stripped by
+ * `sanitizeToPersistedDeveloperOriginSnapshot()` before persistence.
+ */
+export function isValidDeveloperOriginSession(
+  origin: unknown
+): origin is PersistedDeveloperOriginSnapshot {
   if (!origin || typeof origin !== 'object') {
     return false;
   }
-  const snap = origin as Partial<DeveloperOriginSession>;
+  const snap = origin as Partial<RuntimeDeveloperOriginSession> & Record<string, unknown>;
   if (snap.schemaVersion !== 1) {
     return false;
   }
@@ -136,8 +192,32 @@ export function isValidDeveloperOriginSession(origin: unknown): origin is Develo
   if (snap.developerUser.id !== 'USR_DEV_001' || snap.developerUser.role !== 'developer') {
     return false;
   }
-  if (!snap.developerToken || typeof snap.developerToken !== 'string' || snap.developerToken.trim() === '') {
+  if (
+    typeof snap.developerUser.email !== 'string' ||
+    typeof snap.developerUser.name !== 'string'
+  ) {
     return false;
+  }
+  if (snap.developerToken !== undefined) {
+    if (typeof snap.developerToken !== 'string' || snap.developerToken.trim() === '') {
+      return false;
+    }
+  }
+  if (
+    snap.snapshotState !== undefined &&
+    snap.snapshotState !== 'active_origin' &&
+    snap.snapshotState !== 'inert'
+  ) {
+    return false;
+  }
+  const userRecord = snap.developerUser as unknown as Record<string, unknown>;
+  for (const key of PROHIBITED_SNAPSHOT_CREDENTIAL_KEYS) {
+    if (key !== 'developerToken' && snap[key] !== undefined) {
+      return false;
+    }
+    if (userRecord[key] !== undefined) {
+      return false;
+    }
   }
   if (
     typeof snap.developerExpiresAt !== 'number' ||
@@ -149,212 +229,388 @@ export function isValidDeveloperOriginSession(origin: unknown): origin is Develo
   if (!snap.personaId || typeof snap.personaId !== 'string') {
     return false;
   }
-  const validPersonaIds = [
-    'USR_TEST_SUPER_001',
-    'USR_TEST_ADMIN_001',
-    'USR_TEST_AST_001',
-    'USR_TEST_LEC_001',
-    'USR_TEST_TRN_001',
-  ];
-  if (!validPersonaIds.includes(snap.personaId)) {
+  if (!(VALID_SYNTHETIC_PERSONA_IDS as readonly string[]).includes(snap.personaId)) {
     return false;
   }
   return true;
 }
 
 /**
- * Authoritative Session Storage Abstraction
- *
- * Rules:
- * 1. Plaintext passwords are NEVER stored.
- * 2. Only sanitized user profile metadata, mock token, and expiry timestamp are preserved.
- * 3. Session state is scoped to browser session tab lifecycle (sessionStorage).
- * 4. Dedicated Developer Origin slot is strictly isolated from active auth session slot.
+ * Strict persistence-level validator confirming that a serialized snapshot conforms 100%
+ * to the explicit allowlist and contains ZERO credential fields (including no `developerToken`).
  */
-export const authStorage = {
-  /**
-   * Retrieves the currently stored session, or null if absent or expired
-   */
-  getSession(): AuthSession | null {
-    if (!isStorageAvailable()) {
+export function isPersistedDeveloperOriginSnapshot(
+  origin: unknown
+): origin is PersistedDeveloperOriginSnapshot {
+  if (!isValidDeveloperOriginSession(origin)) {
+    return false;
+  }
+  const snapRecord = origin as unknown as Record<string, unknown>;
+  for (const key of Object.keys(snapRecord)) {
+    if (!ALLOWED_PERSISTED_SNAPSHOT_KEYS.has(key)) {
+      return false;
+    }
+  }
+  for (const key of PROHIBITED_SNAPSHOT_CREDENTIAL_KEYS) {
+    if (key in snapRecord || snapRecord[key] !== undefined) {
+      return false;
+    }
+  }
+  const userRecord = snapRecord.developerUser as Record<string, unknown>;
+  for (const key of Object.keys(userRecord)) {
+    if (!ALLOWED_DEVELOPER_USER_KEYS.has(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Explicit allowlist serializer that constructs a credential-free `PersistedDeveloperOriginSnapshot`.
+ * Never copies arbitrary properties; explicitly picks only approved non-credential metadata fields.
+ */
+export function sanitizeToPersistedDeveloperOriginSnapshot(
+  origin: unknown,
+  forcedState?: 'active_origin' | 'inert'
+): PersistedDeveloperOriginSnapshot | null {
+  if (!isValidDeveloperOriginSession(origin)) {
+    return null;
+  }
+  const raw = origin as RuntimeDeveloperOriginSession;
+  const resolvedState: 'active_origin' | 'inert' =
+    forcedState ?? (raw.snapshotState === 'inert' ? 'inert' : 'active_origin');
+
+  const sanitizedUser: SanitizedDeveloperUserMetadata = {
+    id: 'USR_DEV_001',
+    email: String(raw.developerUser.email),
+    name: String(raw.developerUser.name),
+    role: 'developer',
+    department: typeof raw.developerUser.department === 'string' ? raw.developerUser.department : '',
+    jobTitle: typeof raw.developerUser.jobTitle === 'string' ? raw.developerUser.jobTitle : '',
+    initials: typeof raw.developerUser.initials === 'string' ? raw.developerUser.initials : '',
+  };
+
+  const persisted: PersistedDeveloperOriginSnapshot = {
+    schemaVersion: 1,
+    savedAt: String(raw.savedAt),
+    developerUser: sanitizedUser,
+    developerExpiresAt: Number(raw.developerExpiresAt),
+    personaId: String(raw.personaId),
+    snapshotState: resolvedState,
+  };
+
+  return isPersistedDeveloperOriginSnapshot(persisted) ? persisted : null;
+}
+
+/**
+ * Verifies that a Developer origin snapshot is in a strictly inert, credential-free S7 state.
+ */
+export function isInertDeveloperOriginSession(
+  origin: unknown
+): origin is InertDeveloperOriginSnapshot {
+  return (
+    isPersistedDeveloperOriginSnapshot(origin) &&
+    origin.snapshotState === 'inert'
+  );
+}
+
+/**
+ * Authoritative Session Storage Interface
+ */
+export interface AuthStorageInstance {
+  getSession(): AuthSession | null;
+  setSession(session: AuthSession): void;
+  clearSession(): void;
+  saveDeveloperOriginSession(
+    origin: RuntimeDeveloperOriginSession | PersistedDeveloperOriginSnapshot
+  ): boolean;
+  preserveInertDeveloperOriginSession(): boolean;
+  getDeveloperOriginSession(): PersistedDeveloperOriginSnapshot | null;
+  getRuntimeDeveloperTokenForRestore(): string | null;
+  clearDeveloperOriginSession(): void;
+  hasDeveloperOriginSession(): boolean;
+  inspectSessionContinuity(): SessionContinuityDescriptor;
+  quarantineDeveloperOriginSession(
+    origin: unknown,
+    reason: 'DEVELOPER_SNAPSHOT_EXPIRED' | 'CORRUPTED_SNAPSHOT_STRUCTURE'
+  ): void;
+  getQuarantinedOriginSession(): SanitizedQuarantinedOriginSnapshot | null;
+  clearQuarantinedOriginSession(): void;
+  getDeveloperOriginSnapshotVersion(): number;
+  subscribeToDeveloperOriginChanges(listener: () => void): () => void;
+  getInMemorySessionForTesting(): AuthSession | null;
+  getInMemoryDeveloperOriginSessionForTesting(): PersistedDeveloperOriginSnapshot | null;
+}
+
+/**
+ * Factory for creating independent AuthStorage instances.
+ * In a real browser, each tab runs an independent JavaScript runtime with its own module memory.
+ * For test harnesses simulating multiple tabs or isolated browsing contexts, createAuthStorage
+ * encapsulates all per-tab in-memory fallbacks, origin revision counters, listener sets,
+ * and backing storage providers.
+ */
+export function createAuthStorage(storageProvider?: Storage | null): AuthStorageInstance {
+  let inMemorySession: AuthSession | null = null;
+  let inMemoryDeveloperOriginSession: PersistedDeveloperOriginSnapshot | null = null;
+  let inMemoryRuntimeDeveloperToken: string | null = null;
+  let originSnapshotVersion = 0;
+  const originChangeListeners = new Set<() => void>();
+
+  function getStorage(): Storage | null {
+    if (storageProvider === null) {
+      return null;
+    }
+    if (storageProvider !== undefined) {
+      return storageProvider;
+    }
+    try {
+      if (typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined') {
+        return window.sessionStorage;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  function notifyDeveloperOriginChanged(): void {
+    originSnapshotVersion++;
+    originChangeListeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (e) {
+        console.warn('Error in origin snapshot listener:', e);
+      }
+    });
+  }
+
+  function clearSession(): void {
+    inMemorySession = null;
+    const storage = getStorage();
+    if (!storage) return;
+
+    try {
+      storage.removeItem(SESSION_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to remove auth session from storage:', error);
+    }
+  }
+
+  function getSession(): AuthSession | null {
+    const storage = getStorage();
+    if (!storage) {
       return inMemorySession;
     }
 
     try {
-      const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+      const raw = storage.getItem(SESSION_STORAGE_KEY);
       if (!raw) return null;
 
       const session: AuthSession = JSON.parse(raw);
       if (!session || !session.user || !session.token) {
-        this.clearSession();
+        clearSession();
         return null;
       }
 
       // Check expiry if set
       if (session.expiresAt && Date.now() > session.expiresAt) {
-        this.clearSession();
+        clearSession();
         return null;
       }
 
       return session;
     } catch (error) {
-      console.warn('Failed to parse auth session from sessionStorage:', error);
-      this.clearSession();
+      console.warn('Failed to parse auth session from storage:', error);
+      clearSession();
       return null;
     }
-  },
+  }
 
-  /**
-   * Stores an active session. Plaintext passwords are never included.
-   */
-  setSession(session: AuthSession): void {
+  function setSession(session: AuthSession): void {
     inMemorySession = session;
-    if (!isStorageAvailable()) return;
+    const storage = getStorage();
+    if (!storage) return;
 
     try {
-      window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+      storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
     } catch (error) {
-      console.warn('Failed to persist auth session to sessionStorage:', error);
+      console.warn('Failed to persist auth session to storage:', error);
     }
-  },
+  }
 
-  /**
-   * Clears the current session
-   */
-  clearSession(): void {
-    inMemorySession = null;
-    if (!isStorageAvailable()) return;
+  function getDeveloperOriginSession(): PersistedDeveloperOriginSnapshot | null {
+    const storage = getStorage();
+    if (!storage) {
+      return sanitizeToPersistedDeveloperOriginSnapshot(inMemoryDeveloperOriginSession);
+    }
 
     try {
-      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    } catch (error) {
-      console.warn('Failed to remove auth session from sessionStorage:', error);
-    }
-  },
+      const raw = storage.getItem(DEVELOPER_ORIGIN_STORAGE_KEY);
+      if (!raw) return null;
 
-  /**
-   * Captures and securely preserves the Developer origin session snapshot
-   * before transitioning to a synthetic test persona (Increment 5.3 / Decision D-10).
-   *
-   * Invariants:
-   * 1. Rejects overwriting an existing valid Developer origin snapshot (prevents nested launches).
-   * 2. Rejects any non-developer user identity as the origin snapshot.
-   * 3. Verifies that the snapshot can be immediately read back before returning success.
-   */
-  saveDeveloperOriginSession(origin: DeveloperOriginSession): boolean {
-    // 1. Strict validation of snapshot structure and identity invariants
+      const parsed = JSON.parse(raw);
+      return sanitizeToPersistedDeveloperOriginSnapshot(parsed);
+    } catch (error) {
+      console.warn('Failed to parse Developer origin session from storage:', error);
+      return null;
+    }
+  }
+
+  function getRuntimeDeveloperTokenForRestore(): string | null {
+    const origin = getDeveloperOriginSession();
+    if (
+      !origin ||
+      origin.snapshotState === 'inert' ||
+      Date.now() >= origin.developerExpiresAt
+    ) {
+      return null;
+    }
+    return inMemoryRuntimeDeveloperToken;
+  }
+
+  function clearDeveloperOriginSession(): void {
+    inMemoryDeveloperOriginSession = null;
+    inMemoryRuntimeDeveloperToken = null;
+    const storage = getStorage();
+    if (storage) {
+      try {
+        storage.removeItem(DEVELOPER_ORIGIN_STORAGE_KEY);
+      } catch (error) {
+        console.warn('Failed to remove Developer origin session from storage:', error);
+      }
+    }
+    notifyDeveloperOriginChanged();
+  }
+
+  function hasDeveloperOriginSession(): boolean {
+    return Boolean(getDeveloperOriginSession());
+  }
+
+  function saveDeveloperOriginSession(
+    origin: RuntimeDeveloperOriginSession | PersistedDeveloperOriginSnapshot
+  ): boolean {
+    // 1. Strict validation of snapshot structure and canonical identity invariants.
+    // If `developerToken` is provided on a runtime input, it must be non-empty (P5-T18-3),
+    // and is stripped before persistence so browser storage is 100% credential-free.
     if (!isValidDeveloperOriginSession(origin)) {
       return false;
     }
 
+    const runtimeInput = origin as RuntimeDeveloperOriginSession;
+    if (
+      'developerToken' in runtimeInput &&
+      runtimeInput.developerToken !== undefined &&
+      (typeof runtimeInput.developerToken !== 'string' ||
+        runtimeInput.developerToken.trim() === '')
+    ) {
+      return false;
+    }
+
+    const persistedSnapshot = sanitizeToPersistedDeveloperOriginSnapshot(
+      origin,
+      runtimeInput.snapshotState === 'inert' ? 'inert' : 'active_origin'
+    );
+    if (!persistedSnapshot || !isPersistedDeveloperOriginSnapshot(persistedSnapshot)) {
+      return false;
+    }
+
+    const storage = getStorage();
+
     // 2. Anti-overwriting invariant: Do NOT overwrite an existing origin snapshot
     if (
-      this.hasDeveloperOriginSession() ||
-      (isStorageAvailable() && Boolean(window.sessionStorage.getItem(DEVELOPER_ORIGIN_STORAGE_KEY)))
+      hasDeveloperOriginSession() ||
+      (storage && Boolean(storage.getItem(DEVELOPER_ORIGIN_STORAGE_KEY)))
     ) {
       console.warn('Cannot overwrite existing Developer origin session snapshot.');
       return false;
     }
 
-    inMemoryDeveloperOriginSession = origin;
+    // Retain runtime mock token ONLY in volatile closure memory when snapshot is active_origin
+    inMemoryRuntimeDeveloperToken =
+      persistedSnapshot.snapshotState !== 'inert' &&
+      typeof runtimeInput.developerToken === 'string' &&
+      runtimeInput.developerToken.trim() !== ''
+        ? runtimeInput.developerToken.trim()
+        : null;
 
-    if (!isStorageAvailable()) {
+    inMemoryDeveloperOriginSession = persistedSnapshot;
+
+    if (!storage) {
       notifyDeveloperOriginChanged();
       return true;
     }
 
     try {
-      window.sessionStorage.setItem(
+      // 3. Persist ONLY the credential-free allowlisted metadata
+      storage.setItem(
         DEVELOPER_ORIGIN_STORAGE_KEY,
-        JSON.stringify(origin)
+        JSON.stringify(persistedSnapshot)
       );
 
-      // 3. Verify immediate read-back and validation
-      const readBack = window.sessionStorage.getItem(DEVELOPER_ORIGIN_STORAGE_KEY);
+      // 4. Verify immediate read-back and strict credential-free persistence invariants
+      const readBack = storage.getItem(DEVELOPER_ORIGIN_STORAGE_KEY);
       if (!readBack) {
-        this.clearDeveloperOriginSession();
+        clearDeveloperOriginSession();
         return false;
       }
       try {
         const parsed = JSON.parse(readBack);
-        if (!isValidDeveloperOriginSession(parsed)) {
-          this.clearDeveloperOriginSession();
+        if (!isPersistedDeveloperOriginSnapshot(parsed)) {
+          clearDeveloperOriginSession();
           return false;
         }
       } catch {
-        this.clearDeveloperOriginSession();
+        clearDeveloperOriginSession();
         return false;
       }
       notifyDeveloperOriginChanged();
       return true;
     } catch (error) {
-      console.error('Failed to write Developer origin session to sessionStorage:', error);
-      this.clearDeveloperOriginSession();
+      console.error('Failed to write Developer origin session to storage:', error);
+      clearDeveloperOriginSession();
       return false;
     }
-  },
+  }
 
   /**
-   * Retrieves the stored Developer origin session snapshot.
-   * Validates snapshot integrity without destroying storage on read error.
+   * Transitions and preserves an existing Developer origin snapshot in an inert, credential-free
+   * state during real-user logout (Decision C: S8 -> S7).
+   *
+   * Purges any runtime in-memory Developer token (`inMemoryRuntimeDeveloperToken = null`) and marks
+   * the persisted metadata record with `snapshotState: 'inert'` so it cannot independently restore
+   * authentication or expose Developer return controls.
    */
-  getDeveloperOriginSession(): DeveloperOriginSession | null {
-    if (!isStorageAvailable()) {
-      return isValidDeveloperOriginSession(inMemoryDeveloperOriginSession)
-        ? inMemoryDeveloperOriginSession
-        : null;
+  function preserveInertDeveloperOriginSession(): boolean {
+    const existing = getDeveloperOriginSession();
+    if (!existing) {
+      return false;
+    }
+
+    const sanitized = sanitizeToPersistedDeveloperOriginSnapshot(existing, 'inert');
+    if (!sanitized || !isInertDeveloperOriginSession(sanitized)) {
+      return false;
+    }
+
+    inMemoryRuntimeDeveloperToken = null;
+    inMemoryDeveloperOriginSession = sanitized;
+
+    const storage = getStorage();
+    if (!storage) {
+      notifyDeveloperOriginChanged();
+      return true;
     }
 
     try {
-      const raw = window.sessionStorage.getItem(DEVELOPER_ORIGIN_STORAGE_KEY);
-      if (!raw) return null;
-
-      const origin = JSON.parse(raw);
-      if (!isValidDeveloperOriginSession(origin)) {
-        return null;
-      }
-
-      return origin;
+      storage.setItem(DEVELOPER_ORIGIN_STORAGE_KEY, JSON.stringify(sanitized));
+      notifyDeveloperOriginChanged();
+      return true;
     } catch (error) {
-      console.warn('Failed to parse Developer origin session from sessionStorage:', error);
-      return null;
+      console.warn('Failed to persist inert Developer origin session to storage:', error);
+      return false;
     }
-  },
+  }
 
-  /**
-   * Clears the Developer origin session slot.
-   */
-  clearDeveloperOriginSession(): void {
-    inMemoryDeveloperOriginSession = null;
-    if (isStorageAvailable()) {
-      try {
-        window.sessionStorage.removeItem(DEVELOPER_ORIGIN_STORAGE_KEY);
-      } catch (error) {
-        console.warn('Failed to remove Developer origin session from sessionStorage:', error);
-      }
-    }
-    notifyDeveloperOriginChanged();
-  },
-
-  /**
-   * Returns true if a valid Developer origin session snapshot exists.
-   */
-  hasDeveloperOriginSession(): boolean {
-    return Boolean(this.getDeveloperOriginSession());
-  },
-
-  /**
-   * Non-authorizing, non-destructive inspection of stored session continuity (Increment 5.4 / WP-5.4.1).
-   *
-   * Rules:
-   * 1. Does NOT destructively clear storage even if the session is expired.
-   * 2. Raw-token parsing and regex validation remain strictly internal.
-   * 3. NEVER exposes rawToken in the returned descriptor.
-   * 4. Validates persona ID against SYNTHETIC_TEST_PERSONA_REGISTRY.
-   * 5. Validates exact mock token format: ^mock_jwt_${personaId}_${13-digit-timestamp}$
-   * 6. Fails closed on storage exceptions without exposing errors as authorization evidence.
-   */
-  inspectSessionContinuity(): SessionContinuityDescriptor {
+  function inspectSessionContinuity(): SessionContinuityDescriptor {
     const emptyDescriptor: SessionContinuityDescriptor = {
       isRawSessionPresent: false,
       isExpired: false,
@@ -368,13 +624,12 @@ export const authStorage = {
 
     let raw: string | null = null;
     let parsedFromMemory: AuthSession | null = null;
+    const storage = getStorage();
 
-    if (isStorageAvailable()) {
+    if (storage) {
       try {
-        raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+        raw = storage.getItem(SESSION_STORAGE_KEY);
       } catch (err) {
-        // Storage access failure (e.g. SecurityError in restricted browser context)
-        // Fail closed immediately: return empty descriptor
         console.warn('Storage access failed during inspectSessionContinuity:', err);
         return emptyDescriptor;
       }
@@ -463,14 +718,9 @@ export const authStorage = {
       expiresAt,
       hasStructuralIntegrity,
     };
-  },
+  }
 
-  /**
-   * Persists a sanitized diagnostic quarantine record for an expired or corrupted Developer origin snapshot.
-   * STRICT SECURITY REQUIREMENT:
-   * Under NO circumstances may any token, password, or credential be written into quarantine.
-   */
-  quarantineDeveloperOriginSession(
+  function quarantineDeveloperOriginSession(
     origin: unknown,
     reason: 'DEVELOPER_SNAPSHOT_EXPIRED' | 'CORRUPTED_SNAPSHOT_STRUCTURE'
   ): void {
@@ -497,53 +747,126 @@ export const authStorage = {
         rejectionReason: reason,
       };
 
-      if (isStorageAvailable()) {
-        window.sessionStorage.setItem(QUARANTINE_STORAGE_KEY, JSON.stringify(sanitized));
+      const storage = getStorage();
+      if (storage) {
+        storage.setItem(QUARANTINE_STORAGE_KEY, JSON.stringify(sanitized));
       }
       notifyDeveloperOriginChanged();
     } catch (error) {
       console.warn('Failed to quarantine Developer origin session snapshot:', error);
     }
-  },
+  }
 
-  /**
-   * Retrieves the stored sanitized quarantine snapshot, if any.
-   */
-  getQuarantinedOriginSession(): SanitizedQuarantinedOriginSnapshot | null {
-    if (!isStorageAvailable()) return null;
+  function getQuarantinedOriginSession(): SanitizedQuarantinedOriginSnapshot | null {
+    const storage = getStorage();
+    if (!storage) return null;
     try {
-      const raw = window.sessionStorage.getItem(QUARANTINE_STORAGE_KEY);
+      const raw = storage.getItem(QUARANTINE_STORAGE_KEY);
       if (!raw) return null;
       return JSON.parse(raw) as SanitizedQuarantinedOriginSnapshot;
     } catch {
       return null;
     }
-  },
+  }
 
-  /**
-   * Clears the quarantined origin session slot.
-   */
-  clearQuarantinedOriginSession(): void {
-    if (!isStorageAvailable()) return;
+  function clearQuarantinedOriginSession(): void {
+    const storage = getStorage();
+    if (!storage) return;
     try {
-      window.sessionStorage.removeItem(QUARANTINE_STORAGE_KEY);
+      storage.removeItem(QUARANTINE_STORAGE_KEY);
     } catch (error) {
-      console.warn('Failed to remove quarantined session from sessionStorage:', error);
+      console.warn('Failed to remove quarantined session from storage:', error);
     }
-  },
+  }
 
-  /**
-   * Retrieves the current mutation version counter for the Developer origin snapshot.
-   * Increments on saveDeveloperOriginSession, clearDeveloperOriginSession, and quarantineDeveloperOriginSession.
-   */
-  getDeveloperOriginSnapshotVersion(): number {
-    return getDeveloperOriginSnapshotVersion();
-  },
+  function getDeveloperOriginSnapshotVersion(): number {
+    return originSnapshotVersion;
+  }
 
-  /**
-   * Subscribes to local same-tab Developer origin session snapshot mutations.
-   */
-  subscribeToDeveloperOriginChanges(listener: () => void): () => void {
-    return subscribeToDeveloperOriginChanges(listener);
-  },
-};
+  function subscribeToDeveloperOriginChanges(listener: () => void): () => void {
+    originChangeListeners.add(listener);
+    return () => {
+      originChangeListeners.delete(listener);
+    };
+  }
+
+  let inMemoryLogoutStatus: LogoutStatus = null;
+
+  function getLogoutStatus(): LogoutStatus {
+    const storage = getStorage();
+    if (!storage) return inMemoryLogoutStatus;
+    try {
+      const val = storage.getItem(LOGOUT_STATUS_STORAGE_KEY);
+      if (val === 'LOGOUT_CONFIRMED' || val === 'LOGOUT_UNCONFIRMED') {
+        return val;
+      }
+      return inMemoryLogoutStatus;
+    } catch {
+      return inMemoryLogoutStatus;
+    }
+  }
+
+  function setLogoutStatus(status: 'LOGOUT_CONFIRMED' | 'LOGOUT_UNCONFIRMED'): void {
+    inMemoryLogoutStatus = status;
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(LOGOUT_STATUS_STORAGE_KEY, status);
+    } catch (error) {
+      console.warn('Failed to save logout status to storage:', error);
+    }
+  }
+
+  function clearLogoutStatus(): void {
+    inMemoryLogoutStatus = null;
+    const storage = getStorage();
+    if (!storage) return;
+    try {
+      storage.removeItem(LOGOUT_STATUS_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear logout status from storage:', error);
+    }
+  }
+
+  return {
+    getSession,
+    setSession,
+    clearSession,
+    saveDeveloperOriginSession,
+    preserveInertDeveloperOriginSession,
+    getDeveloperOriginSession,
+    getRuntimeDeveloperTokenForRestore,
+    clearDeveloperOriginSession,
+    hasDeveloperOriginSession,
+    inspectSessionContinuity,
+    quarantineDeveloperOriginSession,
+    getQuarantinedOriginSession,
+    clearQuarantinedOriginSession,
+    getDeveloperOriginSnapshotVersion,
+    subscribeToDeveloperOriginChanges,
+    getLogoutStatus,
+    setLogoutStatus,
+    clearLogoutStatus,
+    getInMemorySessionForTesting: () => inMemorySession,
+    getInMemoryDeveloperOriginSessionForTesting: () => inMemoryDeveloperOriginSession,
+  };
+}
+
+/**
+ * Default singleton instance for the current application / browser tab context.
+ */
+export const defaultAuthStorage = createAuthStorage();
+export const authStorage = defaultAuthStorage;
+
+/**
+ * Same-Tab Mutation Detection Counter & Listener Registry (Increment 5.4 / WP-5.4.1 Final Source Audit)
+ * Tracks mutations to the Developer origin snapshot within the current browser tab.
+ * Per-tab only: does not perform cross-tab synchronization or global epochs.
+ */
+export function getDeveloperOriginSnapshotVersion(): number {
+  return defaultAuthStorage.getDeveloperOriginSnapshotVersion();
+}
+
+export function subscribeToDeveloperOriginChanges(listener: () => void): () => void {
+  return defaultAuthStorage.subscribeToDeveloperOriginChanges(listener);
+}

@@ -24,6 +24,8 @@ export function useAuthContext(): AuthContextValue {
       isolatedPersona: null,
       launchIsolatedTestSession: async () => false,
       returnToDeveloperSession: async () => false,
+      returnFromExpiredPersonaSession: async () => false,
+      sessionEpoch: 1,
     };
   }
   return context;

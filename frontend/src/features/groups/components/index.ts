@@ -15,3 +15,7 @@ export * from './AttentionBadge';
 export * from './CountdownStrip';
 export * from './TraineeProgressModal';
 export * from './ManageGroupAssistantsModal';
+export * from './RemoveMemberModal';
+export * from './TraineeGroupsCarousel';
+export * from './TraineeGroupsSummaryCards';
+export * from './TraineeGroupsDetailedTable';

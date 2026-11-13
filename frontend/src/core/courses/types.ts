@@ -3,6 +3,8 @@
  * Strict schema derived directly from the Cairo Metro LMS dataset.
  */
 
+import type { LessonProgress } from '@/features/learning-player/types';
+
 export type CourseLevel = 'مبتدئ' | 'متوسط' | 'متقدم' | 'beginner' | 'intermediate' | 'advanced';
 
 export type CourseStatus =
@@ -75,6 +77,72 @@ export interface ChapterItem {
   embedPolicy?: VideoEmbedPolicy;
   // Lesson Completion Policy (e.g. Google Drive Minimum Viewing-Time Requirement)
   completionPolicy?: LessonCompletionPolicy;
+  // Phase 2 / WP-2.3 / T-2.3.1: Curriculum Versioning & Substantive vs. Metadata Diffing (MFR-10, Rule B)
+  contentVersion?: number;
+  contentFingerprint?: string;
+  videoUrl?: string;
+  pdfUrl?: string;
+  content?: string;
+  durationSeconds?: number;
+  description?: string;
+  order?: number;
+}
+
+export interface PublishedCourseVersionItem {
+  itemId: string;
+  chapterId?: string;
+  contentVersion: number;
+  type: ContentItemType;
+  durationSeconds?: number | null;
+  contentFingerprint: string;
+}
+
+export interface PublishedCourseVersion {
+  id?: string;
+  courseId: string;
+  versionNumber: number;
+  publishedAt: string;
+  publishedBy: string;
+  title?: string;
+  description?: string;
+  chapters?: CourseChapter[];
+  items: PublishedCourseVersionItem[];
+  requiredItems?: PublishedCourseVersionItem[];
+}
+
+/**
+ * Authoritative computed progress summary for an attempt (Phase 2 / WP-2.3 / T-2.3.2 — D-12, Rule B).
+ */
+export interface ComputedAttemptProgress {
+  attemptId: string;
+  userId: string;
+  courseId: string;
+  courseVersionNumber: number;
+  completedRequiredItems: number;
+  totalRequiredItems: number;
+  completedItemIds: string[];
+  progressPercent: number;
+  isCompleted: boolean;
+  isSealed: boolean;
+}
+
+/**
+ * Version-scoped Certificate Record (Phase 2 / WP-2.3 / T-2.3.2 — D-13, MFR-46).
+ */
+export interface CertificateRecord {
+  id: string;
+  userId: string;
+  courseId: string;
+  attemptId: string;
+  attemptNumber?: number | null;
+  courseVersionNumber: number;
+  courseVersion: number;
+  certificateLabel: string;
+  certificateLabelAr: string;
+  courseTitleSnapshot: string;
+  traineeNameSnapshot: string;
+  verificationCode: string;
+  issuedAt: string;
 }
 
 export interface LessonCompletionPolicy {
@@ -121,6 +189,7 @@ export interface Course {
   externalResources?: ExternalResource[];
   chapters: CourseChapter[];
   createdAt?: string;
+  updatedAt?: string;
   commentsEnabled?: boolean;
   enrolledUserIds?: string[];
   whatsappContacts?: Array<{
@@ -130,6 +199,9 @@ export interface Course {
   }>;
   courseZipPolicy?: CourseZipPolicy;
   publishedAt?: string;
+  publishedBy?: string;
+  versionNumber?: number;
+  currentVersionNumber?: number;
   sections?: any;
   hasDraftChanges?: boolean;
   draftUpdatedAt?: string;
@@ -172,15 +244,90 @@ export interface CourseFilterParams {
 }
 
 /**
- * Course Enrollment Entity
- * Represents an authoritative registration record of a trainee in a course.
+ * Increment 10 / Phase 6 (D-06, D-07, MFR-41):
+ * Multi-Source Enrollment Provenance & Attempt Isolation Types
  */
-export interface CourseEnrollment {
+export type EnrollmentSourceKind =
+  | 'self'                        // Source category: independent self-enrollment from catalog OR standalone continuation grant after group removal (D-07)
+  | 'group';                      // Source category: provisioned via membership in a specific training group
+
+export type EnrollmentGrantStatus = 'active' | 'revoked_by_group_removal' | 'expired';
+
+export interface EnrollmentSourceGrant {
+  sourceId: string;               // Stable unique grant ID per source instance (e.g., `self:catalog:${attemptId}`, `self:continued:${groupId}:${attemptId}`, or `group:${groupId}:${cycleId}`)
+  kind: EnrollmentSourceKind;     // Category ('self' | 'group'); multiple active grants of kind: 'self' are allowed when bound to distinct attempts/contexts
+  groupId?: string;               // Present when kind === 'group'
+  cycleId?: string;               // Active cycle when granted
+  attemptId: string;              // Active CourseAttempt ID bound to this specific grant (D-06, D-07)
+  convertedFromGroupId?: string;  // Present when this standalone continuation grant was created upon keeping a course during group removal (D-07)
+  grantedAt: string;
+  grantedBy?: string;
+  revokedAt?: string;
+  status: EnrollmentGrantStatus;
+}
+
+/**
+ * Course Enrollment Entity / Enrollment Record (D-06, D-07, MFR-41)
+ * Represents an authoritative registration record of a trainee in a course,
+ * maintaining multi-source provenance grants.
+ */
+export interface EnrollmentRecord {
   id: string;
   courseId: string;
   userId: string;
   enrolledAt: string; // ISO 8601 date string e.g. "2026-10-16T08:30:00.000Z"
-  status: 'active';
+  status: 'active' | 'inactive' | 'revoked_by_group_removal';
+  sources: EnrollmentSourceGrant[];
+}
+
+export type CourseEnrollment = EnrollmentRecord;
+
+/**
+ * Per-Attempt Progress Domain Model (D-06, MFR-02, MFR-41)
+ * Represents isolated lesson and course progress bound strictly to a single CourseAttempt instance.
+ */
+export interface AttemptProgress {
+  attemptId: string;
+  courseId: string;
+  userId: string;
+  progressPercent: number;
+  completedItemIds: string[];
+  lastWatchedItemId: string | null;
+  isCompleted: boolean;
+  updatedAt: string;
+  itemsProgress: Record<string, LessonProgress>;
+}
+
+/**
+ * Course Access Mode Semantics (D-06, D-07, MFR-23, MFR-42, §9.1, §12)
+ * - 'full': allows learning, progress mutation, and certificate eligibility.
+ * - 'review_only': allows viewing content and reading existing progress; mutations rejected with 403.
+ * - 'none': course access expired or hidden; denied with 403.
+ */
+export type CourseAccessMode = 'full' | 'review_only' | 'none';
+
+/**
+ * Eligible Attempt Option DTO (D-06, MFR-41, §9.1)
+ * Represents an unambiguous candidate attempt context presented to the learner
+ * when entering a course with multiple eligible attempts.
+ */
+export interface EligibleAttemptOption {
+  attemptId: string;
+  sourceId: string;
+  kind: EnrollmentSourceKind;
+  groupId?: string | null;
+  groupName?: string | null;
+  cycleId?: string | null;
+  cycleTitle?: string | null;
+  convertedFromGroupId?: string | null;
+  convertedFromGroupName?: string | null;
+  contextLabel: string;
+  accessMode: CourseAccessMode;
+  progressPercent: number;
+  completedLessons: number;
+  totalLessons: number;
+  lastActivityAt?: string | null;
+  status: string;
 }
 
 export interface EnrollmentResponse {

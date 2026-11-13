@@ -21,6 +21,11 @@ import {
   CourseDiffViewerModal,
 } from '@/features/course-review';
 import { reviewApi } from '@/features/course-review/api/reviewApi';
+import {
+  saveCourseBuilderDraft,
+  getCourseBuilderDraft,
+  clearCourseBuilderDraft,
+} from '@/features/course-builder/services/courseBuilderDraftStorage';
 
 export const CourseBuilderPage: React.FC = () => {
   const toast = useToast();
@@ -63,22 +68,16 @@ export const CourseBuilderPage: React.FC = () => {
   const { guardDialog, handleSafeNavigate } = useUnsavedChangesGuard({
     isDirty,
     onConfirmDiscard: () => {
-      if (courseId) {
-        localStorage.removeItem(`metro_builder_draft_${courseId}`);
-      }
+      clearCourseBuilderDraft(user?.id, courseId);
     },
   });
 
-  // Save backup to localStorage on edit
+  // Save backup to localStorage on edit (strictly namespaced by user ID via service)
   useEffect(() => {
     if (course && courseId && isDirty) {
-      try {
-        localStorage.setItem(`metro_builder_draft_${courseId}`, JSON.stringify(course));
-      } catch {
-        // Storage quota exceeded or disabled; silently continue
-      }
+      saveCourseBuilderDraft(user?.id, courseId, course);
     }
-  }, [course, courseId, isDirty]);
+  }, [course, courseId, isDirty, user?.id]);
 
   // Load course and catalog prerequisites
   const loadCourseData = useCallback(async () => {
@@ -91,21 +90,12 @@ export const CourseBuilderPage: React.FC = () => {
       // 1. Fetch course for editing (validates ownership & role)
       const data = await builderApi.getCourseForEditing(courseId);
 
-      // Check if a recoverable local backup exists
-      const backupKey = `metro_builder_draft_${courseId}`;
-      const savedBackup = localStorage.getItem(backupKey);
+      // Check if a recoverable local backup exists for the current authenticated user via service
       let courseToUse = data;
-
+      const savedBackup = getCourseBuilderDraft(user?.id, courseId);
       if (savedBackup) {
-        try {
-          const parsed = JSON.parse(savedBackup) as Course;
-          if (parsed && parsed.id === courseId) {
-            courseToUse = parsed;
-            setHasRestoredBackup(true);
-          }
-        } catch {
-          localStorage.removeItem(backupKey);
-        }
+        courseToUse = savedBackup;
+        setHasRestoredBackup(true);
       }
 
       setCourse(courseToUse);
@@ -151,7 +141,7 @@ export const CourseBuilderPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [courseId]);
+  }, [courseId, user?.id]);
 
   useEffect(() => {
     if (previewRole === 'assistant_lecturer') return;
@@ -179,7 +169,7 @@ export const CourseBuilderPage: React.FC = () => {
       setInitialSnapshot(JSON.stringify(res.course));
 
       // Clear local backup after successful remote save
-      localStorage.removeItem(`metro_builder_draft_${courseId}`);
+      clearCourseBuilderDraft(user?.id, courseId);
 
       const successText = res.isPublishedPreserved
         ? 'تم حفظ المسودة بنجاح! تم الحفاظ على النسخة المنشورة حالياً في دليل الدورات دون تغيير.'
@@ -212,7 +202,7 @@ export const CourseBuilderPage: React.FC = () => {
       const res = await builderApi.resetContentLab(courseId);
       setCourse(res.course);
       setInitialSnapshot(JSON.stringify(res.course));
-      localStorage.removeItem(`metro_builder_draft_${courseId}`);
+      clearCourseBuilderDraft(user?.id, courseId);
       setHasRestoredBackup(false);
       const resetText = res.message || 'تمت إعادة ضبط معمل تجربة المحتوى لحالته الافتراضية بنجاح.';
       toast.success(resetText);
@@ -506,7 +496,7 @@ export const CourseBuilderPage: React.FC = () => {
             </span>
             <button
               onClick={() => {
-                localStorage.removeItem(`metro_builder_draft_${courseId}`);
+                clearCourseBuilderDraft(user?.id, courseId);
                 loadCourseData();
                 setHasRestoredBackup(false);
               }}

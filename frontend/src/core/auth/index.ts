@@ -9,3 +9,4 @@ export * from './ProtectedRoute';
 export * from './canonicalIdentity';
 export * from './testPersonas';
 export * from './useIsolatedSession';
+export * from './sessionEpoch';

@@ -21,10 +21,17 @@ const AppLayoutInner: React.FC = () => {
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isIsolatedModalOpen, setIsIsolatedModalOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, sessionEpoch } = useAuth();
   const { unreadCount } = useNotifications();
   const { effectiveUiRole, isPreviewing, previewLabelAr } = useRolePreview();
   const { isIsolatedSession } = useIsolatedSession();
+
+  // Route Subtree Remount Key (WP-5.4.2):
+  // Conceptually binds to the authenticated user ID and monotonic session epoch.
+  // Guarantees clean component subtree remounting upon genuine session identity transitions,
+  // purging component-local state, pending effects, and form state without unmounting AuthProvider.
+  // Intentionally excludes RolePreview values so Visual Role Preview toggling does NOT remount the subtree.
+  const outletKey = `${user ? user.id : 'anonymous'}_epoch_${sessionEpoch}`;
 
   const previewRoleLabel = isPreviewing
     ? (previewLabelAr || ROLE_CANONICAL_LABELS_AR[effectiveUiRole] || effectiveUiRole)
@@ -81,7 +88,7 @@ const AppLayoutInner: React.FC = () => {
         {/* Scrollable Main Viewport + Footer */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
           <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
-            <Outlet />
+            <Outlet key={outletKey} />
           </main>
 
           <Footer />
@@ -113,13 +120,14 @@ const AppLayoutInner: React.FC = () => {
 
 export const AppLayout: React.FC = () => {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, sessionEpoch } = useAuth();
 
   // Application-level scheduler: periodically checks and processes due automatic group renewals
   useAutoRenewalScheduler(Boolean(user));
 
   // Immersive Learning Mode: Hide light application navbar, sidebar, and footer on player routes
   const isLearningRoute = Boolean(location.pathname.match(/^\/courses\/[^/]+\/learn(\/.*)?$/));
+  const learningOutletKey = `${user ? user.id : 'anonymous'}_epoch_${sessionEpoch}`;
 
   // Immersive Learning Environment: Dedicated full-viewport dark container
   if (isLearningRoute) {
@@ -140,7 +148,7 @@ export const AppLayout: React.FC = () => {
 
             {/* Dedicated Learning Main Content (Navbar and Sidebar hidden for focused study) */}
             <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none">
-              <Outlet />
+              <Outlet key={learningOutletKey} />
             </main>
           </div>
         </NotificationProvider>

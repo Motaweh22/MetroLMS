@@ -1,4 +1,11 @@
-import type { ChapterItem } from '@/core/courses/types';
+import type {
+  CertificateRecord,
+  ChapterItem,
+  CourseAccessMode,
+  EligibleAttemptOption,
+} from '@/core/courses/types';
+
+export type { CertificateRecord, CourseAccessMode, EligibleAttemptOption };
 
 /**
  * Lesson-level watch progress entity.
@@ -14,6 +21,8 @@ export interface LessonProgress {
   eligibleViewingSeconds?: number;
   /** Explicit accumulated viewing frequency / count (telemetry extension) */
   watchCount?: number;
+  /** Substantive content version of the item when completed (MFR-10 / Rule B) */
+  contentVersion?: number;
   updatedAt: string;
 }
 
@@ -21,6 +30,7 @@ export interface LessonProgress {
  * Course-level progress aggregate entity.
  */
 export interface CourseProgress {
+  attemptId?: string;
   courseId: string;
   userId: string;
   progressPercent: number;
@@ -29,6 +39,11 @@ export interface CourseProgress {
   isCompleted: boolean;
   updatedAt: string;
   itemsProgress: Record<string, LessonProgress>;
+  accessMode?: CourseAccessMode;
+  requiresAttemptSelection?: boolean;
+  eligibleAttempts?: EligibleAttemptOption[];
+  overallProgressPercentage?: number;
+  certificates?: CertificateRecord[];
 }
 
 /**
@@ -40,6 +55,9 @@ export interface RecordActivityPayload {
   furthestWatchedSeconds?: number;
   durationSeconds?: number;
   eligibleViewingSeconds?: number;
+  attemptId?: string;
+  groupId?: string;
+  cycleId?: string;
 }
 
 /**
@@ -47,6 +65,9 @@ export interface RecordActivityPayload {
  */
 export interface CompleteLessonPayload {
   itemId: string;
+  attemptId?: string;
+  groupId?: string;
+  cycleId?: string;
 }
 
 /**
@@ -63,7 +84,10 @@ export interface CompleteLessonResponse {
  * Response for course progress queries.
  */
 export interface CourseProgressResponse {
-  progress: CourseProgress;
+  progress?: CourseProgress;
+  requiresAttemptSelection?: boolean;
+  eligibleAttempts?: EligibleAttemptOption[];
+  message?: string;
 }
 
 /**

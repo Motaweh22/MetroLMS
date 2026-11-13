@@ -1,5 +1,10 @@
 # Cairo Metro LMS — Authorization Model & Permissions Governance Design
 
+> [!IMPORTANT]
+> **Reconciliation Notice (`CP-001` — 2026-11-07):**
+> - **Superseded Sections (§§1–2 Role Count & Admin Protection):** The 4-role model (`admin`, `assistant_admin`, `lecturer`, `user`/`trainee`) and single-admin protection invariant in **Sections 1 and 2** have been **superseded** by the **6-Tier Role Hierarchy (`developer`, `admin`, `superior`, `assistant_admin`, `lecturer`, `trainee`)** and account protection invariants **`INV-R1`–`INV-R8`** (`MFR-37`, `MFR-38`, `MFR-39`). See [`docs/requirements/domain-business-rules.md`](../requirements/domain-business-rules.md) and [`docs/architecture/security-and-xss-baseline.md`](../architecture/security-and-xss-baseline.md).
+> - **Active Authoritative Sections (§§3–12):** The **Three-Layer Capability Resolution Model** (`ROLE_CAPABILITY_CEILINGS`, `ROLE_DEFAULT_PERMISSIONS`, `UserPermissionOverride`), **Group-Scoped Assistant Lecturer Assignment (`GroupAssistantAssignment`)**, and **Department-to-Track Governance (§12)** remain **active and authoritative**.
+
 ## 1. Executive Summary & Architectural Scope
 
 This document provides the authoritative architecture and implementation specification for the **Four Canonical Roles Authorization Model**, **Centralized Role Capability Ceilings**, **Individual-User Permission Management Workflow**, **Group-Scoped Assistant Lecturer Assignment Engine**, **Assistant Administrator Approval & Delegation Workflow**, and **Protected Administrator Invariants** for the Metro Courses LMS platform.
@@ -110,7 +115,7 @@ A role defines the maximum ordinary capabilities a user may receive. Individual 
 - Full administrative capabilities, subject to Immutable Protected Invariants.
 
 ### 4.5 Centralized Ceiling Validation
-The function [`validatePermissionOverride(role, capability)`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/core/permissions/policy.ts) enforces ceiling boundaries. If an override attempt exceeds the target user's role ceiling:
+The function [`validatePermissionOverride(role, capability)`](../../frontend/src/core/permissions/policy.ts) enforces ceiling boundaries. If an override attempt exceeds the target user's role ceiling:
 - The attempt is rejected with an Arabic explanatory error:
   `"الصلاحية [X] تقع خارج السقف الأقصى المسموح به لدور [Y]. لتمكين هذه الصلاحية، يجب ترقية دور المستخدم أولاً عبر إدارة الحسابات."`
 - The store remains unchanged.
@@ -120,7 +125,7 @@ The function [`validatePermissionOverride(role, capability)`](file:///c:/Users/A
 
 ## 5. Permission Resolution Model
 
-The centralized evaluator [`evaluatePermission`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/core/permissions/policy.ts) implements the following strict 6-step conceptual precedence:
+The centralized evaluator [`evaluatePermission`](../../frontend/src/core/permissions/policy.ts) implements the following strict 6-step conceptual precedence:
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -170,7 +175,7 @@ The centralized evaluator [`evaluatePermission`](file:///c:/Users/Administrator/
 ### 6.1 User Interface Integration (`/admin/users`)
 - Individual permission customization is accessed directly from **إدارة المستخدمين** (`/admin/users`).
 - Each user row in `UserTable` displays the action button **تحديد الصلاحيات** (`data-testid="manage-permissions-btn-${user.id}"`).
-- Clicking the button opens [`UserPermissionsModal`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/features/permissions/components/UserPermissionsModal.tsx).
+- Clicking the button opens [`UserPermissionsModal`](../../frontend/src/features/permissions/components/UserPermissionsModal.tsx).
 
 ### 6.2 `UserPermissionsModal` Specifications
 - **Header:** Displays target user's full name, canonical ID, job title, department, and canonical role badge.
@@ -226,7 +231,7 @@ export interface GroupAssistantAssignment {
 
 ## 8. Immutable Administrator Protection Invariants
 
-The following safeguards are strictly enforced in [`policy.ts`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/core/permissions/policy.ts) and [`inMemoryStore.ts`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/mocks/store/inMemoryStore.ts):
+The following safeguards are strictly enforced in [`policy.ts`](../../frontend/src/core/permissions/policy.ts) and [`inMemoryStore.ts`](../../frontend/src/mocks/store/inMemoryStore.ts):
 
 1. **System Administrator Account Creation:** An authorized System Administrator (`admin`) may create another account with the canonical `admin` role through the authorized user-creation workflow.
 2. **Assistant Administrator Cannot Create Admin Accounts:** An assistant administrator (`assistant_admin`) must never create an account with the canonical `admin` role, with or without operational delegation. This restriction is enforced across direct API calls (`POST /api/admin/users`), approval-request creation (`POST /api/admin/permissions/approvals`), and approval-request execution.
@@ -428,11 +433,11 @@ Department-to-track configurations reside purely in `inMemoryStore.departmentTra
 ## 13. Verification & Test Coverage Summary
 
 The system architecture, governance invariants, editable role defaults, security audit trail, and department-track configuration are verified by **139 comprehensive automated tests** across three dedicated suites:
-1. [`src/test/permissions-governance.test.tsx`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/test/permissions-governance.test.tsx) (**80 tests** across 15 sections):
+1. [`frontend/src/test/permissions-governance.test.tsx`](../../frontend/src/test/permissions-governance.test.tsx) (**80 tests** across 15 sections):
    - Four Canonical Roles, Ceilings, Overrides, Assistant Lecturer Assignment, Approval Interception, Invariants, and Admin Lockout Prevention.
-2. [`src/test/security-audit-trail.test.tsx`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/test/security-audit-trail.test.tsx) (**36 tests** across 9 sections):
+2. [`frontend/src/test/security-audit-trail.test.tsx`](../../frontend/src/test/security-audit-trail.test.tsx) (**36 tests** across 9 sections):
    - In-Memory Audit Ledger & Deterministic Reset, Account Lifecycle & Password Sanitization, Permission Instrumentation, Assistant Admin Governance, Denied Invariants, Group Lifecycle & Course Publication Instrumentation, Sovereign Access Control (`GET /api/admin/audit`), Filters & Pagination, and `/admin/audit` UI Workflows.
-3. [`src/test/department-tracks.test.tsx`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/test/department-tracks.test.tsx) (**23 tests** across 7 sections):
+3. [`frontend/src/test/department-tracks.test.tsx`](../../frontend/src/test/department-tracks.test.tsx) (**23 tests** across 7 sections):
    - Canonical Fixtures & Deterministic Store Reset (10 depts, 7 tracks, deep cloning).
    - Data Validation & Atomic Update Safeguards (reject unknown depts/tracks, deduplicate tracks, atomic updates).
    - Security Audit Trail Instrumentation (`permissions.configure_departments`).

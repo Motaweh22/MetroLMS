@@ -15,11 +15,14 @@ export type GroupAdminStatus = 'draft' | 'active' | 'archived';
 
 export type GroupEnrollmentPolicy = 'open' | 'approval_required' | 'closed';
 
+export type GroupType = 'regular' | 'reminder';
+
 export type CourseRole = 'core' | 'reminder';
 
 export interface GroupCourseAssignment {
   courseId: string;
   order: number;
+  courseRole?: CourseRole; // 'core' | 'reminder' (default: 'core', D-GRP-03, D-GRP-05)
   customStartDateTime?: string | null;
   customDeadlineDateTime?: string | null;
   customPostDeadlinePolicy?: PostDeadlinePolicy | null;
@@ -59,6 +62,7 @@ export interface GroupRenewalCycle {
   groupId: string;
   cycleNumber: number; // 1, 2, 3...
   title: string; // e.g. "دورة تدريب أبريل - مايو 2026"
+  name?: string;
   status: 'active' | 'completed' | 'archived';
   startDateTime: string;
   deadlineDateTime: string;
@@ -92,6 +96,10 @@ export interface CourseAttempt {
   completedItemIds: string[];
   lastWatchedItemId?: string | null;
   lessonProgress: Record<string, LessonProgress>;
+  /** Explicit seal marker for historical attempts that must remain immutable across curriculum updates (MFR-10 / Rule B) */
+  isSealed?: boolean;
+  sealedAt?: string | null;
+  sealedCourseVersion?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -228,6 +236,9 @@ export interface TrainingGroup {
   predecessorGroupId?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  cycles?: GroupRenewalCycle[];
+  /** Monotonic historical reminder marker (Decision D-GRP-06): true once any reminder course is assigned, never reverts to false */
+  hasHistoricalReminderCourses?: boolean;
 }
 
 export interface EffectiveCourseSettings {

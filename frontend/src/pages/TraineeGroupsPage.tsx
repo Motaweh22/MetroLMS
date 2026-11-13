@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { groupsApi, type EnrichedTrainingGroup } from '@/features/groups/services/groupsApi';
-import { useAuth } from '@/features/auth';
+import { groupsApi } from '@/features/groups/services/groupsApi';
+import type { TraineeGroupItemDTO } from '@/core/groups/dtos';
 import { useRolePreview } from '@/core/auth/useRolePreview';
-import { Card, CardHeader, CardTitle } from '@/shared/ui/Card';
+import {
+  TraineeGroupsCarousel,
+  TraineeGroupsSummaryCards,
+  TraineeGroupsDetailedTable,
+} from '@/features/groups/components';
+import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
-import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
-import { ProgressBar } from '@/shared/ui/ProgressBar';
 import { Alert } from '@/shared/ui/Alert';
 
 export const TraineeGroupsPage: React.FC = () => {
-  const { user } = useAuth();
   const { previewRole, scopedAssignmentPreview } = useRolePreview();
-  const [groups, setGroups] = useState<EnrichedTrainingGroup[]>([]);
+  const [groups, setGroups] = useState<TraineeGroupItemDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,31 +47,40 @@ export const TraineeGroupsPage: React.FC = () => {
   }, [loadGroups]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto" data-testid="trainee-groups-page">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+    <div
+      className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto"
+      data-testid="trainee-groups-page"
+      dir="rtl"
+    >
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-text-heading flex items-center gap-3">
             <span className="p-2 rounded-xl bg-primary/10 text-primary">
               <Icon name="trainingGroups" size="lg" />
             </span>
-            <span>مجموعاتي والبرامج التدريبية</span>
+            <span>المجموعات التدريبية والبرامج التذكيرية</span>
           </h1>
-          <p className="text-sm text-text-muted mt-1">
-            المجموعات والدفعات الميدانية المخصصة لك ومتابعة المهل الزمنية والمحاضرات التفاعلية.
+          <p className="text-sm text-text-muted mt-1 leading-relaxed">
+            المجموعات والدفعات الميدانية والبرامج التذكيرية الدورية المخصصة لك ومتابعة المهل الزمنية والجداول.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-lg border border-border text-xs font-bold text-text-heading">
+        <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-lg border border-border text-xs font-bold text-text-heading shrink-0">
           <Icon name="trainingGroups" size="sm" className="text-primary" />
-          <span>إجمالي المجموعات:</span>
-          <span className="text-primary font-extrabold">{visibleGroups.length}</span>
+          <span>المجموعات المتاحة:</span>
+          <span
+            className="text-primary font-extrabold"
+            data-testid="page-groups-count"
+          >
+            {visibleGroups.length}
+          </span>
         </div>
       </div>
 
       {/* Error Alert */}
       {error && (
-        <Alert variant="danger" title="خطأ في تحميل المجموعات">
+        <Alert variant="danger" title="خطأ في تحميل المجموعات التدريبية">
           <div className="flex items-center justify-between gap-4">
             <span>{error}</span>
             <Button variant="outline" size="sm" onClick={loadGroups}>
@@ -81,20 +92,51 @@ export const TraineeGroupsPage: React.FC = () => {
 
       {/* Loading Skeleton */}
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6" aria-busy="true">
-          {[1, 2].map((n) => (
-            <Card key={n} variant="elevated" className="animate-pulse p-6 space-y-4">
-              <div className="h-6 bg-neutral-light rounded-sm w-3/4" />
-              <div className="h-4 bg-neutral-light rounded-sm w-1/2" />
-              <div className="h-16 bg-neutral-light rounded-sm w-full" />
-            </Card>
-          ))}
+        <div className="space-y-6" aria-busy="true" data-testid="trainee-groups-loading">
+          {/* Carousel Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2].map((n) => (
+              <Card key={n} variant="elevated" className="animate-pulse p-5 space-y-3">
+                <div className="h-5 bg-neutral-light rounded w-1/3" />
+                <div className="h-6 bg-neutral-light rounded w-3/4" />
+                <div className="h-10 bg-neutral-light rounded w-full" />
+              </Card>
+            ))}
+          </div>
+
+          {/* Summary Cards Skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[1, 2, 3].map((n) => (
+              <Card key={n} className="animate-pulse p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-neutral-light shrink-0" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-3 bg-neutral-light rounded w-1/2" />
+                  <div className="h-6 bg-neutral-light rounded w-1/3" />
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Table Skeleton */}
+          <div className="space-y-3">
+            {[1, 2, 3].map((n) => (
+              <Card key={n} className="animate-pulse p-5 space-y-3">
+                <div className="h-5 bg-neutral-light rounded w-1/2" />
+                <div className="h-4 bg-neutral-light rounded w-1/3" />
+                <div className="h-12 bg-neutral-light rounded w-full" />
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Empty State */}
+      {/* Empty State (when trainee is enrolled in 0 groups) */}
       {!isLoading && !error && visibleGroups.length === 0 && (
-        <Card variant="default" className="text-center py-12 px-4 sm:px-8 border-dashed">
+        <Card
+          variant="default"
+          className="text-center py-12 px-4 sm:px-8 border-dashed"
+          data-testid="trainee-groups-empty-state"
+        >
           <div className="max-w-md mx-auto space-y-4">
             <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-inner">
               <Icon name="trainingGroups" size="xl" />
@@ -102,12 +144,12 @@ export const TraineeGroupsPage: React.FC = () => {
             <h2 className="text-xl font-bold text-text-heading">
               {previewRole === 'assistant_lecturer'
                 ? 'المجموعة التدريبية المخصصة للمعاينة غير متوفرة'
-                : 'لا توجد مجموعات تدريبية مخصصة لك حالياً'}
+                : 'لا توجد مجموعات أو برامج تذكيرية مخصصة لك حالياً'}
             </h2>
             <p className="text-sm text-text-muted leading-relaxed">
               {previewRole === 'assistant_lecturer'
                 ? 'لم يتم العثور على المجموعة المحددة لتكليف المحاضر المساعد في السجل الحالي.'
-                : 'أنت غير مدرج في أي مجموعة تدريبية حالياً. سيتم إدراجك من خلال إدارة التدريب عند بدء البرامج الميدانية والدفعات المشتركة.'}
+                : 'أنت غير مدرج في أي مجموعة تدريبية أو برنامج تذكيري حالياً. سيتم إدراجك من خلال إدارة التدريب عند بدء البرامج الميدانية والدفعات المشتركة.'}
             </p>
             <div className="pt-2">
               <Link to="/courses">
@@ -120,112 +162,34 @@ export const TraineeGroupsPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Groups List */}
+      {/* Primary Content: 3 Sections in Canonical Order */}
       {!isLoading && !error && visibleGroups.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {visibleGroups.map((grp) => {
-            const metrics = grp.metrics;
-            const statusKey = metrics?.status || 'active';
+        <div className="space-y-8" data-testid="trainee-groups-content">
+          {/* Section 1: Persistent Groups Carousel */}
+          <section aria-label="شريط المجموعات التدريبية" data-testid="section-carousel">
+            <TraineeGroupsCarousel groups={visibleGroups} />
+          </section>
 
-            const statusBadgeVariant =
-              statusKey === 'active' ? 'primary' : statusKey === 'scheduled' ? 'neutral' : 'danger';
+          {/* Section 2: Three Summary Cards */}
+          <section aria-label="إحصائيات المجموعات" data-testid="section-summary-cards">
+            <TraineeGroupsSummaryCards groups={visibleGroups} />
+          </section>
 
-            const statusLabel =
-              statusKey === 'active'
-                ? 'نشطة — قيد التدريب'
-                : statusKey === 'scheduled'
-                ? 'مجدولة'
-                : 'منتهية الصلاحية';
-
-            const statusIcon =
-              statusKey === 'active' ? 'activity' : statusKey === 'scheduled' ? 'calendar' : 'clock';
-
-            // Find current trainee's metrics in this group
-            const myMetrics = metrics?.traineeMetricsList.find(
-              (tm) => tm.userId.toLowerCase() === (user?.id || '').toLowerCase()
-            );
-
-            const programPercent = myMetrics?.programPercent ?? 0;
-            const attention = myMetrics?.worstAttention;
-
-            return (
-              <Card
-                key={grp.id}
-                variant="elevated"
-                className="flex flex-col justify-between border-border hover:shadow-md transition-shadow"
-              >
-                <div className="p-5 space-y-4">
-                  {/* Top Meta Row */}
-                  <div className="flex items-start justify-between gap-3">
-                    <Badge variant={statusBadgeVariant} className="text-xs font-bold gap-1 px-2.5 py-1">
-                      <Icon name={statusIcon} size="sm" />
-                      <span>{statusLabel}</span>
-                    </Badge>
-
-                    {metrics && (
-                      <span className="text-xs text-text-muted font-bold flex items-center gap-1 bg-neutral-light px-2.5 py-1 rounded-md">
-                        <Icon name="clock" size="sm" />
-                        <span>{metrics.timeRemainingText}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Title & Description */}
-                  <CardHeader className="p-0">
-                    <CardTitle className="text-lg sm:text-xl font-bold text-text-heading leading-snug">
-                      {grp.name}
-                    </CardTitle>
-                    <p className="text-xs sm:text-sm text-text-muted line-clamp-2 mt-1 leading-relaxed">
-                      {grp.description}
-                    </p>
-                  </CardHeader>
-
-                  {/* Assigned Courses Counter */}
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted bg-surface-alt/60 p-2.5 rounded-lg border border-border/70">
-                    <span className="font-bold text-text-heading flex items-center gap-1">
-                      <Icon name="courses" size="sm" className="text-primary" />
-                      <span>المقررات المخصصة ({grp.courses.length}):</span>
-                    </span>
-                    {grp.courses.map((c) => (
-                      <Badge key={c.courseId} variant="neutral" className="text-[11px] font-medium">
-                        {c.courseId}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  {/* Program Progress Bar */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between text-xs text-text-muted">
-                      <span className="font-medium">إنجازك في البرنامج</span>
-                      <span className="font-bold text-text-heading">{programPercent}%</span>
-                    </div>
-                    <ProgressBar
-                      value={programPercent}
-                      variant={programPercent === 100 ? 'success' : 'primary'}
-                      size="md"
-                    />
-                  </div>
-
-                  {/* Attention Notice if applicable */}
-                  {attention && attention.needsAttention && (
-                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-danger-light/50 border border-danger/30 text-danger-dark text-xs font-semibold">
-                      <Icon name="alert" size="sm" className="shrink-0" />
-                      <span>{attention.reason}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer Action */}
-                <div className="p-4 bg-neutral-light/40 border-t border-border flex items-center justify-end">
-                  <Link to={`/my-groups/${grp.id}`}>
-                    <Button variant="primary" size="sm" rightIcon="arrowLeft" className="font-bold text-xs">
-                      عرض تفاصيل المجموعة والمحتوى
-                    </Button>
-                  </Link>
-                </div>
-              </Card>
-            );
-          })}
+          {/* Section 3: Detailed Groups Table with Self-Contained Filters */}
+          <section aria-label="جدول المجموعات والبرامج التفصيلي" data-testid="section-detailed-table" className="space-y-4">
+            <div className="flex items-center justify-between gap-4 pb-2 border-b border-border">
+              <div>
+                <h2 className="text-lg font-bold text-text-heading flex items-center gap-2">
+                  <Icon name="list" size="sm" className="text-primary" />
+                  <span>دليل المجموعات والبرامج التدريبية المخصصة</span>
+                </h2>
+                <p className="text-xs text-text-muted mt-0.5">
+                  استعرض تفاصيل المقررات والجداول والمهل الزمنية لكل مجموعة تدريبية وبرنامج تذكيري.
+                </p>
+              </div>
+            </div>
+            <TraineeGroupsDetailedTable groups={visibleGroups} />
+          </section>
         </div>
       )}
     </div>

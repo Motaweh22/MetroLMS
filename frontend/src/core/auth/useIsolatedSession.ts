@@ -32,6 +32,8 @@ export interface UseIsolatedSessionResult {
   launchIsolatedTestSession: (personaId: string) => Promise<boolean>;
   /** Return to the exact preserved Developer session in a single transaction */
   returnToDeveloperSession: () => Promise<boolean>;
+  /** Emergency return from an expired synthetic test persona session using valid memory-only continuity proof (Increment 5.4 / WP-5.4.4) */
+  returnFromExpiredPersonaSession: () => Promise<boolean>;
   /** Whether a launch or return transaction is in flight */
   isTransitioning: boolean;
   /** Any error encountered during session switching */
@@ -53,6 +55,7 @@ export function useIsolatedSession(): UseIsolatedSessionResult {
     isolatedPersona,
     launchIsolatedTestSession: authLaunch,
     returnToDeveloperSession: authReturn,
+    returnFromExpiredPersonaSession: authReturnFromExpired,
     isLoading,
     error,
     clearError,
@@ -80,6 +83,13 @@ export function useIsolatedSession(): UseIsolatedSessionResult {
     return authReturn();
   }, [authReturn]);
 
+  const returnFromExpiredPersonaSession = useCallback(async (): Promise<boolean> => {
+    if (authReturnFromExpired) {
+      return authReturnFromExpired();
+    }
+    return false;
+  }, [authReturnFromExpired]);
+
   const personaRoleLabelAr = isolatedPersona ? getPersonaRoleLabelAr(isolatedPersona) : null;
   const availablePersonas = getSyntheticTestPersonas();
 
@@ -90,6 +100,7 @@ export function useIsolatedSession(): UseIsolatedSessionResult {
     availablePersonas,
     launchIsolatedTestSession,
     returnToDeveloperSession,
+    returnFromExpiredPersonaSession,
     isTransitioning: isLoading,
     error,
     clearError,

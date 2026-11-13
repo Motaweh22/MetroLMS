@@ -4,10 +4,10 @@
 **Status:** Complete / Standalone Architecture Specification  
 **Classification:** Documentation-Only Architecture Deliverable  
 **Companion Documents:**  
-- [`docs/backend/database-schema.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/database-schema.md) (Authoritative Production Schema & Data Dictionary)  
-- [`docs/backend/erd.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/erd.md) (Crow's Foot Relational ERD Specification)  
+- [`docs/backend/database-schema.md`](database-schema.md) (Authoritative Production Schema & Data Dictionary)  
+- [`docs/backend/erd.md`](erd.md) (Crow's Foot Relational ERD Specification)  
 **Visual Style:** Classic Chen Notation (Textbook Relational Modeling)  
-**Deliverable Formats:** Native Draw.io XML (`.drawio`), High-Resolution Vector SVG (`.svg`), and High-Resolution Raster PNG (`.png`) in [`docs/backend/diagrams/`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/)  
+**Deliverable Formats:** Native Draw.io XML (`.drawio`), High-Resolution Vector SVG (`.svg`), and High-Resolution Raster PNG (`.png`) in [`docs/backend/diagrams/`](diagrams/)  
 
 ---
 
@@ -15,9 +15,9 @@
 
 This document provides the authoritative **Classic Chen-Notation Entity-Relationship Diagram (ERD)** specification for the future production database of the **Metro Courses Learning Management System (LMS)**.
 
-While [`docs/backend/erd.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/erd.md) models the physical database schema using Crow's Foot notation (emphasizing table columns, foreign key constraints, composite primary keys, and index structures), this Chen-notation specification models the system from a **pure conceptual and logical database design perspective**, strictly reflecting the semantics taught in classic database systems textbooks (e.g. Peter Chen, Silberschatz, Elmasri & Navathe).
+While [`docs/backend/erd.md`](erd.md) models the physical database schema using Crow's Foot notation (emphasizing table columns, foreign key constraints, composite primary keys, and index structures), this Chen-notation specification models the system from a **pure conceptual and logical database design perspective**, strictly reflecting the semantics taught in classic database systems textbooks (e.g. Peter Chen, Silberschatz, Elmasri & Navathe).
 
-Every entity, weak entity, relationship, identifying relationship, attribute, primary key, derived attribute, multivalued attribute, cardinality (`1`, `N`, `M`), and total participation constraint in this deliverable is grounded directly in the verified production schema ([`docs/backend/database-schema.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/database-schema.md)).
+Every entity, weak entity, relationship, identifying relationship, attribute, primary key, derived attribute, multivalued attribute, cardinality (`1`, `N`, `M`), and total participation constraint in this deliverable is grounded directly in the verified production schema ([`docs/backend/database-schema.md`](database-schema.md)).
 
 ---
 
@@ -50,23 +50,23 @@ Unlike conceptual overviews, this poster represents the entire enterprise databa
 
 ### Full-System Poster Deliverables
 
-- **Editable Draw.io XML Source:** [`docs/backend/diagrams/erd-chen-full-system.drawio`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-full-system.drawio) (137.8 KB)
-- **High-Resolution Vector SVG:** [`docs/backend/diagrams/erd-chen-full-system.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-full-system.svg) (104.1 KB)
-- **High-Resolution Raster PNG:** [`docs/backend/diagrams/erd-chen-full-system.png`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-full-system.png) (1.39 MB, 5,200 × 3,800 px)
+- **Editable Draw.io XML Source:** [`docs/backend/diagrams/erd-chen-full-system.drawio`](diagrams/erd-chen-full-system.drawio) (137.8 KB)
+- **High-Resolution Vector SVG:** [`docs/backend/diagrams/erd-chen-full-system.svg`](diagrams/erd-chen-full-system.svg) (104.1 KB)
+- **High-Resolution Raster PNG:** [`docs/backend/diagrams/erd-chen-full-system.png`](diagrams/erd-chen-full-system.png) (1.39 MB, 5,200 × 3,800 px)
 
 ### Unified Poster Preview
 
-![Metro Courses LMS Complete Full-System Chen ERD Poster](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-full-system.svg)
+![Metro Courses LMS Complete Full-System Chen ERD Poster](diagrams/erd-chen-full-system.svg)
 
 ### Instructions for Viewing and Zooming at Different Scales
 
 Because this poster contains 562 graph nodes, 189 attribute ovals, 63 relationship diamonds, and 316 connector lines, it is designed to be inspected across multiple zoom levels:
 
 1. **Vector SVG Viewing (Recommended for Infinite Clarity):**
-   - Open [`erd-chen-full-system.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-full-system.svg) directly in Google Chrome, Microsoft Edge, or Mozilla Firefox.
+   - Open [`erd-chen-full-system.svg`](diagrams/erd-chen-full-system.svg) directly in Google Chrome, Microsoft Edge, or Mozilla Firefox.
    - Use `Ctrl + Mouse Wheel` or `Ctrl + + / -` to zoom from 25% (overview of all 5 regions) up to 500% (close-up inspection of individual attribute ovals, primary keys, and cardinality labels). Vector elements remain pin-sharp at any magnification.
 2. **High-Resolution PNG Viewing:**
-   - Open [`erd-chen-full-system.png`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-full-system.png) in any standard image viewer (Windows Photos, QuickLook, IrfanView, Photoshop).
+   - Open [`erd-chen-full-system.png`](diagrams/erd-chen-full-system.png) in any standard image viewer (Windows Photos, QuickLook, IrfanView, Photoshop).
    - Set zoom to **100% (Actual Pixels)** to pan smoothly across the 5 regions with crisp 1:1 text readability.
 3. **Interactive Visual Studio Code Inspection:**
    - Install the **Draw.io Integration** extension (`hediet.vscode-drawio`).
@@ -117,7 +117,7 @@ The canvas is organized into **five labeled thematic panels** surrounding centra
 
 ### Complete 42-Table Schema Coverage Checklist
 
-Every table from [`docs/backend/database-schema.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/database-schema.md) appears **exactly once** on the unified canvas:
+Every table from [`docs/backend/database-schema.md`](database-schema.md) appears **exactly once** on the unified canvas:
 
 | # | Table Name in Schema | Modeled Construct in Full-System Chen Poster | Chen Symbol | Region | Primary Key / Identifying Owner |
 | :-: | :--- | :--- | :--- | :-: | :--- |
@@ -172,12 +172,12 @@ The High-Level Conceptual Overview diagram models the overarching architecture o
 
 ### Overview Diagram Preview
 
-![Metro Courses LMS Conceptual Overview](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-overview.svg)
+![Metro Courses LMS Conceptual Overview](diagrams/erd-chen-overview.svg)
 
 ### Deliverable Files
 
-- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-overview.drawio`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-overview.drawio)
-- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-overview.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-overview.svg)
+- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-overview.drawio`](diagrams/erd-chen-overview.drawio)
+- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-overview.svg`](diagrams/erd-chen-overview.svg)
 
 ### Key Architectural Invariants Visible in the Overview
 
@@ -204,12 +204,12 @@ This domain models organizational departments, technical training tracks, canoni
 
 #### Domain 1 Diagram Preview
 
-![Domain 1: Identity, Departments & Permissions](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-identity-permissions.svg)
+![Domain 1: Identity, Departments & Permissions](diagrams/erd-chen-identity-permissions.svg)
 
 #### Deliverable Files
 
-- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-identity-permissions.drawio`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-identity-permissions.drawio)
-- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-identity-permissions.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-identity-permissions.svg)
+- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-identity-permissions.drawio`](diagrams/erd-chen-identity-permissions.drawio)
+- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-identity-permissions.svg`](diagrams/erd-chen-identity-permissions.svg)
 
 ---
 
@@ -219,12 +219,12 @@ This domain models the educational catalog, multi-instructor staffing, recursive
 
 #### Domain 2 Diagram Preview
 
-![Domain 2: Courses, Curriculum & Review Workflows](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-courses-curriculum.svg)
+![Domain 2: Courses, Curriculum & Review Workflows](diagrams/erd-chen-courses-curriculum.svg)
 
 #### Deliverable Files
 
-- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-courses-curriculum.drawio`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-courses-curriculum.drawio)
-- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-courses-curriculum.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-courses-curriculum.svg)
+- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-courses-curriculum.drawio`](diagrams/erd-chen-courses-curriculum.drawio)
+- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-courses-curriculum.svg`](diagrams/erd-chen-courses-curriculum.svg)
 
 ---
 
@@ -234,12 +234,12 @@ This domain models enterprise training cohorts (`TRAINING_GROUPS`), supervisory 
 
 #### Domain 3 Diagram Preview
 
-![Domain 3: Training Groups, Renewal Cycles & Materials](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-groups-cycles.svg)
+![Domain 3: Training Groups, Renewal Cycles & Materials](diagrams/erd-chen-groups-cycles.svg)
 
 #### Deliverable Files
 
-- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-groups-cycles.drawio`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-groups-cycles.drawio)
-- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-groups-cycles.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-groups-cycles.svg)
+- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-groups-cycles.drawio`](diagrams/erd-chen-groups-cycles.drawio)
+- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-groups-cycles.svg`](diagrams/erd-chen-groups-cycles.svg)
 
 ---
 
@@ -249,12 +249,12 @@ This domain models course registration, multi-attempt learning execution, granul
 
 #### Domain 4 Diagram Preview
 
-![Domain 4: Enrollment, Attempts, Progress & Certificates](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-learning-progress.svg)
+![Domain 4: Enrollment, Attempts, Progress & Certificates](diagrams/erd-chen-learning-progress.svg)
 
 #### Deliverable Files
 
-- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-learning-progress.drawio`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-learning-progress.drawio)
-- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-learning-progress.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-learning-progress.svg)
+- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-learning-progress.drawio`](diagrams/erd-chen-learning-progress.drawio)
+- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-learning-progress.svg`](diagrams/erd-chen-learning-progress.svg)
 
 ---
 
@@ -264,12 +264,12 @@ This domain models course discussion forums, content abuse moderation with soft-
 
 #### Domain 5 Diagram Preview
 
-![Domain 5: Discussions, Contacts, Media & Telemetry](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-discussions-media-analytics.svg)
+![Domain 5: Discussions, Contacts, Media & Telemetry](diagrams/erd-chen-discussions-media-analytics.svg)
 
 #### Deliverable Files
 
-- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-discussions-media-analytics.drawio`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-discussions-media-analytics.drawio)
-- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-discussions-media-analytics.svg`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-chen-discussions-media-analytics.svg)
+- **Editable Draw.io Source:** [`docs/backend/diagrams/erd-chen-discussions-media-analytics.drawio`](diagrams/erd-chen-discussions-media-analytics.drawio)
+- **Standalone SVG Export:** [`docs/backend/diagrams/erd-chen-discussions-media-analytics.svg`](diagrams/erd-chen-discussions-media-analytics.svg)
 
 ---
 

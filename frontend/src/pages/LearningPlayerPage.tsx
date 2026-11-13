@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
 import { useCourseDetail } from '@/features/courses/hooks/useCourseDetail';
@@ -14,6 +14,7 @@ import {
   LearningHeader,
   PlayerToolbar,
   CompletionCelebrationModal,
+  AttemptContextSelectorModal,
 } from '@/features/learning-player';
 import { Alert } from '@/shared/ui/Alert/Alert';
 import { Icon } from '@/shared/ui/Icon/Icon';
@@ -28,6 +29,12 @@ import '@/features/learning-player/styles/learningPlayer.css';
 export const LearningPlayerPage: React.FC = () => {
   const { courseId, itemId } = useParams<{ courseId: string; itemId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const urlAttemptId = searchParams.get('attemptId') || undefined;
+  const urlGroupId = searchParams.get('groupId') || undefined;
+  const urlCycleId = searchParams.get('cycleId') || undefined;
 
   const { previewRole } = useRolePreview();
   const effectiveCourseId = previewRole === 'assistant_lecturer' ? undefined : courseId;
@@ -38,16 +45,40 @@ export const LearningPlayerPage: React.FC = () => {
     progress,
     isLoading: progressLoading,
     error: progressError,
+    requiresAttemptSelection,
+    eligibleAttempts,
     completeLesson,
     isSubmitting,
     updateLocalActivity,
-  } = useCourseProgress(effectiveCourseId);
+  } = useCourseProgress(effectiveCourseId, {
+    attemptId: urlAttemptId,
+    groupId: urlGroupId,
+    cycleId: urlCycleId,
+  });
 
   const [celebrationOpen, setCelebrationOpen] = useState<boolean>(false);
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
   const [mediaLoadError, setMediaLoadError] = useState<string | null>(null);
 
   const isEnrolled = courseId ? isEnrolledInCourse(courseId) : false;
+
+  const handleSelectAttempt = useCallback(
+    (selectedAttemptId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('attemptId', selectedAttemptId);
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const handleCancelAttemptSelection = useCallback(() => {
+    navigate('/courses');
+  }, [navigate]);
 
   const {
     flatItems,
@@ -66,7 +97,7 @@ export const LearningPlayerPage: React.FC = () => {
     initialItemId: itemId,
     onItemChange: (newItem) => {
       if (courseId) {
-        navigate(`/courses/${courseId}/learn/${newItem.id}`, { replace: true });
+        navigate(`/courses/${courseId}/learn/${newItem.id}${location.search}`, { replace: true });
       }
     },
   });
@@ -116,6 +147,10 @@ export const LearningPlayerPage: React.FC = () => {
 
   // Handle lesson completion and trigger celebration if course hits 100%
   const handleComplete = useCallback(async (completedItemId: string): Promise<boolean> => {
+    // Review-only guard (MFR-23, MFR-42): Prohibit completion mutations when in review-only mode
+    if (progress?.accessMode === 'review_only') {
+      return false;
+    }
     const res = await completeLesson(completedItemId);
     if (res) {
       if (res.justCompletedCourse || (res.progress && res.progress.progressPercent === 100)) {
@@ -124,7 +159,7 @@ export const LearningPlayerPage: React.FC = () => {
       return true;
     }
     return false;
-  }, [completeLesson]);
+  }, [completeLesson, progress?.accessMode]);
 
   // 1. Unauthenticated Visitor Guard
   if (!authLoading && !isAuthenticated) {
@@ -182,6 +217,37 @@ export const LearningPlayerPage: React.FC = () => {
     );
   }
 
+  // 3b. Course Access Expired / Revoked Guard (MFR-23, MFR-42)
+  if (
+    progressError &&
+    (progressError.includes('COURSE_ACCESS_EXPIRED') ||
+      progressError.includes('انتهت صلاحية الوصول') ||
+      progressError.includes('COURSE_ACCESS_REVOKED') ||
+      progressError.includes('لم يعد لديك صلاحية الوصول'))
+  ) {
+    return (
+      <div className="learning-player-page" style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', padding: '2rem', maxWidth: '480px' }} data-testid="player-access-expired">
+          <Icon name="lock" size={48} className="text-danger" style={{ margin: '0 auto 1rem' }} />
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', color: '#FFFFFF' }}>
+            انتهت مهلة المقرر التدريبي
+          </h2>
+          <p style={{ color: '#94A3B8', fontSize: '0.9rem', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+            {progressError}
+          </p>
+          <button
+            type="button"
+            className="speed-dropdown-btn"
+            onClick={() => navigate('/my-courses')}
+            style={{ padding: '0.5rem 1.25rem', fontSize: '0.9rem' }}
+          >
+            العودة إلى دوراتي التدريبية
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // 4. Course Not Found State (404)
   if (isNotFound || !course) {
     return (
@@ -234,6 +300,20 @@ export const LearningPlayerPage: React.FC = () => {
             <Alert variant="danger">
               {progressError}
             </Alert>
+          )}
+
+          {/* Review Only Access Mode Alert */}
+          {progress?.accessMode === 'review_only' && (
+            <div
+              className="p-3.5 rounded-xl bg-warning/10 border border-warning/20 text-warning text-xs flex items-center gap-2.5"
+              role="alert"
+              data-testid="review-only-access-banner"
+            >
+              <Icon name="info" size={18} className="shrink-0" />
+              <span>
+                <strong>وضع المراجعة والاطلاع فقط:</strong> انتهت فترة التدريب النشطة لهذا المسار. يمكنك تصفح ومراجعة المحتوى والدروس، ولكن لا يمكن تسجيل إنجاز دروس جديدة أو الحصول على شهادة جديدة.
+              </span>
+            </div>
           )}
 
           {/* Persisted Media Missing / Error Alert */}
@@ -295,6 +375,7 @@ export const LearningPlayerPage: React.FC = () => {
                   initialPosition={currentItem.progress?.lastPositionSeconds || 0}
                   furthestWatched={currentItem.progress?.furthestWatchedSeconds || 0}
                   isCompleted={currentItem.isCompleted}
+                  isReadOnly={progress?.accessMode === 'review_only'}
                   onComplete={handleComplete}
                   onLocalProgressUpdate={updateLocalActivity}
                 />
@@ -304,6 +385,7 @@ export const LearningPlayerPage: React.FC = () => {
                 item={resolvedMediaUrl ? { ...currentItem, url: resolvedMediaUrl } : currentItem}
                 isCompleted={currentItem.isCompleted}
                 isSubmitting={isSubmitting}
+                isReadOnly={progress?.accessMode === 'review_only'}
                 onComplete={handleComplete}
               />
             ) : (
@@ -311,6 +393,7 @@ export const LearningPlayerPage: React.FC = () => {
                 item={resolvedMediaUrl ? { ...currentItem, url: resolvedMediaUrl } : currentItem}
                 isCompleted={currentItem.isCompleted}
                 isSubmitting={isSubmitting}
+                isReadOnly={progress?.accessMode === 'review_only'}
                 onComplete={handleComplete}
               />
             )
@@ -409,6 +492,15 @@ export const LearningPlayerPage: React.FC = () => {
         isOpen={celebrationOpen}
         courseTitle={course.title}
         onClose={() => setCelebrationOpen(false)}
+      />
+
+      {/* Attempt Context Selector Modal for Multiple Eligible Grants/Attempts */}
+      <AttemptContextSelectorModal
+        isOpen={requiresAttemptSelection}
+        courseTitle={course.title}
+        eligibleAttempts={eligibleAttempts}
+        onSelectAttempt={handleSelectAttempt}
+        onCancel={handleCancelAttemptSelection}
       />
 
       {/* Context-Aware Floating WhatsApp Contacts */}

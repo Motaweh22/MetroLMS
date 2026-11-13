@@ -3,6 +3,7 @@ import type { TrainingGroup, GroupMember, GroupJoinRequest, GroupEnrollmentPolic
 import { groupsApi } from '../services/groupsApi';
 import { GroupQRModal } from './GroupQRModal';
 import { DirectAssignModal } from './DirectAssignModal';
+import { RemoveMemberModal } from './RemoveMemberModal';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
@@ -133,13 +134,14 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
     return requests.filter((r) => r.status === requestFilter);
   }, [requests, requestFilter]);
 
-  // ── Member Removal Handler ──────────────────────────────────────────────
-  const handleConfirmRemoveMember = async () => {
+  // ── Member Removal Handler (D-07, MFR-24) ──────────────────────────────
+  const handleConfirmRemoveMember = async (targetUserId?: string, removeCourseIds?: string[]) => {
     if (!memberToRemove) return;
+    const uid = targetUserId || memberToRemove.userId;
 
     setIsRemovingMember(true);
     try {
-      const res = await groupsApi.removeGroupMember(group.id, memberToRemove.userId);
+      const res = await groupsApi.removeGroupMember(group.id, uid, removeCourseIds);
       if ((res as any)?.approvalRequired) {
         setMemberToRemove(null);
         toast.info(
@@ -151,11 +153,11 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
       toast.success(`تمت إزالة المتدرب (${memberToRemove.name}) من المجموعة بنجاح`);
 
       // Update local state and parent group
-      setMembers((prev) => prev.filter((m) => m.userId !== memberToRemove.userId));
+      setMembers((prev) => prev.filter((m) => m.userId !== uid));
       onGroupUpdated({
         ...group,
         traineeIds: (group.traineeIds || []).filter(
-          (id) => id.toLowerCase() !== memberToRemove.userId.toLowerCase()
+          (id) => id.toLowerCase() !== uid.toLowerCase()
         ),
       });
       setMemberToRemove(null);
@@ -786,31 +788,17 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
         />
       )}
 
-      {/* ── Safe Member Removal Confirmation Dialog ───────────────────── */}
-      <ConfirmDialog
-        isOpen={Boolean(memberToRemove)}
-        title="تأكيد إزالة المتدرب من المجموعة"
-        message={
-          <div className="space-y-2 text-sm text-text" dir="rtl">
-            <p>
-              هل أنت متأكد من رغبتك في إزالة المتدرب{' '}
-              <strong className="text-text-heading">{memberToRemove?.name}</strong> من هذه المجموعة التدريبية؟
-            </p>
-            <p className="text-xs text-text-muted bg-surface p-2.5 rounded-lg border border-border">
-              ملاحظة أمان البيانات: لن يؤدي حذف العضوية إلى مسح تسجيلات المتدرب السابقة أو تقدمه التعليمي في المقررات، وستظل سجلات محاولاته وإنجازاته محفوظة بالكامل في سجل المحاولات التاريخي.
-            </p>
-          </div>
-        }
-        confirmLabel="نعم، قم بإزالة العضو"
-        cancelLabel="إلغاء التراجع"
-        variant="danger"
-        isConfirming={isRemovingMember}
-        onConfirm={handleConfirmRemoveMember}
-        onCancel={() => setMemberToRemove(null)}
-        testId="remove-member-confirm-dialog"
-        confirmTestId="confirm-remove-member-btn"
-        cancelTestId="cancel-remove-member-btn"
-      />
+      {/* ── Trainee Removal Modal with Per-Course Checkboxes (D-07, MFR-24) ── */}
+      {Boolean(memberToRemove) && (
+        <RemoveMemberModal
+          isOpen={Boolean(memberToRemove)}
+          onClose={() => setMemberToRemove(null)}
+          member={memberToRemove}
+          group={group}
+          onConfirm={handleConfirmRemoveMember}
+          isRemoving={isRemovingMember}
+        />
+      )}
 
       {/* ── Join Request Rejection Modal with Note ─────────────────────── */}
       <Modal

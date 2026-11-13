@@ -149,25 +149,50 @@ export const authHandlers = [
     }
   }),
 
-  // POST /api/auth/logout
-  http.post('/api/auth/logout', () => {
-    return HttpResponse.json({
-      success: true,
-      message: 'تم إنهاء الجلسة وتسجيل الخروج بنجاح',
-    });
+  // POST /api/auth/logout (T-1.3.2 / D-AUTH-01 Server Session Destruction & Cookie Eviction)
+  http.post('/api/auth/logout', ({ request }) => {
+    // 1. CSRF Protection Simulation for state-changing POST requests (D-AUTH-01 / Section 1.2)
+    const csrfHeader = request.headers.get('X-CSRFToken');
+    if (csrfHeader === 'invalid_csrf' || csrfHeader === 'csrf_rejected') {
+      return HttpResponse.json(
+        { detail: 'CSRF Failed: CSRF token missing or incorrect.' },
+        { status: 403 }
+      );
+    }
+
+    // 2. Server-side session eviction in storage
+    authStorage.clearSession();
+
+    // 3. Return 200 OK with matching cookie-clearing header (Section 2.2.D)
+    return HttpResponse.json(
+      {
+        success: true,
+        message: 'تم إنهاء الجلسة وتسجيل الخروج بنجاح',
+      },
+      {
+        status: 200,
+        headers: {
+          'Set-Cookie': 'sessionid=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax',
+        },
+      }
+    );
   }),
 
   // GET /api/auth/me
   http.get('/api/auth/me', ({ request }) => {
     const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return HttpResponse.json(
-        { message: 'لم يتم العثور على رمز الجلسة' },
-        { status: 401 }
-      );
+    let token: string | null = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.replace('Bearer ', '').trim();
+    } else if (import.meta.env.DEV) {
+      // Development-only prototype fallback: support cookie-session simulation where Bearer header is omitted
+      const activeDevSession = authStorage.getSession();
+      if (activeDevSession?.token) {
+        token = activeDevSession.token;
+      }
     }
 
-    const token = authHeader.replace('Bearer ', '').trim();
     if (!token) {
       return HttpResponse.json(
         { message: 'لم يتم العثور على رمز الجلسة' },

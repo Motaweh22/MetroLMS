@@ -1,0 +1,231 @@
+
+docs/
+├── README.md                                         # Master Navigation Hub & Governance Portal
+│
+├── 00-governance/                                    # SUPPORTING: Scoped Documentation Governance
+│   ├── README.md                                     # Governance Hub Index
+│   ├── AGENTS.md                                     # Scoped Documentation Authoring Guidelines (Non-Duplicative)
+│   ├── decision-register.md                          # Scoped Documentation Program Decision Register (Links to Arch Register)
+│   ├── documentation-authority-hierarchy.md          # 7-Level Authority Order Definition
+│   └── continuous-update-protocol.md                 # Protocol for Keeping Code and Docs in Sync
+│
+├── 01-requirements/                                  # PRIMARY 01: REQUIREMENTS DOCUMENTATION
+│   ├── README.md                                     # Requirements Governance & Navigation
+│   ├── brd/                                          # Business Requirements Documents
+│   │   └── BRD-001-cairo-metro-lms-platform.md       # Organizational Mission, Scope & Business Goals
+│   ├── srs/                                          # Software Requirements Specifications (IEEE 830)
+│   │   ├── SRS-001-core-system-requirements.md       # Core Functional Requirements
+│   │   └── SRS-002-non-functional-requirements.md   # Latency, Concurrency, Security, Availability
+│   ├── frd/                                          # Functional Requirements by Subsystem
+│   │   ├── FRD-001-authentication-and-sessions.md    # Session Lifecycles & Dev Role Switcher
+│   │   ├── FRD-002-course-builder-and-versioning.md  # Curriculum Builder & Rule B Publishing
+│   │   ├── FRD-003-training-groups-and-renewals.md   # Groups, Reminder Programs & In-Place Renewal
+│   │   ├── FRD-004-enrollments-and-progress.md       # Multi-Source Provenance & Per-Attempt Progress
+│   │   ├── FRD-005-approvals-and-moderation.md       # Assistant Admin Rule A & Sensitive Approvals
+│   │   └── FRD-006-certificates-and-verification.md  # Version-Scoped Certificates & QR Verification
+│   ├── use-cases/                                    # Use Case Catalog across 6 Roles
+│   │   ├── UC-CATALOG.md                             # Comprehensive Use Case Index
+│   │   ├── trainee-use-cases.md                      # Trainee Scenarios (UC-TRN-01..20)
+│   │   ├── lecturer-use-cases.md                     # Lecturer Scenarios (UC-LEC-01..15)
+│   │   ├── admin-use-cases.md                        # Admin Scenarios (UC-ADM-01..25)
+│   │   └── assistant-admin-use-cases.md              # Assistant Admin Scenarios (UC-AST-01..12)
+│   ├── domains/                                      # Domain Business Rules Specifications
+│   │   ├── auth-rules.md                             # Role Invariants INV-R1 through INV-R10
+│   │   ├── course-rules.md                           # Rule B Curriculum Invariants & Passing Gates
+│   │   ├── group-rules.md                            # D-GRP-01 through D-GRP-08 Invariants
+│   │   ├── progress-rules.md                         # D-06 Isolation & D-12 Rounding Formula
+│   │   └── governance-rules.md                       # D-01..D-03 Deletion Cascades & Tombstones
+│   └── domain-business-rules.md                      # Consolidated Canonical Master Business Rules
+│
+├── 02-architecture-and-design/                       # PRIMARY 02: ARCHITECTURE & DESIGN
+│   ├── README.md                                     # Architecture Navigation & Standards
+│   ├── hld/                                          # High-Level Architecture Designs
+│   │   ├── HLD-001-system-topology.md                # Network Tiers, DMZ, Boundary & Subsystems
+│   │   └── HLD-002-technology-stack.md               # React 19 + Vite + Django 5 + SQL Server
+│   ├── lld/                                          # Low-Level Component & State Designs
+│   │   ├── LLD-001-session-lifecycle-state-machine.md# Formal S0 to S15 Session Specification
+│   │   ├── LLD-002-course-versioning-diff-engine.md  # Structural Diffing & Version Bump Engine
+│   │   ├── LLD-003-group-renewal-cycle-manager.md    # In-Place Cycle Progression & Attempt Sealing
+│   │   └── LLD-004-progress-calculation-pipeline.md  # Deterministic Math.round Progress Pipeline
+│   ├── adr/                                          # Architecture Decision Records
+│   │   ├── README.md                                 # Master ADR Index
+│   │   ├── ADR-001-django-server-sessions.md         # D-AUTH-01: HttpOnly Cookies, Zero JWTs
+│   │   ├── ADR-002-microsoft-sql-server-engine.md    # D-DB-01: Sole Target Relational Engine
+│   │   ├── ADR-003-frontend-security-and-xss.md      # D-SEC-01: DOMPurify, CSP, React Escaping
+│   │   ├── ADR-004-decoupled-media-storage.md        # D-MEDIA-01: Decoupled Storage Provider Contract
+│   │   ├── ADR-005-in-place-group-renewal.md         # D-GRP-01 & D-GRP-04: In-Place Renewal Cycles
+│   │   ├── ADR-006-day-based-recurrence.md           # D-GRP-02: Day-Based Recurrence Measurement
+│   │   ├── ADR-007-persistent-reminder-type.md       # D-GRP-06: Monotonic Reminder Marker
+│   │   └── ADR-008-archive-exclusion-contract.md     # D-GRP-07: Trainee Groups Archive Exclusion
+│   ├── data-models/                                  # Conceptual & Logical Data Models
+│   │   ├── logical-data-model.md                     # Engine-Agnostic Entity-Relationship Model
+│   │   ├── erd-crow-foot.md                          # Relational Crow's Foot ERD
+│   │   ├── erd-chen-notation.md                      # Classic Chen Notation Entity Diagrams
+│   │   └── data-dictionary.md                        # Master Logical Entities, Attributes & Keys
+│   └── security/                                     # Security Architecture Baselines
+│       ├── authentication-and-session-contract.md    # Canonical Auth & Session Specification
+│       ├── security-and-xss-baseline.md              # Canonical Security Baseline
+│       └── role-privilege-matrix.md                  # 6-Tier Role Capabilities & Ceilings Matrix
+│
+├── 03-technical-documentation/                       # PRIMARY 03: TECHNICAL SPECIFICATIONS
+│   ├── README.md                                     # Technical Documentation Guide
+│   ├── frontend/                                     # Frontend Engineering Specifications
+│   │   ├── architecture.md                           # React 19 Component & State Architecture
+│   │   ├── design-system.md                          # Metro Design System Tokens, Surfaces & Palettes
+│   │   ├── loading-and-error-handling.md             # Standardized Loading Boundaries & Errors
+│   │   └── permissions-engine.md                     # 3-Layer Capability Resolution Engine
+│   ├── backend/                                      # Target Backend Specifications (Django/DRF)
+│   │   ├── django-sqlserver-integration-contract.md  # Core Backend & Connector Standards
+│   │   ├── service-layer-patterns.md                 # Service Layer Encapsulation & Transactions
+│   │   ├── developer-bootstrap-contract.md           # Developer Account Provisioning
+│   │   └── background-job-processing.md              # Background Jobs Architecture (Evaluation Options)
+│   ├── domains/                                      # Tripartite Domain Technical Implementation
+│   │   ├── auth/technical-spec.md                    # Auth & Session Implementation Details
+│   │   ├── courses/technical-spec.md                 # Curriculum Builder & Versioning Engine
+│   │   ├── groups/technical-spec.md                  # Groups, Renewals, In-Place Cycle Engine
+│   │   ├── progress/technical-spec.md                # Progress Calculator & Attempt Isolation
+│   │   └── certificates/technical-spec.md            # Certificate Generator & QR Verification
+│   ├── api/                                          # Canonical API Contracts & References
+│   │   ├── openapi-specification.yaml                # Master OpenAPI 3.1 Specification
+│   │   ├── api-conventions-and-contracts.md          # Envelopes, Error Codes, Pagination, Headers
+│   │   ├── auth-endpoints.md                         # POST /login, POST /logout, GET /me
+│   │   ├── course-endpoints.md                       # Courses, Versions, Lessons, Quizzes
+│   │   ├── group-endpoints.md                        # Groups, Renewals, GET /api/groups/my
+│   │   ├── enrollment-endpoints.md                   # Provenance, Grants, Attempt Lifecycles
+│   │   └── admin-endpoints.md                        # User Directory, Approvals, Audit Logs
+│   ├── database/                                     # Database Architecture & Migration Design
+│   │   ├── schema-design-guidelines.md               # SQL Server Design Guidelines & T-SQL Mappings
+│   │   ├── logical-schema-specification.md           # Master Logical Schema (Derived from Domain)
+│   │   ├── django-models-and-migrations-guide.md     # Authoritative Django Models Implementation Guide
+│   │   ├── sqlserver-provisioning-runbook.md         # Provisioning Script Specifications (Automated/Admin)
+│   │   └── legacy-postgres-reference/                # PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL
+│   │       ├── README.md                             # Context: UNAPPROVED LEGACY DRAFT
+│   │       └── database-schema.md                    # (Currently preserved in place at docs/backend/database-schema.md)
+│   └── integrations/                                 # Third-Party & Infrastructure Contracts
+│       ├── decoupled-media-storage-contract.md       # D-MEDIA-01: Decoupled Storage Provider
+│       └── notification-channels.md                  # WhatsApp URI Specs & Future Gateways
+│
+├── 04-testing/                                       # PRIMARY 04: TESTING & QUALITY ASSURANCE
+│   ├── README.md                                     # Testing Strategy & Governance Portal
+│   ├── master-verification-strategy.md               # Master Test Strategy & Gate B Specifications
+│   ├── test-plans/                                   # Domain & Phase Test Plans
+│   │   ├── phase-c-group-domain-test-plan.md         # Domain Model & Renewal Test Plan
+│   │   ├── phase-d-trainee-ui-test-plan.md           # Trainee Dashboard Visual & Functional Plan
+│   │   └── backend-migration-master-test-plan.md     # Gate B Full Stack & SQL Server Integration
+│   ├── test-cases/                                   # Formal Test Case Catalog
+│   │   ├── TC-AUTH-authentication-cases.md           # Session Lifecycle & Role Invariant Tests
+│   │   ├── TC-GRP-group-renewal-cases.md             # In-Place Renewal & Cycle History Tests
+│   │   ├── TC-CRS-curriculum-versioning-cases.md     # Version Scoping & Certificate Tests
+│   │   └── TC-PRG-progress-rounding-cases.md         # Deterministic Math.round Progress Tests
+│   ├── test-suites/                                  # Physical Regression Test Suite Inventory
+│   │   ├── phase-c-test-suite-inventory.md           # 35 Specifications in group-domain-reconciliation.test.ts
+│   │   ├── phase-d-test-suite-inventory.md           # 25 Specifications in trainee-groups-dashboard-ui.test.tsx
+│   │   └── core-frontend-test-inventory.md           # Increment 11 Baseline & Remediation Suites
+│   ├── execution-reports/                            # Formal Verification Evidence
+│   │   └── gate-b-runtime-execution-log.md           # Execution Evidence (Deferred to Gate B)
+│   └── historical-checklists/                        # PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL
+│       └── [17 historical checklist files]          # (Currently preserved in place at docs/frontend/checklists/)
+│
+├── 05-user-documentation/                            # PRIMARY 05: USER MANUALS & OPERATIONAL GUIDES
+│   ├── README.md                                     # User Documentation Navigation Portal
+│   ├── getting-started/                              # Onboarding & Platform Basics
+│   │   ├── platform-overview.md                      # Cairo Metro Training Mission & Key Concepts
+│   │   ├── account-activation-and-login.md           # Initial Setup, Passwords & Navigation
+│   │   └── browser-compatibility.md                  # Supported Browsers (Provisional Baseline; Phase 7 Ratification)
+│   ├── trainee-guide/                                # End-User Trainee Manual
+│   │   ├── my-courses-and-learning.md                # Video Player, Lesson Completion, Quizzes
+│   │   ├── my-groups-and-reminder-programs.md        # Using /my-groups, Carousels, Deadlines
+│   │   ├── tracking-progress-and-grades.md           # Progress Meters, Passing Gates, Deadlines
+│   │   └── earning-and-verifying-certificates.md     # Downloading PDFs, QR Verification
+│   ├── instructor-guide/                             # Lecturer & Instructor Manual
+│   │   ├── curriculum-builder-handbook.md            # Modules, Video Uploads, Rich-Text Content
+│   │   ├── quiz-creation-and-grading.md              # Question Types, Pass Marks, Grade Overrides
+│   │   └── managing-course-discussions.md            # Answering Questions & Comment Moderation
+│   ├── supervisor-guide/                             # Assistant Admin & Supervisor Manual
+│   │   ├── group-management-handbook.md              # Member Rosters, Course Roles, Renewal Cycles
+│   │   ├── tracking-team-compliance.md               # Inactivity Alerts, Overdue Flags, Reminders
+│   │   └── sensitive-action-approval-workflow.md     # Shared Guide — Part 1: Assistant Admin; Part 2: Supervisor Visibility
+│   ├── admin-guide/                                  # System Administrator Manual
+│   │   ├── user-and-role-administration.md           # Account Provisioning, Ceilings, 6 Roles
+│   │   ├── course-catalog-publishing.md              # Major/Minor Versioning & Approvals
+│   │   ├── approval-queue-management.md              # Executing & Rejecting Assistant Requests
+│   │   └── platform-audit-and-security.md            # Audit Trails, Tombstones & Security Logs
+│   └── faq-and-troubleshooting/                      # Self-Service Help
+│       ├── trainee-faq.md                            # Common Trainee Inquiries & Solutions
+│       └── instructor-faq.md                         # Common Authoring & Upload Inquiries
+│
+├── 06-operations-and-maintenance/                    # PRIMARY 06: OPERATIONS, DEPLOYMENT & RUNBOOKS
+│   ├── README.md                                     # Operations & DevOps Hub
+│   ├── environment-setup/                            # Developer & Staging Environment Bootstrap
+│   │   ├── frontend-development-setup.md             # Node.js, Vite, Environment Flags
+│   │   ├── backend-development-setup.md              # Python, Poetry/Pip, Django Settings
+│   │   └── local-sqlserver-docker-setup.md           # SQL Server Container Configuration
+│   ├── deployment/                                   # Production Deployment Manuals (Options for Evaluation)
+│   │   ├── production-architecture-topology.md       # Web Tier, App Tier, DB Tier, Storage Tier
+│   │   ├── frontend-deployment-guide.md              # Static Asset Optimization & Web Server Setup
+│   │   ├── django-backend-deployment-guide.md        # WSGI Options (Gunicorn/Waitress), Systemd/Service
+│   │   └── ssl-tls-and-reverse-proxy.md              # Certificate Renewal & Secure Headers
+│   ├── runbooks/                                     # Operational Runbooks
+│   │   ├── RB-001-routine-database-maintenance.md    # Index Maintenance, Statistics, Integrity
+│   │   ├── RB-002-database-backup-and-recovery.md    # Backup Strategy & Point-in-Time Restore
+│   │   ├── RB-003-disaster-recovery-procedure.md     # Failover Procedure & Verification
+│   │   ├── RB-004-incident-management-protocol.md    # Scope: Sev 1-4 Triage, On-Call, Escalation (Pending Review)
+│   │   └── RB-005-certificate-revocation-audit.md    # Scope: D-13 Revocation & Verification (Pending Review)
+│   ├── monitoring-and-alerting/                      # Telemetry & Health Checks
+│   │   ├── health-check-endpoints.md                 # Liveness, Readiness & DB Probe Specifications
+│   │   ├── logging-standards-and-retention.md        # JSON Logging, Audit Logging & Retention
+│   │   └── performance-monitoring-and-alerts.md      # APM Thresholds, Error Spikes & Slow Queries
+│   └── sop/                                          # Standard Operating Procedures
+│       ├── SOP-001-user-offboarding-and-deletion.md  # Executing D-01/D-02 Permanent Deletion
+│       ├── SOP-002-production-database-patching.md   # Zero-Downtime Migration Execution
+│       └── SOP-003-emergency-session-invalidation.md # Force-Expiring Sessions across SQL Server
+│
+├── 07-project-and-process/                           # PRIMARY 07: PROJECT GOVERNANCE & ARCHIVES
+│   ├── README.md                                     # Governance Hub & Project State Index
+│   ├── roadmaps/                                     # Master Roadmaps & Dashboards
+│   │   ├── active-roadmap.md                         # Authoritative Living Master Plan
+│   │   ├── CURRENT.md                                # Live Status Dashboard
+│   │   └── historical-roadmaps/                      # Frozen Historical Baselines
+│   │       ├── pre-backend-migration-roadmap.md      # Revision 5 Baseline (Frozen)
+│   │       └── frontend-implementation-roadmaps/     # Historical Increments 11 & 12 Roadmaps
+│   ├── checkpoints/                                  # Documentation Program Milestone Ledger Namespace
+│   │   └── documentation-program/                    # DEDICATED NAMESPACE: Documentation Milestones Only (D5)
+│   │       ├── README.md                             # Dedicated Documentation Checkpoint Ledger
+│   │       └── [CP-DOC-00 through CP-DOC-08]         # Future Planned Documentation Milestones (None created now)
+│   │                                                 # Note: Product checkpoints remain at docs/project-state/checkpoints/
+│   ├── historical-reports/                           # PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL
+│   │   ├── README.md                                 # Historical Reports Ledger
+│   │   ├── sup-01-audit-series/                      # 28 Historical SUP-01 Cryptographic Reports
+│   │   ├── supervisor-and-admin-audits/              # Historical Increment Audit Reports
+│   │   └── phase-implementation-reports/             # Phase 1, Phase 2, Phase 3, Phase 5 Reports
+│   │                                                 # (All 81 reports currently remain in docs/frontend/reports/)
+│   ├── archive/                                      # PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL
+│   │   ├── README.md                                 # Transcripts Ledger
+│   │   ├── CHAT_TRANSCRIPT.md                        # Session 1 Full Transcript (60k lines)
+│   │   └── CHAT_TRANSCRIPT_INCREMENTS_9_10.md        # Session 2 Transcript (32k lines)
+│   │                                                 # (Transcripts currently remain in docs/archive/transcripts/)
+│   └── risk-management/                              # RAID Log
+│       └── master-risk-register.md                   # Technical, Operational & Project Risks
+│
+└── _templates/                                       # SUPPORTING: 20 Reusable Authoring Templates
+    ├── README.md                                     # Template Library Index & Usage Guidelines
+    ├── BRD-template.md                               # Business Requirements Document Template
+    ├── SRS-template.md                               # Software Requirements Specification Template
+    ├── FRD-template.md                               # Functional Requirements Document Template
+    ├── NFR-template.md                               # Non-Functional Requirements Template
+    ├── UseCase-template.md                           # Use Case Specification Template
+    ├── HLD-template.md                               # High-Level Design Template
+    ├── LLD-template.md                               # Low-Level Design Template
+    ├── ADR-template.md                               # Architecture Decision Record Template
+    ├── DomainLogic-template.md                       # Domain Business Rules Specification Template
+    ├── APISpec-template.md                           # API Endpoint Contract Template
+    ├── DatabaseSpec-template.md                      # Logical & Physical Relational Design Template (Separated)
+    ├── MasterTestPlan-template.md                    # Master Verification & Test Plan Template
+    ├── TestCase-template.md                          # Test Case & Scenario Template
+    ├── TestExecutionReport-template.md               # Test Execution & Verification Report Template
+    ├── BugReport-template.md                         # Defect & Contradiction Log Template
+    ├── UserManual-template.md                        # Role-Based User Guide Template
+    ├── SOP-template.md                               # Standard Operating Procedure Template
+    ├── DeploymentGuide-template.md                   # Production Deployment Runbook Template
+    ├── OperationalRunbook-template.md                # System Subsystem Runbook Template
+    └── RiskRegister-template.md                      # Master Risk Register (RAID) Template

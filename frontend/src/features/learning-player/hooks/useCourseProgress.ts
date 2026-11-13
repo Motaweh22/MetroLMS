@@ -1,13 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { learningApi } from '../services/learningApi';
 import { sanitizeErrorMessage } from '@/core/api/apiClient';
-import type { CourseProgress, LessonProgress, CompleteLessonResponse } from '../types';
+import type {
+  CourseProgress,
+  LessonProgress,
+  CompleteLessonResponse,
+  EligibleAttemptOption,
+} from '../types';
 
 interface UseCourseProgressResult {
   progress: CourseProgress | null;
   isLoading: boolean;
   error: string | null;
   isSubmitting: boolean;
+  requiresAttemptSelection: boolean;
+  eligibleAttempts: EligibleAttemptOption[];
   refetch: () => Promise<void>;
   completeLesson: (itemId: string) => Promise<CompleteLessonResponse | null>;
   isItemCompleted: (itemId: string) => boolean;
@@ -15,11 +22,16 @@ interface UseCourseProgressResult {
   updateLocalActivity: (itemId: string, activity: Partial<LessonProgress>) => void;
 }
 
-export function useCourseProgress(courseId: string | undefined): UseCourseProgressResult {
+export function useCourseProgress(
+  courseId: string | undefined,
+  options?: { attemptId?: string; groupId?: string; cycleId?: string }
+): UseCourseProgressResult {
   const [progress, setProgress] = useState<CourseProgress | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [requiresAttemptSelection, setRequiresAttemptSelection] = useState<boolean>(false);
+  const [eligibleAttempts, setEligibleAttempts] = useState<EligibleAttemptOption[]>([]);
 
   const isMountedRef = useRef(true);
 
@@ -30,9 +42,15 @@ export function useCourseProgress(courseId: string | undefined): UseCourseProgre
     };
   }, []);
 
+  const attemptId = options?.attemptId;
+  const groupId = options?.groupId;
+  const cycleId = options?.cycleId;
+
   const fetchProgress = useCallback(async () => {
     if (!courseId) {
       setProgress(null);
+      setRequiresAttemptSelection(false);
+      setEligibleAttempts([]);
       setIsLoading(false);
       return;
     }
@@ -40,9 +58,17 @@ export function useCourseProgress(courseId: string | undefined): UseCourseProgre
     try {
       setIsLoading(true);
       setError(null);
-      const res = await learningApi.getCourseProgress(courseId);
+      const res = await learningApi.getCourseProgress(courseId, { attemptId, groupId, cycleId });
       if (isMountedRef.current) {
-        setProgress(res.progress);
+        if (res.requiresAttemptSelection) {
+          setRequiresAttemptSelection(true);
+          setEligibleAttempts(res.eligibleAttempts || []);
+          setProgress(null);
+        } else {
+          setRequiresAttemptSelection(false);
+          setEligibleAttempts([]);
+          setProgress(res.progress || null);
+        }
       }
     } catch (err: unknown) {
       if (isMountedRef.current) {
@@ -55,7 +81,7 @@ export function useCourseProgress(courseId: string | undefined): UseCourseProgre
         setIsLoading(false);
       }
     }
-  }, [courseId]);
+  }, [courseId, attemptId, groupId, cycleId]);
 
   useEffect(() => {
     fetchProgress();
@@ -136,7 +162,7 @@ export function useCourseProgress(courseId: string | undefined): UseCourseProgre
 
       try {
         setIsSubmitting(true);
-        const res = await learningApi.completeLesson(courseId, { itemId });
+        const res = await learningApi.completeLesson(courseId, { itemId, attemptId, groupId, cycleId });
         if (isMountedRef.current) {
           setProgress(res.progress);
         }
@@ -154,7 +180,7 @@ export function useCourseProgress(courseId: string | undefined): UseCourseProgre
         }
       }
     },
-    [courseId, isSubmitting]
+    [courseId, isSubmitting, attemptId, groupId, cycleId]
   );
 
   return {
@@ -162,6 +188,8 @@ export function useCourseProgress(courseId: string | undefined): UseCourseProgre
     isLoading,
     error,
     isSubmitting,
+    requiresAttemptSelection,
+    eligibleAttempts,
     refetch: fetchProgress,
     completeLesson,
     isItemCompleted,

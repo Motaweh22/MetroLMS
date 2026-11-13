@@ -9,4 +9,5 @@ export * from './components/CurriculumSidebar';
 export * from './components/LearningHeader';
 export * from './components/PlayerToolbar';
 export * from './components/CompletionCelebrationModal';
+export * from './components/AttemptContextSelectorModal';
 export * from './components/ImageViewer';

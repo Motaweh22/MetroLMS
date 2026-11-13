@@ -180,11 +180,18 @@ export function resolveAuthenticatedUser(
   options: ResolveUserOptions = {}
 ): User | null {
   const authHeader = request.headers.get('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
+  let token: string | null = null;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.replace('Bearer ', '').trim();
+  } else if (import.meta.env.DEV) {
+    // Development-only prototype fallback: support cookie-session simulation where Bearer header is omitted
+    const activeDevSession = authStorage.getSession();
+    if (activeDevSession?.token) {
+      token = activeDevSession.token;
+    }
   }
 
-  const token = authHeader.replace('Bearer ', '').trim();
   if (!token) return null;
 
   const mustEnforceBrowserSession =

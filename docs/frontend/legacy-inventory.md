@@ -47,7 +47,7 @@ metro courses/
 
 ## 3. Verified Route & View Inventory
 
-The legacy router in [`js/app.js`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/app.js) executes route matching inside `navigate(page)` and `renderPage(page)`. The table below inventories all 25 verified legacy views, their exact controller implementations and line numbers, role restrictions, mapped modern routes, and delivery status:
+The legacy router in [`js/app.js`](../../legacy-reference/js/app.js) executes route matching inside `navigate(page)` and `renderPage(page)`. The table below inventories all 25 verified legacy views, their exact controller implementations and line numbers, role restrictions, mapped modern routes, and delivery status:
 
 | Legacy View Key | Legacy Controller Function (Exact File & Line) | Access Role | Modern Route (`frontend/`) | Implementation Status | Notes / Parity Cross-Reference |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -81,7 +81,7 @@ The legacy router in [`js/app.js`](file:///c:/Users/Administrator/Desktop/metro%
 
 ## 4. Verified Data Sources Inventory
 
-The legacy application loads data through four primary pathways managed by `DataService` in [`js/data.js`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/data.js):
+The legacy application loads data through four primary pathways managed by `DataService` in [`js/data.js`](../../legacy-reference/js/data.js):
 
 ### A. Static Seed Files
 * **`data/users.json`:**

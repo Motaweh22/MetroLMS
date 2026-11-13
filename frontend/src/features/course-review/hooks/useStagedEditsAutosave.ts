@@ -3,6 +3,11 @@ import type { Course, StagedAdminEditsRecord } from '@/core/courses/types';
 import { reviewApi } from '../api/reviewApi';
 import { ApiError } from '@/core/api/apiClient';
 import {
+  getAdminStagedEditsFallback,
+  saveAdminStagedEditsFallback,
+  clearAdminStagedEditsFallback,
+} from '../services/stagedEditsStorage';
+import {
   threeWayRebase,
   type FieldConflict,
   type ThreeWayRebaseResult,
@@ -12,6 +17,7 @@ export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
 
 export interface UseStagedEditsAutosaveOptions {
   courseId: string;
+  adminId?: string;
   baselineCourse?: Course | null;
   initialRevision?: number;
   initialStagedEdits?: StagedAdminEditsRecord | null;
@@ -51,6 +57,7 @@ export interface UseStagedEditsAutosaveReturn {
  */
 export function useStagedEditsAutosave({
   courseId,
+  adminId,
   baselineCourse,
   initialRevision,
   initialStagedEdits,
@@ -145,29 +152,22 @@ export function useStagedEditsAutosave({
         pendingPatchRef.current = res.record.patchedContent || {};
         setHasUnsavedChanges(false);
       } else {
-        // Check localStorage fallback
-        if (typeof localStorage !== 'undefined') {
-          const raw = localStorage.getItem(`metro_admin_staged_edits_${courseId}`);
-          if (raw) {
-            try {
-              const parsed: StagedAdminEditsRecord = JSON.parse(raw);
-              setClientRevision(parsed.clientRevision);
-              clientRevisionRef.current = parsed.clientRevision;
-              setLastSavedAt(parsed.lastSavedAt);
-              setServerPatchedContent(parsed.patchedContent || {});
-              setPendingPatch(parsed.patchedContent || {});
-              pendingPatchRef.current = parsed.patchedContent || {};
-              setHasUnsavedChanges(false);
-            } catch {
-              // ignore
-            }
-          }
+        // Check localStorage fallback strictly for the current authenticated administrator via service
+        const fallback = getAdminStagedEditsFallback(adminId, courseId);
+        if (fallback) {
+          setClientRevision(fallback.clientRevision);
+          clientRevisionRef.current = fallback.clientRevision;
+          setLastSavedAt(fallback.lastSavedAt);
+          setServerPatchedContent(fallback.patchedContent || {});
+          setPendingPatch(fallback.patchedContent || {});
+          pendingPatchRef.current = fallback.patchedContent || {};
+          setHasUnsavedChanges(false);
         }
       }
     } catch {
       // Rehydration errors shouldn't crash the editor
     }
-  }, [courseId]);
+  }, [courseId, adminId]);
 
   /**
    * Internal save execution with 409 conflict detection and 3-way rebase
@@ -202,6 +202,7 @@ export function useStagedEditsAutosave({
         setStatus('saved');
         setHasUnsavedChanges(false);
         retryCountRef.current = 0;
+        clearAdminStagedEditsFallback(adminId, courseId);
         onSaveSuccess?.(res.record);
         return res.record;
       } catch (err) {
@@ -297,6 +298,21 @@ export function useStagedEditsAutosave({
       });
       setHasUnsavedChanges(true);
 
+      // Save local fallback draft via service (strictly fails closed if adminId is null/undefined)
+      if (adminId) {
+        const fallbackRecord: StagedAdminEditsRecord = {
+          courseId,
+          baselineId: baselineCourseRef.current?.id || courseId,
+          baselineSubmittedAt: baselineCourseRef.current?.submittedAt || '',
+          clientRevision: clientRevisionRef.current,
+          patchedContent: pendingPatchRef.current,
+          lastSavedAt: new Date().toISOString(),
+          savedByAdminId: adminId,
+          isStale: false,
+        };
+        saveAdminStagedEditsFallback(adminId, courseId, fallbackRecord);
+      }
+
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
@@ -305,7 +321,7 @@ export function useStagedEditsAutosave({
         executeSave(pendingPatchRef.current);
       }, debounceMs);
     },
-    [debounceMs, executeSave]
+    [courseId, adminId, debounceMs, executeSave]
   );
 
   /**

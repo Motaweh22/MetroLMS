@@ -127,30 +127,45 @@
   to { transform: rotate(360deg); }
 }
 
-/* Seeking Clamped Alert Pill */
+/* Seeking Clamped Alert Pill (Resilient Presentation) */
 .seeking-clamped-badge {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: rgba(239, 68, 68, 0.9);
-  color: #FFFFFF;
-  padding: 0.4rem 0.8rem;
-  border-radius: var(--radius-md, 8px);
-  font-size: 0.82rem;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-  animation: fadeInOut 2.5s ease-in-out forwards;
-  z-index: 20;
+  position: absolute !important;
+  top: 1rem !important;
+  right: 1rem !important;
+  background: rgba(220, 38, 38, 0.95) !important;
+  color: #FFFFFF !important;
+  padding: 0.45rem 0.9rem !important;
+  border-radius: var(--radius-md, 8px) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+  pointer-events: none !important;
+  opacity: 1 !important;
+  z-index: 50 !important;
+  animation: seekBadgeFadeIn 0.2s ease-out;
 }
 
-@keyframes fadeInOut {
-  0% { opacity: 0; transform: translateY(-8px); }
-  15% { opacity: 1; transform: translateY(0); }
-  85% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(-8px); }
+@keyframes seekBadgeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Accessible Reduced-Motion: Never lock badge to transparent */
+@media (prefers-reduced-motion: reduce) {
+  .seeking-clamped-badge {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 /* -------------------------------------------------------------

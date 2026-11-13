@@ -1,0 +1,1937 @@
+{
+  "manifestIdentifier": "METROLMS-DOC-MIGRATION-MANIFEST-V1",
+  "documentTitle": "MetroLMS Passive Point-in-Time Documentation Migration Manifest",
+  "generatedAt": "2026-11-12T20:40:00Z",
+  "planBaseline": "DOC-PROG-2026-11-12-REV6",
+  "phase": "Phase 2B Training Groups & Renewal Programs (Domains 08-10) Completed",
+  "governanceNotice": "Strictly passive point-in-time planning and reference inventory. Zero relocation, renaming, copying, or deletion of existing files authorized by this manifest.",
+  "relocationAuthorized": false,
+  "inventoryAccounting": {
+    "prePhase0MarkdownCount": 136,
+    "phase0CreatedMarkdownCount": 33,
+    "postPhase0TotalMarkdownCount": 169,
+    "externalCodebaseFilesCount": 19,
+    "gitkeepPlaceholdersCount": 43,
+    "scaffoldedDirectoriesCount": 58,
+    "phase1CreatedMarkdownCount": 14,
+    "postPhase1TotalMarkdownCount": 183,
+    "phase2aCreatedMarkdownCount": 16,
+    "postPhase2aTotalMarkdownCount": 199,
+    "phase2bCreatedMarkdownCount": 7,
+    "postPhase2bTotalMarkdownCount": 206
+  },
+  "historicalBaselineInventory": [
+    {
+      "id": "DOC-HIST-001",
+      "currentAuthoritativePath": "docs/README.md",
+      "documentTitle": "MetroLMS — Master Documentation Navigation Hub (`docs/README.md`)",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 2 (Repository Documentation Navigation Root)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/README.md)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-002",
+      "currentAuthoritativePath": "docs/architecture/authentication-and-session-contract.md",
+      "documentTitle": "MetroLMS — Canonical Authentication, Session & Isolation Architecture",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 2 (Canonical System Architecture)",
+      "proposedFutureLocation": "docs/02-architecture-and-design/hld/authentication-and-session-contract.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-003",
+      "currentAuthoritativePath": "docs/architecture/decision-register.md",
+      "documentTitle": "MetroLMS — Master Owner Decision Register & Documentation Authority Rules",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 1 (Master Owner Decision Register)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Sole Level 1 Register retained at docs/architecture/decision-register.md)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-004",
+      "currentAuthoritativePath": "docs/architecture/security-and-xss-baseline.md",
+      "documentTitle": "MetroLMS — Frontend Security, XSS Prevention & Role Hardening Baseline (`D-SEC-01`)",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 2 (Canonical System Architecture)",
+      "proposedFutureLocation": "docs/02-architecture-and-design/hld/security-and-xss-baseline.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-005",
+      "currentAuthoritativePath": "docs/architecture/system-architecture.md",
+      "documentTitle": "MetroLMS — Canonical System Architecture & Technology Stack",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 2 (Canonical System Architecture)",
+      "proposedFutureLocation": "docs/02-architecture-and-design/hld/system-architecture.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-006",
+      "currentAuthoritativePath": "docs/archive/README.md",
+      "documentTitle": "MetroLMS — Historical & Superseded Documentation Archive (`docs/archive/README.md`)",
+      "disposition": "TIER-4-SUPERSEDED-ARCHIVE",
+      "currentAuthorityLevel": "Level 7 (Archived Index)",
+      "proposedFutureLocation": "docs/07-project-and-process/archive/README.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-007",
+      "currentAuthoritativePath": "docs/archive/transcripts/CHAT_TRANSCRIPT.md",
+      "documentTitle": "سجل المحادثات الكامل — مشروع منصة تدريب مترو القاهرة (Cairo Metro LMS)",
+      "disposition": "TIER-4-SUPERSEDED-ARCHIVE",
+      "currentAuthorityLevel": "Level 7 (Archived Session Transcript)",
+      "proposedFutureLocation": "docs/07-project-and-process/archive/CHAT_TRANSCRIPT.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-008",
+      "currentAuthoritativePath": "docs/archive/transcripts/CHAT_TRANSCRIPT_INCREMENTS_9_10.md",
+      "documentTitle": "سجل محادثات الجلسة الثانية — مشروع منصة تدريب مترو القاهرة (Cairo Metro LMS)",
+      "disposition": "TIER-4-SUPERSEDED-ARCHIVE",
+      "currentAuthorityLevel": "Level 7 (Archived Session Transcript)",
+      "proposedFutureLocation": "docs/07-project-and-process/archive/CHAT_TRANSCRIPT_INCREMENTS_9_10.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-009",
+      "currentAuthoritativePath": "docs/backend/contracts/developer-bootstrap-contract.md",
+      "documentTitle": "Future Backend Contract: Secure Developer Account Bootstrap & Provisioning (`MFR-45`)",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 5 (Implementation Contract & Design)",
+      "proposedFutureLocation": "docs/03-technical-documentation/backend/developer-bootstrap-contract.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-010",
+      "currentAuthoritativePath": "docs/backend/database-schema.md",
+      "documentTitle": "Metro Courses LMS — Production Relational Database Schema Design & Architecture Review",
+      "disposition": "TIER-5-UNAPPROVED-DRAFT",
+      "currentAuthorityLevel": "Level 7 (Unapproved Legacy Draft)",
+      "proposedFutureLocation": "docs/03-technical-documentation/database/legacy-postgres-reference/database-schema.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-011",
+      "currentAuthoritativePath": "docs/backend/django-sqlserver-integration-contract.md",
+      "documentTitle": "MetroLMS — Django & Microsoft SQL Server Backend Integration Contract",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 5 (Implementation Contract & Design)",
+      "proposedFutureLocation": "docs/03-technical-documentation/backend/django-sqlserver-integration-contract.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-012",
+      "currentAuthoritativePath": "docs/backend/erd-chen.md",
+      "documentTitle": "Metro Courses LMS — Classic Chen-Notation Entity-Relationship Diagram (ERD) Specification",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 5 (Implementation Contract & Design)",
+      "proposedFutureLocation": "docs/03-technical-documentation/backend/erd-chen.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-013",
+      "currentAuthoritativePath": "docs/backend/erd.md",
+      "documentTitle": "Metro Courses LMS — Production Database Entity-Relationship Diagram (ERD) Specification",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 5 (Implementation Contract & Design)",
+      "proposedFutureLocation": "docs/03-technical-documentation/backend/erd.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-014",
+      "currentAuthoritativePath": "docs/backend/pre-backend-migration-remediation-roadmap.md",
+      "documentTitle": "MetroLMS — Official Pre-Backend Migration Remediation Roadmap",
+      "disposition": "TIER-4-SUPERSEDED-ARCHIVE",
+      "currentAuthorityLevel": "Level 7 (Frozen Baseline Roadmap)",
+      "proposedFutureLocation": "docs/07-project-and-process/roadmaps/historical-roadmaps/pre-backend-migration-roadmap.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-015",
+      "currentAuthoritativePath": "docs/frontend/README.md",
+      "documentTitle": "MetroLMS — Frontend Documentation Index (`docs/frontend/README.md`)",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/README.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-016",
+      "currentAuthoritativePath": "docs/frontend/architecture.md",
+      "documentTitle": "Cairo Metro LMS — Frontend Architecture Specification",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 2 (Canonical System Architecture)",
+      "proposedFutureLocation": "docs/02-architecture-and-design/hld/architecture.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-017",
+      "currentAuthoritativePath": "docs/frontend/authorization-and-permissions-design.md",
+      "documentTitle": "Cairo Metro LMS — Authorization Model & Permissions Governance Design",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/authorization-and-permissions-design.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-018",
+      "currentAuthoritativePath": "docs/frontend/checklists/README.md",
+      "documentTitle": "MetroLMS — Frontend Checklists Index (`docs/frontend/checklists/`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/README.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-019",
+      "currentAuthoritativePath": "docs/frontend/checklists/increment-05-enrollment-verification.md",
+      "documentTitle": "Increment 5 — Course Enrollment Verification & Messaging Correction Checklist",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/increment-05-enrollment-verification.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-020",
+      "currentAuthoritativePath": "docs/frontend/checklists/increment-06-learning-player-checklist.md",
+      "documentTitle": "Increment 6 — Learning Player & Progress Tracking Checklist",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/increment-06-learning-player-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-021",
+      "currentAuthoritativePath": "docs/frontend/checklists/increment-07-dashboard-groups-checklist.md",
+      "documentTitle": "Increment 7 — Adaptive Dashboards & Trainee Groups Checklist",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/increment-07-dashboard-groups-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-022",
+      "currentAuthoritativePath": "docs/frontend/checklists/increment-08-course-builder-checklist.md",
+      "documentTitle": "Increment 8 — Course Builder & Lecturer Workspace",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/increment-08-course-builder-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-023",
+      "currentAuthoritativePath": "docs/frontend/checklists/increment-09-course-review-checklist.md",
+      "documentTitle": "Increment 9 — Review & Quality Audit Workflow",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/increment-09-course-review-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-024",
+      "currentAuthoritativePath": "docs/frontend/checklists/increment-10-manual-acceptance-checklist.md",
+      "documentTitle": "Increment 10: Training Groups Management & Follow-up",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/increment-10-manual-acceptance-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-025",
+      "currentAuthoritativePath": "docs/frontend/checklists/increment-10-training-groups-checklist.md",
+      "documentTitle": "Increment 10 — Training Groups Management & Follow-up",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/increment-10-training-groups-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-026",
+      "currentAuthoritativePath": "docs/frontend/checklists/messaging-and-transient-feedback-checklist.md",
+      "documentTitle": "Messaging, Dialogs, Unsaved Changes & Transient Feedback System",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/messaging-and-transient-feedback-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-027",
+      "currentAuthoritativePath": "docs/frontend/checklists/phase-02-role-architecture-checklist.md",
+      "documentTitle": "MetroLMS — Phase 2 Planning & Execution Checklist: Role Architecture, Account Protection & Confidentiality",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/phase-02-role-architecture-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-028",
+      "currentAuthoritativePath": "docs/frontend/checklists/phase-03-assistant-admin-visibility-checklist.md",
+      "documentTitle": "MetroLMS — Phase 3 Planning & Execution Checklist: Assistant Admin Visibility (`Rule A`, `D-14`), Route Guards & Role Navigation",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/phase-03-assistant-admin-visibility-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-029",
+      "currentAuthoritativePath": "docs/frontend/checklists/phase-04-approval-lifecycle-checklist.md",
+      "documentTitle": "Phase 4 Planning Checklist: Approval Lifecycle, Delegation, Execution, Notifications & Audit Attribution",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/phase-04-approval-lifecycle-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-030",
+      "currentAuthoritativePath": "docs/frontend/checklists/phase-05-developer-preview-and-isolated-testing-checklist.md",
+      "documentTitle": "Phase 5 Planning Checklist: Developer Role Preview & Isolated Role Testing",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/phase-05-developer-preview-and-isolated-testing-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-031",
+      "currentAuthoritativePath": "docs/frontend/checklists/phase-5-implementation-plan.md",
+      "documentTitle": "Increment 11 — Phase 5: Implementation Plan & Feature Audit Checklist",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/phase-5-implementation-plan.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-032",
+      "currentAuthoritativePath": "docs/frontend/checklists/shared-ui-icon-text-alignment-checklist.md",
+      "documentTitle": "Shared UI Icon–Text Alignment & Inline Typography System",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/shared-ui-icon-text-alignment-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-033",
+      "currentAuthoritativePath": "docs/frontend/checklists/t-2-3-1-published-course-versions-and-diffing-checklist.md",
+      "documentTitle": "Task Checklist: Published Course Versions & Substantive vs. Metadata Diffing (`T-2.3.1`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/t-2-3-1-published-course-versions-and-diffing-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-034",
+      "currentAuthoritativePath": "docs/frontend/checklists/t-2-3-2-authoritative-progress-rounding-and-version-scoped-certificates-checklist.md",
+      "documentTitle": "T-2.3.2 Checklist — Authoritative Progress Rounding & Version-Scoped Certificate Issuance (`MFR-09`, `MFR-46`, `D-12`, `D-13`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/t-2-3-2-authoritative-progress-rounding-and-version-scoped-certificates-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-035",
+      "currentAuthoritativePath": "docs/frontend/checklists/t-2-4-1-post-deadline-access-enforcement-checklist.md",
+      "documentTitle": "Task Checklist: Post-Deadline Access Enforcement (`hide` vs. `keep_no_cert`, `T-2.4.1`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/t-2-4-1-post-deadline-access-enforcement-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-036",
+      "currentAuthoritativePath": "docs/frontend/checklists/t-2-4-2-seven-surface-enforcement-checklist.md",
+      "documentTitle": "MetroLMS — Task Checklist: Seven-Surface Post-Deadline Access Enforcement (`T-2.4.2`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/t-2-4-2-seven-surface-enforcement-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-037",
+      "currentAuthoritativePath": "docs/frontend/checklists/t-2-4-3-phase-2-test-suites-and-player-regressions-checklist.md",
+      "documentTitle": "MetroLMS — Task Checklist: Phase 2 Test Suites, Player Regressions & Gate B Consolidation (`T-2.4.3`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/t-2-4-3-phase-2-test-suites-and-player-regressions-checklist.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-038",
+      "currentAuthoritativePath": "docs/frontend/checklists/whatsapp-contact-visibility-plan.md",
+      "documentTitle": "MetroLMS — Architectural Plan: Configurable WhatsApp Contact Visibility in User Permissions",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Checklist)",
+      "proposedFutureLocation": "docs/04-testing/historical-checklists/whatsapp-contact-visibility-plan.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-039",
+      "currentAuthoritativePath": "docs/frontend/design-system.md",
+      "documentTitle": "Cairo Metro LMS — Design System Specification",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/design-system.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-040",
+      "currentAuthoritativePath": "docs/frontend/implementation-roadmap-increment-11.md",
+      "documentTitle": "Increment 11 Planning & Implementation Roadmap: Administration & User Management",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/implementation-roadmap-increment-11.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-041",
+      "currentAuthoritativePath": "docs/frontend/implementation-roadmap-increment-12.md",
+      "documentTitle": "Increment 12 Planning & Implementation Roadmap: Platform Analytics & Executive Reporting",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/implementation-roadmap-increment-12.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-042",
+      "currentAuthoritativePath": "docs/frontend/implementation-roadmap.md",
+      "documentTitle": "Cairo Metro LMS — Incremental Implementation Roadmap",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/implementation-roadmap.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-043",
+      "currentAuthoritativePath": "docs/frontend/legacy-feature-parity-audit.md",
+      "documentTitle": "Cairo Metro LMS — Legacy-to-React Feature Parity Audit",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/legacy-feature-parity-audit.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-044",
+      "currentAuthoritativePath": "docs/frontend/legacy-inventory.md",
+      "documentTitle": "Cairo Metro LMS — Legacy System Inventory & Migration Mapping",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/legacy-inventory.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-045",
+      "currentAuthoritativePath": "docs/frontend/loading-and-error-handling.md",
+      "documentTitle": "Metro Courses — Loading System & Error Handling Architecture",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 / Level 5 (Frontend Architecture & Design Tokens)",
+      "proposedFutureLocation": "docs/03-technical-documentation/frontend/loading-and-error-handling.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-046",
+      "currentAuthoritativePath": "docs/frontend/reports/README.md",
+      "documentTitle": "MetroLMS — Frontend Reports Index (`docs/frontend/reports/`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/README.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-047",
+      "currentAuthoritativePath": "docs/frontend/reports/increment-03-3-course-review-visibility-and-preview-report.md",
+      "documentTitle": "MetroLMS — Increment 3.3 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/supervisor-and-admin-audits/increment-03-3-course-review-visibility-and-preview-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-048",
+      "currentAuthoritativePath": "docs/frontend/reports/increment-03-4-route-guards-and-navigation-report.md",
+      "documentTitle": "MetroLMS — Increment 3.4 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/supervisor-and-admin-audits/increment-03-4-route-guards-and-navigation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-049",
+      "currentAuthoritativePath": "docs/frontend/reports/notification-delivery-and-governance-reconciliation-report.md",
+      "documentTitle": "MetroLMS — Notification Delivery & Governance Final Reconciliation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/notification-delivery-and-governance-reconciliation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-050",
+      "currentAuthoritativePath": "docs/frontend/reports/notification-navigation-and-delivery-final-audit-report.md",
+      "documentTitle": "MetroLMS — Notification Center Navigation & Delivery Final Acceptance Audit Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/supervisor-and-admin-audits/notification-navigation-and-delivery-final-audit-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-051",
+      "currentAuthoritativePath": "docs/frontend/reports/notification-navigation-and-delivery-report.md",
+      "documentTitle": "MetroLMS — Notification Center Navigation & Missing Notification Delivery Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/notification-navigation-and-delivery-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-052",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-04-final-closure-audit-report.md",
+      "documentTitle": "MetroLMS — Phase 4 Final Closure Audit Report: Increment 4.3 & Phase 4 Acceptance",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/supervisor-and-admin-audits/phase-04-final-closure-audit-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-053",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-04-increment-02-final-consistency-audit-report.md",
+      "documentTitle": "Phase 4 — Increment 4.2: Final Implementation Consistency Audit Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/supervisor-and-admin-audits/phase-04-increment-02-final-consistency-audit-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-054",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-04-increment-03-implementation-report.md",
+      "documentTitle": "Phase 4 — Increment 4.3 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-04-increment-03-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-055",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-04-planning-report.md",
+      "documentTitle": "Phase 4 Planning Report: Approval Lifecycle, Delegation, Execution, Notifications & Audit Attribution",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-04-planning-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-056",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-02-final-source-audit-report.md",
+      "documentTitle": "MetroLMS — Increment 5.2 Final Source Audit & Evidence Supplement Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/supervisor-and-admin-audits/phase-05-increment-02-final-source-audit-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-057",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-02-implementation-report.md",
+      "documentTitle": "MetroLMS — Increment 5.2 Implementation Report: Visual Role Preview Architecture",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-02-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-058",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-03-implementation-report.md",
+      "documentTitle": "MetroLMS — Increment 5.3 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-03-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-059",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-04-implementation-report.md",
+      "documentTitle": "MetroLMS — Increment 5.4 / WP-5.4.1 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-04-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-060",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-04-planning-report.md",
+      "documentTitle": "MetroLMS — Increment 5.4 Reconciled Planning & Readiness Assessment",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-04-planning-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-061",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-04-wp-5.4.2-implementation-report.md",
+      "documentTitle": "MetroLMS — Work Package 5.4.2 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-04-wp-5.4.2-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-062",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-04-wp-5.4.3-implementation-report.md",
+      "documentTitle": "MetroLMS — Work Package 5.4.3 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-04-wp-5.4.3-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-063",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-04-wp-5.4.4-implementation-report.md",
+      "documentTitle": "MetroLMS — Work Package 5.4.4 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-04-wp-5.4.4-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-064",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-increment-04-wp-5.4.5-implementation-report.md",
+      "documentTitle": "MetroLMS — Work Package 5.4.5 Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-increment-04-wp-5.4.5-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-065",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-05-planning-report.md",
+      "documentTitle": "Phase 5 Planning Report: Developer Role Preview & Isolated Role Testing",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-05-planning-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-066",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-a-scope-reset-and-architecture-baseline-report.md",
+      "documentTitle": "MetroLMS — Phase A Scope Reset, Owner Decision Reconciliation & Architecture Baseline Closure Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-a-scope-reset-and-architecture-baseline-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-067",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-c-group-domain-reconciliation-implementation-report.md",
+      "documentTitle": "MetroLMS — Phase C Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-c-group-domain-reconciliation-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-068",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-d-design-system-consistency-restoration-report.md",
+      "documentTitle": "MetroLMS — Design System Consistency Restoration Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-d-design-system-consistency-restoration-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-069",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-d-trainee-groups-dashboard-implementation-report.md",
+      "documentTitle": "MetroLMS — Phase D Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-d-trainee-groups-dashboard-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-070",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-d-visual-refinement-2-report.md",
+      "documentTitle": "docs/frontend/reports/phase-d-visual-refinement-2-report.md",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-d-visual-refinement-2-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-071",
+      "currentAuthoritativePath": "docs/frontend/reports/phase-d-visual-surface-contrast-correction-report.md",
+      "documentTitle": "MetroLMS — Visual Surface Contrast Correction Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/phase-d-visual-surface-contrast-correction-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-072",
+      "currentAuthoritativePath": "docs/frontend/reports/role-aware-notification-center-implementation-report.md",
+      "documentTitle": "MetroLMS — Role-Aware Notification Center & Category Tabs Implementation Report",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/role-aware-notification-center-implementation-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-073",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-authentication-lifecycle-audit-v1-6.md",
+      "documentTitle": "MetroLMS — SUP-01 Authentication Lifecycle & Server Consistency Audit (Version 1.6)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-authentication-lifecycle-audit-v1-6.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-074",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-complete-auth-cors-and-lease-recovery-audit-v3-12.md",
+      "documentTitle": "MetroLMS — SUP-01 Complete Authentication CORS & Lease Recovery Consistency Audit (Version 3.12)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-complete-auth-cors-and-lease-recovery-audit-v3-12.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-075",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-cors-registration-freshness-and-ticket-lifecycle-audit-v3-10.md",
+      "documentTitle": "MetroLMS — SUP-01 CORS Preflight, Registration Freshness & Ticket Lifecycle Audit (Version 3.10)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-cors-registration-freshness-and-ticket-lifecycle-audit-v3-10.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-076",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-durable-acknowledgement-and-runtime-semantics-audit-v3-4.md",
+      "documentTitle": "MetroLMS — SUP-01 Durable Acknowledgement & Runtime Semantics Audit (Version 3.4)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-durable-acknowledgement-and-runtime-semantics-audit-v3-4.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-077",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-failure-semantics-and-crash-consistency-audit-v3-3.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Failure-Semantics & Crash Consistency Reconciliation (Version 3.3)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-failure-semantics-and-crash-consistency-audit-v3-3.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-078",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-failure-state-correctness-audit-v1-4.md",
+      "documentTitle": "MetroLMS — SUP-01 Failure-State Correctness & Evidence Closure (Version 1.4)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-failure-state-correctness-audit-v1-4.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-079",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-architecture-audit-v1-3.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Architecture Audit (Version 1.3)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-architecture-audit-v1-3.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-080",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-authorization-atomicity-and-lifecycle-audit-v3-8.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Authorization, Atomicity & Lifecycle Consistency Audit (Version 3.8)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-authorization-atomicity-and-lifecycle-audit-v3-8.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-081",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-13.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Contract Closure & Evidence Audit (Version 3.13)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-13.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-082",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-14.md",
+      "documentTitle": "MetroLMS — SUP-01 Deadlock, Idempotency & Cryptographic Boundary Closure (Version 3.14)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-14.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-083",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-15.md",
+      "documentTitle": "MetroLMS — SUP-01 Database Retry, Idempotent Replay & Global Crypto Budget Audit (Version 3.15)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-15.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-084",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-16.md",
+      "documentTitle": "MetroLMS — SUP-01 Transaction Resolution, AES-GCM IV Strategy & Recovery Lifecycle Final Audit (Version 3.16)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-16.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-085",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-17.md",
+      "documentTitle": "MetroLMS — SUP-01 Authentication Outcome, Commit Visibility & Cryptographic Budget Final Closure (Version 3.17)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-17.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-086",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-18.md",
+      "documentTitle": "MetroLMS — SUP-01 Cryptographic Trust, Durable Counter Fencing & Deterministic Token Final Audit (Version 3.18)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-18.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-087",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-19.md",
+      "documentTitle": "MetroLMS — SUP-01 Revocation Trust, Non-Exportable Key Fencing & Cryptographic Runtime Closure (Version 3.19)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-19.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-088",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-20.md",
+      "documentTitle": "MetroLMS — SUP-01 KMS Invocation Accounting, JWKS Trust Chain & Cryptographic Verification Closure (Version 3.20)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-20.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-089",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-21.md",
+      "documentTitle": "MetroLMS — SUP-01 KMS Result Durability, Fencing Protocol & JWKS Anti-Rollback Closure (Version 3.21)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-21.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-090",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-22.md",
+      "documentTitle": "MetroLMS — SUP-01 Synchronous Admission Proof, HSM Fencing Barrier & Retention Consistency Audit (Version 3.22)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-22.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-091",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-23.md",
+      "documentTitle": "MetroLMS — SUP-01 Archival Authorization, JWKS Bootstrap Integrity & HSM Capability Closure (Version 3.23)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-23.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-092",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-24.md",
+      "documentTitle": "MetroLMS — SUP-01 Provider-Specific Fencing, Archival Identity & JWKS Freshness Final Audit (Version 3.24)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-24.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-093",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-25.md",
+      "documentTitle": "MetroLMS — SUP-01 Delegated JWKS Attestation, Provider Fencing & HSM Drain Final Closure (Version 3.25)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-25.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-094",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-contract-closure-audit-v3-26.md",
+      "documentTitle": "MetroLMS — SUP-01 Authoritative Provider Drain, Stale Dispatcher Fencing & Admission Epoch Closure (Version 3.26)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-contract-closure-audit-v3-26.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-095",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-final-transaction-design-audit-v1-5.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Transaction Design & Owner Decision Integration (Version 1.5)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-final-transaction-design-audit-v1-5.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-096",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-gateway-recovery-ticket-integrity-and-concurrency-audit-v3-9.md",
+      "documentTitle": "MetroLMS — SUP-01 Gateway Recovery, Ticket Integrity & Database Concurrency Audit (Version 3.9)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-gateway-recovery-ticket-integrity-and-concurrency-audit-v3-9.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-097",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-lease-lifecycle-cors-and-operation-outcome-audit-v3-11.md",
+      "documentTitle": "MetroLMS — SUP-01 Lease Lifecycle, CORS Contract & Operation Outcome Reconciliation (Version 3.11)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-lease-lifecycle-cors-and-operation-outcome-audit-v3-11.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-098",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-operation-pre-registration-and-atomic-cancellation-audit-v3-6.md",
+      "documentTitle": "MetroLMS — SUP-01 Operation Pre-Registration & Atomic Cancellation Reconciliation (Version 3.6)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-operation-pre-registration-and-atomic-cancellation-audit-v3-6.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-099",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-operation-recovery-authorization-and-state-machine-audit-v3-5.md",
+      "documentTitle": "MetroLMS — SUP-01 Operation Recovery Authorization & State-Machine Reconciliation (Version 3.5)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-operation-recovery-authorization-and-state-machine-audit-v3-5.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-100",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-operation-transaction-integrity-and-recovery-audit-v3-7.md",
+      "documentTitle": "MetroLMS — SUP-01 Operation Transaction Integrity & Recovery Coverage (Version 3.7)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-operation-transaction-integrity-and-recovery-audit-v3-7.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-101",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-request-level-traceability-correction-v3-2.md",
+      "documentTitle": "MetroLMS — SUP-01 Request-Level Runtime Taxonomy Correction (Version 3.2)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-request-level-traceability-correction-v3-2.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-102",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v1-7.md",
+      "documentTitle": "MetroLMS — SUP-01 Server Outcome Semantics & Evidence Boundary Audit (Version 1.7)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v1-7.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-103",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v1-8.md",
+      "documentTitle": "MetroLMS — SUP-01 Server Outcome Semantics & Retry Accessibility Audit (Version 1.8)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v1-8.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-104",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v1-9.md",
+      "documentTitle": "MetroLMS — SUP-01 Recovery UX, Server Acknowledgment & Token Ownership Audit (Version 1.9)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v1-9.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-105",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-0.md",
+      "documentTitle": "MetroLMS — SUP-01 Authentication Semantics & Token Ownership Audit (Version 2.0)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-0.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-106",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-1.md",
+      "documentTitle": "MetroLMS — SUP-01 Authentication Semantics & Token Ownership Audit (Version 2.1)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-1.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-107",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-2.md",
+      "documentTitle": "MetroLMS — SUP-01 Runtime Contract & State Transition Audit (Version 2.2)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-2.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-108",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-3.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Correlation & Recovery Closure Audit (Version 2.3)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-3.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-109",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-4.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Mock, Descriptor & Evidence Closure Audit (Version 2.4)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-4.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-110",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-5.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Evidence Semantics & State-Matrix Verification (Version 2.5)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-5.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-111",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-6.md",
+      "documentTitle": "MetroLMS — SUP-01 Evidence Classification, Snapshot Preservation & Full Matrix Publication (Version 2.6)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-6.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-112",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-7.md",
+      "documentTitle": "MetroLMS — SUP-01 Final State-Matrix Consistency & Runtime Contract Audit (Version 2.7)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-7.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-113",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-8.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Cross-Matrix Reconciliation & Failure-Recovery Audit (Version 2.8)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-8.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-114",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v2-9.md",
+      "documentTitle": "MetroLMS — SUP-01 Final Technical Reconciliation & Browser-Semantics Audit (Version 2.9)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v2-9.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-115",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v3-0.md",
+      "documentTitle": "MetroLMS — SUP-01 Full Matrix Publication & Evidence-Based Readiness Audit (Version 3.0)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v3-0.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-116",
+      "currentAuthoritativePath": "docs/frontend/reports/sup-01-server-outcome-semantics-audit-v3-1.md",
+      "documentTitle": "MetroLMS — SUP-01 Actual Matrix Delivery & Independent Audit (Version 3.1)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/sup-01-audit-series/sup-01-server-outcome-semantics-audit-v3-1.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-117",
+      "currentAuthoritativePath": "docs/frontend/reports/t-2-3-1-published-course-versions-and-diffing-report.md",
+      "documentTitle": "Implementation Report: Published Course Versions & Substantive vs. Metadata Diffing (`T-2.3.1`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/t-2-3-1-published-course-versions-and-diffing-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-118",
+      "currentAuthoritativePath": "docs/frontend/reports/t-2-3-2-authoritative-progress-rounding-and-version-scoped-certificates-report.md",
+      "documentTitle": "Implementation Report: Authoritative Progress Rounding & Version-Scoped Certificate Issuance (`T-2.3.2`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/t-2-3-2-authoritative-progress-rounding-and-version-scoped-certificates-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-119",
+      "currentAuthoritativePath": "docs/frontend/reports/t-2-4-1-post-deadline-access-enforcement-report.md",
+      "documentTitle": "Implementation Report: Post-Deadline Access Enforcement (`hide` vs. `keep_no_cert`, `T-2.4.1`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/t-2-4-1-post-deadline-access-enforcement-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-120",
+      "currentAuthoritativePath": "docs/frontend/reports/t-2-4-2-seven-surface-enforcement-report.md",
+      "documentTitle": "MetroLMS — Implementation Report: Seven-Surface Post-Deadline Access Enforcement & Cross-Mutation Isolation (`T-2.4.2`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/t-2-4-2-seven-surface-enforcement-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-121",
+      "currentAuthoritativePath": "docs/frontend/reports/t-2-4-3-phase-2-test-suites-and-player-regressions-report.md",
+      "documentTitle": "MetroLMS — Implementation Report: Phase 2 Test Suites, Video Player Regressions & Gate B Consolidation (`T-2.4.3`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Historical Verification Report)",
+      "proposedFutureLocation": "docs/07-project-and-process/historical-reports/phase-implementation-reports/t-2-4-3-phase-2-test-suites-and-player-regressions-report.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-122",
+      "currentAuthoritativePath": "docs/project-state/CURRENT.md",
+      "documentTitle": "MetroLMS — Current Project State Dashboard (`CURRENT.md`)",
+      "disposition": "TIER-2-OPERATIONAL",
+      "currentAuthorityLevel": "Level 2 / Level 3 (Active Operational Dashboard / Master Plan)",
+      "proposedFutureLocation": "docs/07-project-and-process/roadmaps/CURRENT.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-123",
+      "currentAuthoritativePath": "docs/project-state/active-roadmap.md",
+      "documentTitle": "MetroLMS — Living Master Plan (`active-roadmap.md`)",
+      "disposition": "TIER-2-OPERATIONAL",
+      "currentAuthorityLevel": "Level 2 / Level 3 (Active Operational Dashboard / Master Plan)",
+      "proposedFutureLocation": "docs/07-project-and-process/roadmaps/active-roadmap.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-124",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/CP-001-2026-11-07-phase-a-closure.md",
+      "documentTitle": "Checkpoint `CP-001` — Phase A Closure, Owner Decision Reconciliation & Documentation Consolidation",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-125",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/CP-002-2026-11-07-wp-1-1-closure.md",
+      "documentTitle": "Checkpoint `CP-002` — WP-1.1 Closure (WP-5.4.5 Closure & Phase 5 Acceptance)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-126",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/CP-003-2026-11-07-wp-1-2-closure.md",
+      "documentTitle": "Checkpoint `CP-003` — WP-1.2 Closure (Session Lifecycle & Developer Isolation)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-127",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/CP-004-2026-11-09-wp-1-3-and-phase-1-closure.md",
+      "documentTitle": "Checkpoint `CP-004` — WP-1.3 Closure & Phase 1 Closure (Django Authentication Integration Contract & Auth Test Reconciliation)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-128",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/CP-005-2026-11-09-wp-2-1-closure.md",
+      "documentTitle": "Checkpoint `CP-005` — WP-2.1 Closure (Enrollment Provenance, Per-Attempt Progress & Attempt Resolution)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-129",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/CP-006-2026-11-09-wp-2-2-closure.md",
+      "documentTitle": "Checkpoint `CP-006` — WP-2.2 Closure (Group Member Removal & Per-Course Continuation Grants `D-07`, `MFR-24`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-130",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/CP-007-2026-11-10-wp-2-3-closure.md",
+      "documentTitle": "Checkpoint `CP-007` — WP-2.3 Closure (Curriculum Versioning `Rule B`, Authoritative Progress Rounding `D-12` & Version-Scoped Certificates `D-13`, `MFR-10`, `MFR-09`, `MFR-46`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-131",
+      "currentAuthoritativePath": "docs/project-state/checkpoints/README.md",
+      "documentTitle": "MetroLMS — Project Checkpoints Directory (`docs/project-state/checkpoints/`)",
+      "disposition": "TIER-3-HISTORICAL-EVIDENCE",
+      "currentAuthorityLevel": "Level 6 (Accepted Product Milestone Checkpoint)",
+      "proposedFutureLocation": "PERMANENT RESIDENCE — NOT RELOCATING (Retained at docs/project-state/checkpoints/)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-132",
+      "currentAuthoritativePath": "docs/project-state/remediation-proposals/wp-2.2-d07-retained-course-access-remediation-execution-log.md",
+      "documentTitle": "Post-WP-2.2 Remediation Execution Log: `D-07` Retained-Course Continuation & Revoked-Attempt Authorization",
+      "disposition": "TIER-4-SUPERSEDED-ARCHIVE",
+      "currentAuthorityLevel": "Level 7 (Historical Proposal)",
+      "proposedFutureLocation": "docs/07-project-and-process/archive/wp-2.2-d07-retained-course-access-remediation-execution-log.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-133",
+      "currentAuthoritativePath": "docs/project-state/remediation-proposals/wp-2.2-d07-retained-course-access-remediation.md",
+      "documentTitle": "Post-WP-2.2 Remediation Proposal: `D-07` Retained-Course Continuation & Revoked-Attempt Authorization",
+      "disposition": "TIER-4-SUPERSEDED-ARCHIVE",
+      "currentAuthorityLevel": "Level 7 (Historical Proposal)",
+      "proposedFutureLocation": "docs/07-project-and-process/archive/wp-2.2-d07-retained-course-access-remediation.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-134",
+      "currentAuthoritativePath": "docs/project-state/verification-and-test-strategy.md",
+      "documentTitle": "MetroLMS — Verification & Test Strategy",
+      "disposition": "TIER-2-OPERATIONAL",
+      "currentAuthorityLevel": "Level 2 / Level 3 (Active Operational Dashboard / Master Plan)",
+      "proposedFutureLocation": "docs/07-project-and-process/roadmaps/verification-and-test-strategy.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-135",
+      "currentAuthoritativePath": "docs/requirements/domain-business-rules.md",
+      "documentTitle": "MetroLMS — Canonical Domain & Business Rules Specification",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 (Canonical Requirements & Business Rules)",
+      "proposedFutureLocation": "docs/01-requirements/domains/domain-business-rules.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    },
+    {
+      "id": "DOC-HIST-136",
+      "currentAuthoritativePath": "docs/requirements/reminder-programs-and-group-domain-specification.md",
+      "documentTitle": "MetroLMS — Reminder Programs & Group Domain Canonical Specification",
+      "disposition": "TIER-1-NORMATIVE",
+      "currentAuthorityLevel": "Level 4 (Canonical Requirements & Business Rules)",
+      "proposedFutureLocation": "docs/01-requirements/domains/reminder-programs-and-group-domain-specification.md (PROPOSED FUTURE LOCATION — PENDING SEPARATE OWNER APPROVAL)",
+      "status": "PRESERVED_IN_PLACE"
+    }
+  ],
+  "codebaseReferenceMappings": [
+    {
+      "codebaseFilePath": "AGENTS.md",
+      "inboundDocsReferences": [
+        "docs/README.md",
+        "docs/architecture/authentication-and-session-contract.md",
+        "docs/architecture/decision-register.md",
+        "docs/architecture/security-and-xss-baseline.md",
+        "docs/architecture/system-architecture.md",
+        "docs/backend/django-sqlserver-integration-contract.md",
+        "docs/backend/pre-backend-migration-remediation-roadmap.md",
+        "docs/frontend/implementation-roadmap",
+        "docs/frontend/reports/",
+        "docs/project-state/CURRENT.md",
+        "docs/project-state/active-roadmap.md",
+        "docs/project-state/checkpoints/",
+        "docs/project-state/checkpoints/CP-001-2026-11-07-phase-a-closure.md",
+        "docs/project-state/checkpoints/CP-NNN-YYYY-MM-DD-",
+        "docs/project-state/checkpoints/README.md",
+        "docs/project-state/verification-and-test-strategy.md",
+        "docs/requirements/domain-business-rules.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "README.md",
+      "inboundDocsReferences": [
+        "docs/README.md",
+        "docs/architecture/authentication-and-session-contract.md",
+        "docs/architecture/decision-register.md",
+        "docs/architecture/system-architecture.md",
+        "docs/backend/django-sqlserver-integration-contract.md",
+        "docs/project-state/CURRENT.md",
+        "docs/project-state/active-roadmap.md",
+        "docs/requirements/domain-business-rules.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "legacy-reference/CHAT_TRANSCRIPT.md",
+      "inboundDocsReferences": [
+        "docs/...",
+        "docs/CHAT_TRANSCRIPT.md",
+        "docs/CHAT_TRANSCRIPT_INCREMENTS_9_10.md",
+        "docs/fro...",
+        "docs/frontend/",
+        "docs/frontend/README.md",
+        "docs/frontend/architecture.md",
+        "docs/frontend/checklists/",
+        "docs/frontend/checklists/increment-05-enrollment-verification.md",
+        "docs/frontend/checklists/increment-06-learning-player-checklist.md",
+        "docs/frontend/checklists/increment-07-dashboard-groups-checklist.md",
+        "docs/frontend/checklists/increment-08-course-builder-checklist.md",
+        "docs/frontend/checklists/increment-09-course-review-checklist.md",
+        "docs/frontend/checklists/increment-10-manual-acceptance-checklist.md",
+        "docs/frontend/checklists/increment-10-training-groups-checklist.md",
+        "docs/frontend/checklists/increment-XX-checklist.md",
+        "docs/frontend/checklists/messaging-and-transient-feedback-checklist.md",
+        "docs/frontend/checklists/shared-ui-icon-text-alignment-checklist.md",
+        "docs/frontend/design-system.md",
+        "docs/frontend/implementation-roadmap.md",
+        "docs/frontend/legacy-inventory.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/core/auth/RolePreviewContext.tsx",
+      "inboundDocsReferences": [
+        "docs/frontend/checklists/phase-05-developer-preview-and-isolated-testing-checklist.md",
+        "docs/frontend/reports/phase-05-planning-report.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/core/permissions/policy.ts",
+      "inboundDocsReferences": [
+        "docs/backend/pre-backend-migration-remediation-roadmap.md",
+        "docs/frontend/authorization-and-permissions-design.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/core/permissions/types.ts",
+      "inboundDocsReferences": [
+        "docs/frontend/authorization-and-permissions-design.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/mocks/fixtures/contentLabFixture.ts",
+      "inboundDocsReferences": [
+        "docs/training-guidelines.pdf"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/mocks/fixtures/reviewDemoCourses.ts",
+      "inboundDocsReferences": [
+        "docs/fire-safety-code.pdf",
+        "docs/freq-regulation.pdf",
+        "docs/rotem-brake-manual.pdf",
+        "docs/tetra-standards.pdf"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/mocks/handlers/utils/routeGuards.ts",
+      "inboundDocsReferences": [
+        "docs/backend/pre-backend-migration-remediation-roadmap.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/admin-review-workflow-corrections.test.tsx",
+      "inboundDocsReferences": [
+        "docs/atp-guide.pdf"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/approval-lifecycle-execution.test.ts",
+      "inboundDocsReferences": [
+        "docs/backend/pre-backend-migration-remediation-roadmap.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/approval-ui-integration-and-attribution.test.ts",
+      "inboundDocsReferences": [
+        "docs/backend/pre-backend-migration-remediation-roadmap.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/assistant-admin-default-approval.test.ts",
+      "inboundDocsReferences": [
+        "docs/backend/pre-backend-migration-remediation-roadmap.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/course-builder-additions.test.tsx",
+      "inboundDocsReferences": [
+        "docs/cars-spec.pdf"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/course-review-feedback-diff.test.tsx",
+      "inboundDocsReferences": [
+        "docs/rules-old.pdf",
+        "docs/safety-v1.pdf",
+        "docs/safety-v2-certified.pdf"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/course-versioning-and-diffing.test.ts",
+      "inboundDocsReferences": [
+        "docs/pending-review.pdf",
+        "docs/substantive-manual-v2.pdf"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/developer-surface-protection.test.tsx",
+      "inboundDocsReferences": [
+        "docs/frontend/checklists/phase-05-developer-preview-and-isolated-testing-checklist.md",
+        "docs/frontend/reports/phase-05-planning-report.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/isolated-role-session.test.tsx",
+      "inboundDocsReferences": [
+        "docs/frontend/checklists/phase-05-developer-preview-and-isolated-testing-checklist.md",
+        "docs/frontend/reports/phase-05-planning-report.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    },
+    {
+      "codebaseFilePath": "frontend/src/test/role-preview.test.tsx",
+      "inboundDocsReferences": [
+        "docs/frontend/checklists/phase-05-developer-preview-and-isolated-testing-checklist.md",
+        "docs/frontend/reports/phase-05-planning-report.md"
+      ],
+      "status": "ACTIVE_PRESERVED_NO_CHANGE"
+    }
+  ],
+  "phase0CreatedArtifacts": [
+    {
+      "id": "DOC-P0-001",
+      "path": "docs/00-governance/AGENTS.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-002",
+      "path": "docs/00-governance/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-003",
+      "path": "docs/00-governance/continuous-update-protocol.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-004",
+      "path": "docs/00-governance/decision-register.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-005",
+      "path": "docs/00-governance/documentation-authority-hierarchy.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-006",
+      "path": "docs/01-requirements/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-007",
+      "path": "docs/02-architecture-and-design/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-008",
+      "path": "docs/03-technical-documentation/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-009",
+      "path": "docs/04-testing/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-010",
+      "path": "docs/05-user-documentation/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-011",
+      "path": "docs/06-operations-and-maintenance/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-012",
+      "path": "docs/07-project-and-process/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-013",
+      "path": "docs/_templates/ADR-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-014",
+      "path": "docs/_templates/APISpec-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-015",
+      "path": "docs/_templates/BRD-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-016",
+      "path": "docs/_templates/BugReport-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-017",
+      "path": "docs/_templates/DatabaseSpec-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-018",
+      "path": "docs/_templates/DeploymentGuide-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-019",
+      "path": "docs/_templates/DomainLogic-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-020",
+      "path": "docs/_templates/FRD-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-021",
+      "path": "docs/_templates/HLD-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-022",
+      "path": "docs/_templates/LLD-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-023",
+      "path": "docs/_templates/MasterTestPlan-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-024",
+      "path": "docs/_templates/NFR-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-025",
+      "path": "docs/_templates/OperationalRunbook-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-026",
+      "path": "docs/_templates/README.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-027",
+      "path": "docs/_templates/RiskRegister-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-028",
+      "path": "docs/_templates/SOP-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-029",
+      "path": "docs/_templates/SRS-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-030",
+      "path": "docs/_templates/TestCase-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-031",
+      "path": "docs/_templates/TestExecutionReport-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-032",
+      "path": "docs/_templates/UseCase-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    },
+    {
+      "id": "DOC-P0-033",
+      "path": "docs/_templates/UserManual-template.md",
+      "origin": "phase_0_scaffolding",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Governance Hub, Category Navigation Portal, or Authoring Template"
+    }
+  ],
+  "lastUpdatedAt": "2026-11-12T21:35:00Z",
+  "phase1CreatedArtifacts": [
+    {
+      "id": "DOC-P1-001",
+      "path": "docs/01-requirements/brd/BRD-001-cairo-metro-lms-platform.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Business Requirements Document (Organizational Mission, Scope & Business Goals)"
+    },
+    {
+      "id": "DOC-P1-002",
+      "path": "docs/01-requirements/srs/SRS-001-core-system-requirements.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Software Requirements Specification — Core System Functional Scope (IEEE 830)"
+    },
+    {
+      "id": "DOC-P1-003",
+      "path": "docs/01-requirements/srs/SRS-002-non-functional-requirements.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Non-Functional Requirements Specification (Proposed Latency, Concurrency, Availability, Security)"
+    },
+    {
+      "id": "DOC-P1-004",
+      "path": "docs/02-architecture-and-design/adr/README.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Master Architecture Decision Records Catalog & Navigation Portal"
+    },
+    {
+      "id": "DOC-P1-005",
+      "path": "docs/02-architecture-and-design/adr/ADR-001-django-server-sessions.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 001: Django Server-Side Sessions & Cookie Security (D-AUTH-01)"
+    },
+    {
+      "id": "DOC-P1-006",
+      "path": "docs/02-architecture-and-design/adr/ADR-002-microsoft-sql-server-engine.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 002: Microsoft SQL Server Target Database Engine (D-DB-01)"
+    },
+    {
+      "id": "DOC-P1-007",
+      "path": "docs/02-architecture-and-design/adr/ADR-003-frontend-security-and-xss.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 003: Frontend Security, DOMPurify & XSS Hardening (D-SEC-01)"
+    },
+    {
+      "id": "DOC-P1-008",
+      "path": "docs/02-architecture-and-design/adr/ADR-004-decoupled-media-storage.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 004: Decoupled Enterprise Media Storage Contract (D-MEDIA-01)"
+    },
+    {
+      "id": "DOC-P1-009",
+      "path": "docs/02-architecture-and-design/adr/ADR-005-in-place-group-renewal.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 005: In-Place Training Group Renewal Architecture (D-GRP-01, D-GRP-04)"
+    },
+    {
+      "id": "DOC-P1-010",
+      "path": "docs/02-architecture-and-design/adr/ADR-006-day-based-recurrence.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 006: Day-Based Calendar Recurrence Measurement (D-GRP-02)"
+    },
+    {
+      "id": "DOC-P1-011",
+      "path": "docs/02-architecture-and-design/adr/ADR-007-persistent-reminder-type.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 007: Monotonic Reminder Type Progression Marker (D-GRP-06)"
+    },
+    {
+      "id": "DOC-P1-012",
+      "path": "docs/02-architecture-and-design/adr/ADR-008-archive-exclusion-contract.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Architecture Decision Record 008: Trainee Active View Archive Exclusion Contract (D-GRP-07)"
+    },
+    {
+      "id": "DOC-P1-013",
+      "path": "docs/02-architecture-and-design/hld/HLD-001-system-topology.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "High-Level Architecture Design 001: Master System Topology & Network Tiers"
+    },
+    {
+      "id": "DOC-P1-014",
+      "path": "docs/02-architecture-and-design/hld/HLD-002-technology-stack.md",
+      "origin": "phase_1_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "High-Level Architecture Design 002: Technology Stack & Component Architecture"
+    }
+  ],
+  "phase2aCreatedInventory": [
+    {
+      "id": "DOC-P2A-001",
+      "path": "docs/01-requirements/domains/domain-01-authentication-and-sessions.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 01 Business Rules: Authentication & Sessions (D-AUTH-01)"
+    },
+    {
+      "id": "DOC-P2A-002",
+      "path": "docs/01-requirements/domains/domain-02-users-and-profiles.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 02 Business Rules: Users, Profiles & Account Lifecycle (D-01..D-03, D-09, D-11)"
+    },
+    {
+      "id": "DOC-P2A-003",
+      "path": "docs/01-requirements/domains/domain-03-roles-permissions-and-switching.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 03 Business Rules: Roles, Permissions & Switching (D-SEC-01, D-10, D-14, INV-R1..R10)"
+    },
+    {
+      "id": "DOC-P2A-004",
+      "path": "docs/01-requirements/domains/domain-04-course-catalog-and-discovery.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 04 Business Rules: Course Catalog & Discovery"
+    },
+    {
+      "id": "DOC-P2A-005",
+      "path": "docs/01-requirements/domains/domain-05-course-creation-and-builder.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 05 Business Rules: Course Creation & Builder"
+    },
+    {
+      "id": "DOC-P2A-006",
+      "path": "docs/01-requirements/domains/domain-06-course-content-and-lessons.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 06 Business Rules: Course Content & Lessons (D-MEDIA-01, D-SEC-01)"
+    },
+    {
+      "id": "DOC-P2A-007",
+      "path": "docs/01-requirements/domains/domain-07-published-versions-and-diffs.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 07 Business Rules: Published Versions & Diffs (Rule B)"
+    },
+    {
+      "id": "DOC-P2A-008",
+      "path": "docs/02-architecture-and-design/lld/LLD-001-session-lifecycle-state-machine.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Low-Level Design 001: Session Lifecycle State Machine (S0-S15)"
+    },
+    {
+      "id": "DOC-P2A-009",
+      "path": "docs/02-architecture-and-design/lld/LLD-002-course-versioning-diff-engine.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Low-Level Design 002: Course Versioning & Diff Engine (Rule B)"
+    },
+    {
+      "id": "DOC-P2A-010",
+      "path": "docs/03-technical-documentation/domains/auth/domain-01-authentication-and-sessions.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 01: Authentication & Sessions"
+    },
+    {
+      "id": "DOC-P2A-011",
+      "path": "docs/03-technical-documentation/domains/auth/domain-02-users-and-profiles.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 02: Users & Profiles"
+    },
+    {
+      "id": "DOC-P2A-012",
+      "path": "docs/03-technical-documentation/domains/auth/domain-03-roles-permissions-and-switching.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 03: Roles, Permissions & Switching"
+    },
+    {
+      "id": "DOC-P2A-013",
+      "path": "docs/03-technical-documentation/domains/courses/domain-04-course-catalog-and-discovery.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 04: Course Catalog & Discovery"
+    },
+    {
+      "id": "DOC-P2A-014",
+      "path": "docs/03-technical-documentation/domains/courses/domain-05-course-creation-and-builder.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 05: Course Creation & Builder"
+    },
+    {
+      "id": "DOC-P2A-015",
+      "path": "docs/03-technical-documentation/domains/courses/domain-06-course-content-and-lessons.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 06: Course Content & Lessons"
+    },
+    {
+      "id": "DOC-P2A-016",
+      "path": "docs/03-technical-documentation/domains/courses/domain-07-published-versions-and-diffs.md",
+      "origin": "phase_2a_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 07: Published Versions & Diffs"
+    }
+  ],
+  "phase2bCreatedInventory": [
+    {
+      "id": "DOC-P2B-001",
+      "path": "docs/01-requirements/domains/domain-08-training-groups-management.md",
+      "origin": "phase_2b_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 08 Business Rules: Training Groups Management"
+    },
+    {
+      "id": "DOC-P2B-002",
+      "path": "docs/01-requirements/domains/domain-09-group-membership-and-rosters.md",
+      "origin": "phase_2b_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 09 Business Rules: Group Membership & Trainee Rosters"
+    },
+    {
+      "id": "DOC-P2B-003",
+      "path": "docs/01-requirements/domains/domain-10-reminder-programs-and-in-place-renewal.md",
+      "origin": "phase_2b_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Domain 10 Business Rules: Reminder Programs & In-Place Renewal"
+    },
+    {
+      "id": "DOC-P2B-004",
+      "path": "docs/02-architecture-and-design/lld/LLD-003-group-renewal-cycle-manager.md",
+      "origin": "phase_2b_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "LLD-003: Group Renewal Cycle Manager & In-Place Renewal Engine"
+    },
+    {
+      "id": "DOC-P2B-005",
+      "path": "docs/03-technical-documentation/domains/groups/domain-08-training-groups-management.md",
+      "origin": "phase_2b_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 08: Training Groups Management"
+    },
+    {
+      "id": "DOC-P2B-006",
+      "path": "docs/03-technical-documentation/domains/groups/domain-09-group-membership-and-rosters.md",
+      "origin": "phase_2b_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 09: Group Membership & Trainee Rosters"
+    },
+    {
+      "id": "DOC-P2B-007",
+      "path": "docs/03-technical-documentation/domains/groups/domain-10-reminder-programs-and-in-place-renewal.md",
+      "origin": "phase_2b_execution",
+      "status": "ACTIVE_AUTHORITATIVE",
+      "purpose": "Technical Domain Specification 10: Reminder Programs & In-Place Renewal"
+    }
+  ]
+}

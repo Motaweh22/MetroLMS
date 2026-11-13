@@ -104,42 +104,42 @@ The audit was conducted strictly in accordance with **Documentation-First** prin
 ### A. Confirmed Missing Features
 
 #### 1. Centralized User Directory & Account Lifecycle (`/admin/users`)
-- **Legacy Implementation:** [`js/admin.js:17–390`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/admin.js#L17-L390) (`renderUsersPage`, `renderUsersTable`, `applyFilters`, `changeUserRole`, `toggleUserStatus`, `openAddUserModal`).
+- **Legacy Implementation:** [`js/admin.js:17–390`](../../legacy-reference/js/admin.js#L17-L390) (`renderUsersPage`, `renderUsersTable`, `applyFilters`, `changeUserRole`, `toggleUserStatus`, `openAddUserModal`).
 - **React Status:** Completely absent from `src/app/router/index.tsx` and `src/pages/`.
 - **Functional Impact:** Administrators cannot view user rosters, cannot filter users by department or role, cannot create new employee accounts, cannot suspend accounts, and cannot alter permissions.
 - **Increment 11 Plan:** **Required in Increment 11 (Phase 1 & Phase 2).**
 - **User Clarification:** No clarification required. Core LMS administrative requirement.
 
 #### 2. User Detail Page & Training Transcript (`/admin/users/:userId`)
-- **Legacy Implementation:** [`js/admin.js:391–622`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/admin.js#L391-L622) (`renderUserDetailPage`).
+- **Legacy Implementation:** [`js/admin.js:391–622`](../../legacy-reference/js/admin.js#L391-L622) (`renderUserDetailPage`).
 - **React Status:** Absent from `src/app/router/index.tsx` and `src/pages/`.
 - **Functional Impact:** Administrators cannot inspect an individual trainee's training history, total learning hours, times opened per course, completion percentages, or most-watched lesson items.
 - **Increment 11 Plan:** **Required in Increment 11 (Phase 3).**
 - **User Clarification:** No clarification required. Directly maps to legacy transcript view.
 
 #### 3. Role Permissions Matrix & System Audit Trail (`/admin/permissions`)
-- **Legacy Implementation:** [`js/admin.js:1308–1480`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/admin.js#L1308-L1480) (`renderPermissionsPage`, tabs `tab-matrix`, `tab-audit`, `tab-departments`).
+- **Legacy Implementation:** [`js/admin.js:1308–1480`](../../legacy-reference/js/admin.js#L1308-L1480) (`renderPermissionsPage`, tabs `tab-matrix`, `tab-audit`, `tab-departments`).
 - **React Status:** Absent from `src/app/router/index.tsx`.
 - **Functional Impact:** Lack of administrative visibility into role permissions and system-level actions (user creation, course edits, account suspensions, IP addresses).
 - **Increment 11 Plan:** **Required in Increment 11 (Phase 4).**
 - **Decision 1 Resolution:** Option A chosen with an explicit enforcement boundary: Department permissions matrix settings are editable and persisted in the mock store, but catalog gating is deferred until explicit authorization rules are formally reviewed. Recorded as an unresolved legacy business rule.
 
 #### 4. System Statistics & Reporting Dashboard (`/stats`)
-- **Legacy Implementation:** [`js/admin.js:898–1074`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/admin.js#L898-L1074) (`renderStatsPage`) and [`js/lecturer.js:686–818`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/lecturer.js#L686-L818).
+- **Legacy Implementation:** [`js/admin.js:898–1074`](../../legacy-reference/js/admin.js#L898-L1074) (`renderStatsPage`) and [`js/lecturer.js:686–818`](../../legacy-reference/js/lecturer.js#L686-L818).
 - **React Status:** Absent from `src/app/router/index.tsx`.
 - **Functional Impact:** No executive LMS-wide completion rates, enrollment statistics, drop-out analytics, peak viewing hours charts, or top performing courses/trainees.
 - **Increment 11 / 12 Plan:** **Deferred to Increment 12.** While individual trainee transcript records remain in Increment 11 Phase 3 (`/admin/users/:userId`) and course-level progress indicators remain in Increment 11 Phase 5 (`/lecturer/performance/:courseId`), the platform-wide executive reporting dashboard, aggregate completion distributions, and CSS peak viewing charts are rescheduled to a dedicated milestone in Increment 12.
 - **Dependencies for Increment 12:** Increment 11 centralized user directory, reliable course-attempt ledgers, and learning-progress contracts.
 
 #### 5. Comment Moderation Queue & Policy (`/admin/comment-moderation`)
-- **Legacy Implementation:** [`js/admin.js:1075–1307`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/admin.js#L1075-L1307) (`renderCommentModerationPage`).
+- **Legacy Implementation:** [`js/admin.js:1075–1307`](../../legacy-reference/js/admin.js#L1075-L1307) (`renderCommentModerationPage`).
 - **React Status:** Absent from `src/app/router/index.tsx`.
 - **Functional Impact:** No interface to review reported comments, delete offending remarks, ignore false reports, or toggle discussion forums per course.
 - **Increment 11 Plan:** **Required in Increment 11 (Phase 5).**
 - **User Clarification:** No clarification required. Data schema verified in `data/courses.json`.
 
 #### 6. Course Trainee Performance & WhatsApp Reminder (`/lecturer/performance/:courseId`)
-- **Legacy Implementation:** [`js/lecturer.js:819–950`](file:///c:/Users/Administrator/Desktop/metro%20courses/js/lecturer.js#L819-L950) (`renderCoursePerformancePage`).
+- **Legacy Implementation:** [`js/lecturer.js:819–950`](../../legacy-reference/js/lecturer.js#L819-L950) (`renderCoursePerformancePage`).
 - **React Status:** Route was documented in `legacy-inventory.md` for Increment 8, but never implemented in React router or feature components.
 - **Functional Impact:** Lecturers cannot inspect the learner roster for a specific individual course (outside of groups) or trigger pre-formatted WhatsApp nudges to late trainees (`daysSince > 5`).
 - **Increment 11 Plan:** **Required in Increment 11 (Phase 5).**
@@ -151,7 +151,7 @@ The audit was conducted strictly in accordance with **Documentation-First** prin
 
 #### 1. Candidate Trainees Disconnect from User Roster
 - **Legacy Evidence:** In legacy `admin.js`, training group trainee assignment pulled directly from `DataService.getUsers()`.
-- **React Evidence:** [`src/mocks/store/inMemoryStore.ts:4241–4263`](file:///c:/Users/Administrator/Desktop/metro%20courses/frontend/src/mocks/store/inMemoryStore.ts#L4241-L4263) hardcodes IDs `usr_trainee_003` and `USR003`–`USR010` and resolves metadata through an isolated internal dictionary rather than a shared user directory.
+- **React Evidence:** [`src/mocks/store/inMemoryStore.ts:4241–4263`](../../frontend/src/mocks/store/inMemoryStore.ts#L4241-L4263) hardcodes IDs `usr_trainee_003` and `USR003`–`USR010` and resolves metadata through an isolated internal dictionary rather than a shared user directory.
 - **Functional Impact:** Adding a new user in user management will not automatically appear as a candidate trainee for training group direct assignment.
 - **Remediation Plan:** Unify `getCandidateTrainees()` to pull from the centralized User Store created in Increment 11.
 

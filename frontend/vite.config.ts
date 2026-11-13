@@ -124,11 +124,35 @@ function devTestMediaPlugin(): Plugin {
   };
 }
 
+/**
+ * Narrow production-build asset hygiene plugin.
+ * Removes `mockServiceWorker.js` copied from `public/` into the build output directory (`dist/`)
+ * during production builds (`apply: 'build'`), while leaving `public/mockServiceWorker.js`
+ * completely untouched on disk for development (`vite`) and testing (`vitest`).
+ */
+function excludeMswWorkerInBuildPlugin(): Plugin {
+  let resolvedOutDir = path.resolve(__dirname, 'dist');
+  return {
+    name: 'exclude-msw-worker-in-build',
+    apply: 'build',
+    configResolved(config) {
+      resolvedOutDir = path.resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      const workerOutputPath = path.join(resolvedOutDir, 'mockServiceWorker.js');
+      if (fs.existsSync(workerOutputPath)) {
+        fs.unlinkSync(workerOutputPath);
+      }
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
     devTestMediaPlugin(),
+    excludeMswWorkerInBuildPlugin(),
   ],
   resolve: {
     alias: {

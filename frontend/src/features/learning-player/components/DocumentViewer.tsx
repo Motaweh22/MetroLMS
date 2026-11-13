@@ -7,6 +7,7 @@ export interface DocumentViewerProps {
   item: EnrichedChapterItem;
   isCompleted?: boolean;
   isSubmitting?: boolean;
+  isReadOnly?: boolean;
   onComplete: (itemId: string) => void;
 }
 
@@ -14,6 +15,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   item,
   isCompleted = false,
   isSubmitting = false,
+  isReadOnly = false,
   onComplete,
 }) => {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(5);
@@ -243,6 +245,10 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
             <span style={{ color: '#94A3B8' }}>
               يرجى قراءة المستند ({secondsRemaining} ثوانٍ لتفعيل زر الإكمال)
             </span>
+          ) : isReadOnly ? (
+            <span style={{ color: '#94A3B8' }} data-testid="doc-review-only-badge">
+              وضع المراجعة والاطلاع فقط
+            </span>
           ) : (
             <span style={{ color: '#38BDF8' }}>
               يمكنك الآن تأكيد إكمال قراءة المستند
@@ -250,7 +256,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
           )}
         </div>
 
-        {!isCompleted && (
+        {!isCompleted && !isReadOnly && (
           <Button
             variant="primary"
             size="sm"

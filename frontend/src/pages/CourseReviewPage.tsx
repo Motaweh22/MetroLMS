@@ -140,6 +140,7 @@ export const CourseReviewPage: React.FC = () => {
     saveImmediately,
   } = useStagedEditsAutosave({
     courseId: courseId || '',
+    adminId: user?.id,
     baselineCourse: reviewData?.course || reviewData?.effectiveContent || null,
     initialStagedEdits: reviewData?.stagedEdits,
     initialRevision: reviewData?.stagedEdits?.clientRevision ?? 0,

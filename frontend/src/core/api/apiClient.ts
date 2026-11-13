@@ -5,6 +5,7 @@ import {
   triggerRolePreviewBlockedNotification,
   ROLE_PREVIEW_MUTATION_BLOCKED_MESSAGE,
 } from '@/core/auth/previewMutationBarrier';
+import { getCurrentSessionEpoch, isStaleEpoch } from '@/core/auth/sessionEpoch';
 
 /**
  * Standard typed API error representing network, HTTP, or data-parsing failures.
@@ -29,6 +30,39 @@ export class ApiError extends Error {
     this.url = url;
     this.isNetworkError = isNetworkError;
   }
+}
+
+/**
+ * Error thrown when an asynchronous API operation resolves after the authenticated
+ * session has transitioned to another identity or become unauthenticated (WP-5.4.2).
+ * Prevents stale in-flight responses and delayed error handlers from mutating state.
+ */
+export class StaleEpochError extends Error {
+  readonly status = 0;
+  readonly requestEpoch: number;
+  readonly currentEpoch: number;
+  readonly isStale: boolean = true;
+  readonly isNetworkError: boolean = false;
+  readonly url?: string;
+
+  constructor(requestEpoch: number, currentEpoch: number, url?: string) {
+    super(
+      `Stale API response discarded: request epoch ${requestEpoch} superseded by session epoch ${currentEpoch}${
+        url ? ` for ${url}` : ''
+      }.`
+    );
+    this.name = 'StaleEpochError';
+    this.requestEpoch = requestEpoch;
+    this.currentEpoch = currentEpoch;
+    this.url = url;
+  }
+}
+
+export function isStaleEpochError(error: unknown): error is StaleEpochError {
+  return (
+    error instanceof StaleEpochError ||
+    (typeof error === 'object' && error !== null && (error as { isStale?: boolean }).isStale === true)
+  );
 }
 
 export interface RequestOptions extends RequestInit {
@@ -120,6 +154,40 @@ export function sanitizeErrorMessage(
 }
 
 /**
+ * Safely extracts the Django CSRF token (`csrftoken`) from `document.cookie`.
+ * Returns null in non-browser contexts or if the cookie is absent.
+ * Safe against malformed percent-encoding; does not throw uncaught exceptions.
+ */
+export function getCsrfToken(): string | null {
+  if (typeof document === 'undefined' || !document.cookie) {
+    return null;
+  }
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  if (!match || !match[1]) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+/**
+ * Determines whether a target URL shares the same origin as the application.
+ * Relative URLs are inherently same-origin.
+ */
+export function isSameOriginUrl(url: string): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Core HTTP Client
  *
  * Single location for network transport, header injection,
@@ -130,6 +198,9 @@ export async function apiClient<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const { params, headers = {}, ...customConfig } = options;
+
+  // Capture the session transition epoch under which this request was dispatched (WP-5.4.2)
+  const requestEpoch = getCurrentSessionEpoch();
 
   let url = endpoint;
   if (params) {
@@ -146,12 +217,15 @@ export async function apiClient<T>(
     'Accept': 'application/json',
   };
 
-  if (session?.token) {
+  // In development mode only, provide Bearer token fallback for current MSW prototype handlers.
+  // In production builds, authentication is strictly cookie-based and zero Bearer header is injected.
+  if (import.meta.env.DEV && session?.token) {
     defaultHeaders['Authorization'] = `Bearer ${session.token}`;
   }
 
   const config: RequestInit = {
     ...customConfig,
+    credentials: 'same-origin',
     headers: {
       ...defaultHeaders,
       ...headers,
@@ -162,12 +236,28 @@ export async function apiClient<T>(
   // Intercept state-changing operations during Visual Role Preview to protect Developer authorization authority
   const method = (customConfig.method || 'GET').toUpperCase();
   const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+
+  // Attach Django CSRF token for same-origin mutating requests (POST, PUT, PATCH, DELETE)
+  if (isMutation && isSameOriginUrl(url)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      (config.headers as Record<string, string>)['X-CSRFToken'] = csrfToken;
+    }
+  }
   
   // Authentication Lifecycle Exemption: Session termination (POST /api/auth/logout) must never be blocked
   // by Visual Role Preview, ensuring the Developer can safely log out and terminate their session.
   // Gated strictly to method === 'POST' and exact normalized path '/api/auth/logout'.
   const normalizedPath = url.split('?')[0].replace(/\/+$/, '');
   const isSessionTermination = method === 'POST' && normalizedPath === '/api/auth/logout';
+
+  // Authentication Control-Plane Exemption (WP-5.4.2):
+  // Lifecycle operations that establish or terminate authenticated identities must not be discarded
+  // by their own epoch-advancing response, while separating them cleanly from protected data requests.
+  const isAuthControlPlane =
+    normalizedPath === '/api/auth/login' ||
+    normalizedPath === '/api/auth/logout' ||
+    normalizedPath === '/api/auth/me';
 
   if (isMutation && isRolePreviewMutationBlocked()) {
     if (isSessionTermination) {
@@ -188,6 +278,10 @@ export async function apiClient<T>(
   try {
     response = await fetch(url, config);
   } catch (err: unknown) {
+    // Stale In-Flight Protection: discard delayed network errors if session has transitioned (WP-5.4.2)
+    if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+      throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+    }
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new ApiError('تم إلغاء الطلب.', 0, null, url, true);
     }
@@ -201,22 +295,38 @@ export async function apiClient<T>(
     );
   }
 
+  // Pre-commit epoch validation: discard response immediately if session epoch advanced (WP-5.4.2)
+  if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+    throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+  }
+
   const contentType = response.headers.get('content-type');
   const isJson = isJsonResponse(contentType);
 
   // Handle 204 No Content
   if (response.status === 204) {
+    if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+      throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+    }
     return {} as T;
   }
 
   // Handle HTTP error responses (!response.ok)
   if (!response.ok) {
+    if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+      throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+    }
+
     let errorMessage = getLocalizedStatusMessage(response.status);
     let errorData: unknown = null;
 
     if (isJson) {
       try {
         errorData = await response.json();
+        // Post-parse validation: ensure epoch did not advance while reading error response body (WP-5.4.2 Audit)
+        if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+          throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+        }
         if (
           typeof errorData === 'object' &&
           errorData !== null &&
@@ -229,7 +339,10 @@ export async function apiClient<T>(
             errorMessage = rawServerMessage;
           }
         }
-      } catch {
+      } catch (err: unknown) {
+        if (isStaleEpochError(err)) {
+          throw err;
+        }
         // Failed to parse JSON error data; fall back to localized status message
       }
     } else {
@@ -243,11 +356,18 @@ export async function apiClient<T>(
       }
     }
 
+    if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+      throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+    }
+
     throw new ApiError(errorMessage, response.status, errorData, url);
   }
 
   // Handle HTTP success responses (response.ok) that are NOT JSON (e.g. Vite SPA fallback serving index.html)
   if (!isJson) {
+    if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+      throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+    }
     throw new ApiError(
       'استجابة غير متوقعة من الخادم (تم استلام مستند HTML بدلاً من بيانات JSON). يرجى التأكد من تشغيل الخادم.',
       response.status,
@@ -256,10 +376,20 @@ export async function apiClient<T>(
     );
   }
 
-  // Safe JSON parsing for valid JSON responses
+  // Safe JSON parsing for valid JSON responses with post-parse epoch validation
   try {
-    return (await response.json()) as T;
-  } catch {
+    const data = (await response.json()) as T;
+    if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+      throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+    }
+    return data;
+  } catch (parseErr: unknown) {
+    if (isStaleEpochError(parseErr)) {
+      throw parseErr;
+    }
+    if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
+      throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
+    }
     throw new ApiError(
       'تعذر معالجة استجابة الخادم بسبب تنسيق بيانات غير صالح.',
       response.status,

@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { DemoAccountPicker } from './DemoAccountPicker';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
+import { Icon } from '@/shared/ui/Icon';
 import { brandConfig } from '@/shared/config/brand';
 import { buildWhatsAppUrl, usePublicSupportContacts } from '@/features/whatsapp';
 import type { SyntheticMockAccount } from '@/core/auth/demoAccounts';
@@ -32,11 +33,12 @@ export interface LoginFormProps {
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
-  const { login, isLoading, error, clearError } = useAuth();
+  const { login, error, clearError, logoutStatus, retryLogout } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [showSignupModal, setShowSignupModal] = useState(false);
@@ -79,17 +81,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
     e.preventDefault();
     clearError();
 
-    if (!validate()) return;
+    if (!validate() || isSubmitting) return;
 
+    setIsSubmitting(true);
     try {
       await login({ email: email.trim(), password });
       onSuccess?.();
     } catch {
       // Error is captured in AuthContext and rendered in .login-error
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSelectDemoAccount = (account: SyntheticMockAccount) => {
+    if (isSubmitting) return;
     setEmail(account.credentials.email);
     setPassword(account.credentials.password);
     setFieldErrors({});
@@ -146,8 +152,32 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
           {/* Error Message Box matching legacy .login-error */}
           {error && (
             <div className="login-error visible" id="login-error" role="alert">
-              <span aria-hidden="true">⚠️</span>
-              <span>{error}</span>
+              <Icon name="alert" size="md" className="shrink-0 text-[#9F1239]" aria-hidden="true" />
+              <div className="login-error-content" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span>{error}</span>
+                {logoutStatus === 'LOGOUT_UNCONFIRMED' && retryLogout && (
+                  <button
+                    type="button"
+                    className="retry-logout-btn"
+                    id="retry-logout-btn"
+                    onClick={() => retryLogout()}
+                    style={{
+                      display: 'inline-block',
+                      alignSelf: 'flex-start',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      textDecoration: 'underline',
+                      background: 'none',
+                      border: 'none',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    إعادة محاولة تأكيد تسجيل الخروج
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -165,7 +195,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                   required
                   autoComplete="username"
                   value={email}
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                   className={fieldErrors.email ? 'input-has-error' : ''}
                   onChange={(e) => {
                     setEmail(e.target.value);
@@ -208,7 +238,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                   required
                   autoComplete="current-password"
                   value={password}
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                   className={fieldErrors.password ? 'input-has-error' : ''}
                   onChange={(e) => {
                     setPassword(e.target.value);
@@ -282,12 +312,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
             {/* Submit button with loading state */}
             <button
               type="submit"
-              className={`login-btn ${isLoading ? 'loading' : ''}`}
+              className={`login-btn ${isSubmitting ? 'loading' : ''}`}
               id="login-btn"
               aria-label="تسجيل الدخول إلى المنظومة"
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   جارِ تسجيل الدخول
                   <span className="spinner" aria-hidden="true" />
@@ -323,7 +353,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
       <div className="login-demo-container">
         <DemoAccountPicker
           onSelectAccount={handleSelectDemoAccount}
-          isLoading={isLoading}
+          isLoading={isSubmitting}
         />
       </div>
 

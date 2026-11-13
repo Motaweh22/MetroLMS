@@ -3,6 +3,7 @@ import { Icon } from '@/shared/ui/Icon/Icon';
 import { clampSeekingPosition, formatDuration } from '@/core/domain/progress';
 import { useVideoProgressSync } from '../hooks/useVideoProgressSync';
 import type { LessonProgress } from '../types';
+import '@/features/learning-player/styles/learningPlayer.css';
 
 export interface VideoPlayerProps {
   courseId?: string;
@@ -13,6 +14,7 @@ export interface VideoPlayerProps {
   initialPosition?: number;
   furthestWatched?: number;
   isCompleted?: boolean;
+  isReadOnly?: boolean;
   onComplete: (itemId: string) => Promise<boolean> | void;
   onLocalProgressUpdate?: (itemId: string, activity: Partial<LessonProgress>) => void;
 }
@@ -26,13 +28,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   initialPosition = 0,
   furthestWatched = 0,
   isCompleted = false,
+  isReadOnly = false,
   onComplete,
   onLocalProgressUpdate,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const hasCompletedRef = useRef<boolean>(isCompleted);
+  const furthestWatchedRef = useRef<number>(Math.max(initialPosition, furthestWatched));
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const seekingClampedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(initialPosition);
@@ -47,18 +52,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isBuffering, setIsBuffering] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
   const [seekingClamped, setSeekingClamped] = useState<boolean>(false);
+  const [seekClampKey, setSeekClampKey] = useState<number>(0);
   const [showControls, setShowControls] = useState<boolean>(true);
   const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
 
-  // Sync completion ref with prop
+  // Trigger seeking clamped warning with active timer reset and animation remounting
+  const triggerSeekingClamped = useCallback(() => {
+    if (seekingClampedTimeoutRef.current) {
+      clearTimeout(seekingClampedTimeoutRef.current);
+    }
+    setSeekingClamped(true);
+    setSeekClampKey((prev) => prev + 1);
+    seekingClampedTimeoutRef.current = setTimeout(() => {
+      setSeekingClamped(false);
+      seekingClampedTimeoutRef.current = null;
+    }, 2500);
+  }, []);
+
+  // Cleanup pending seeking clamped timer on unmount
+  useEffect(() => {
+    return () => {
+      if (seekingClampedTimeoutRef.current) {
+        clearTimeout(seekingClampedTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Sync completion and furthestWatched refs with props
   useEffect(() => {
     hasCompletedRef.current = isCompleted;
   }, [isCompleted]);
 
+  useEffect(() => {
+    const safeMax = Math.max(initialPosition, furthestWatched);
+    furthestWatchedRef.current = Math.max(furthestWatchedRef.current, safeMax);
+  }, [initialPosition, furthestWatched]);
+
   // Reset or initialize when lesson item changes
   useEffect(() => {
+    const initialFurthest = Math.max(initialPosition, furthestWatched);
     setCurrentTime(initialPosition);
-    setFurthestWatchedSecs(Math.max(initialPosition, furthestWatched));
+    setFurthestWatchedSecs(initialFurthest);
+    furthestWatchedRef.current = initialFurthest;
     setHasError(false);
     setIsBuffering(false);
     setIsPlaying(false);
@@ -69,7 +104,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
   }, [itemId, initialPosition, furthestWatched, playbackRate]);
 
-  // Throttled background watch progress synchronization
+  // Throttled background watch progress synchronization (suppressed in read-only mode)
   useVideoProgressSync({
     courseId,
     itemId,
@@ -78,6 +113,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     furthestWatched: furthestWatchedSecs,
     duration,
     onLocalUpdate: onLocalProgressUpdate,
+    isReadOnly,
   });
 
   // Fullscreen state listener (handles button click and native Escape key)
@@ -128,6 +164,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     // Legitimate continuous playback expands furthestWatchedSecs
     setFurthestWatchedSecs((prev) => {
       const newFurthest = Math.max(prev, curr);
+      furthestWatchedRef.current = Math.max(furthestWatchedRef.current, newFurthest);
       // Check 90% completion threshold
       const totalDur = videoRef.current?.duration || duration;
       if (
@@ -172,13 +209,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const handleSeeking = () => {
     if (!videoRef.current) return;
     const target = videoRef.current.currentTime;
+    const safeFurthest = furthestWatchedRef.current;
 
     // Forward-seeking restriction for incomplete lessons
-    if (!hasCompletedRef.current && target > furthestWatchedSecs + 0.5) {
-      videoRef.current.currentTime = furthestWatchedSecs;
-      setCurrentTime(furthestWatchedSecs);
-      setSeekingClamped(true);
-      setTimeout(() => setSeekingClamped(false), 2500);
+    if (!hasCompletedRef.current && target > safeFurthest + 0.05) {
+      videoRef.current.currentTime = safeFurthest;
+      setCurrentTime(safeFurthest);
+      triggerSeekingClamped();
     }
   };
 
@@ -244,6 +281,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     resetControlsTimeout();
   }, [resetControlsTimeout]);
 
+  // Authoritative seek request processor shared across scrubber, keyboard, and direct requests
+  const requestSeek = useCallback(
+    (targetSeconds: number) => {
+      if (!videoRef.current || duration <= 0) return;
+      const safeFurthest = furthestWatchedRef.current;
+      const clampedSeconds = clampSeekingPosition(
+        targetSeconds,
+        safeFurthest,
+        hasCompletedRef.current
+      );
+
+      if (clampedSeconds < targetSeconds && !hasCompletedRef.current) {
+        triggerSeekingClamped();
+      }
+
+      videoRef.current.currentTime = clampedSeconds;
+      setCurrentTime(clampedSeconds);
+      resetControlsTimeout();
+    },
+    [duration, triggerSeekingClamped, resetControlsTimeout]
+  );
+
   // Scrubber seeking interaction
   const handleTimelineSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!videoRef.current || duration <= 0) return;
@@ -251,22 +310,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const clickX = e.clientX - rect.left;
     const percent = Math.max(0, Math.min(1, clickX / rect.width));
     const targetSeconds = percent * duration;
-
-    // Apply seeking clamping
-    const clampedSeconds = clampSeekingPosition(
-      targetSeconds,
-      furthestWatchedSecs,
-      hasCompletedRef.current
-    );
-
-    if (clampedSeconds < targetSeconds && !hasCompletedRef.current) {
-      setSeekingClamped(true);
-      setTimeout(() => setSeekingClamped(false), 2500);
-    }
-
-    videoRef.current.currentTime = clampedSeconds;
-    setCurrentTime(clampedSeconds);
-    resetControlsTimeout();
+    requestSeek(targetSeconds);
   };
 
   // Keyboard navigation & accessibility
@@ -304,30 +348,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           const newTime = Math.max(0, videoRef.current.currentTime - 5);
           videoRef.current.currentTime = newTime;
           setCurrentTime(newTime);
+          resetControlsTimeout();
         }
       } else if (e.code === 'ArrowLeft') {
         // In Arabic RTL, ArrowLeft moves forward in video timeline (clamped)
         e.preventDefault();
         if (videoRef.current) {
-          const target = videoRef.current.currentTime + 5;
-          const clamped = clampSeekingPosition(
-            target,
-            furthestWatchedSecs,
-            hasCompletedRef.current
-          );
-          if (clamped < target && !hasCompletedRef.current) {
-            setSeekingClamped(true);
-            setTimeout(() => setSeekingClamped(false), 2500);
-          }
-          videoRef.current.currentTime = clamped;
-          setCurrentTime(clamped);
+          requestSeek(videoRef.current.currentTime + 5);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleMute, toggleFullscreen, furthestWatchedSecs]);
+  }, [togglePlay, toggleMute, toggleFullscreen, requestSeek, resetControlsTimeout]);
 
   // Scrubber percentage positions
   const elapsedPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -404,9 +438,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             </div>
           )}
 
-          {/* Forward-Seeking Clamped Warning Badge */}
+          {/* Forward-Seeking Clamped Warning Badge (Resilient Visibility) */}
           {seekingClamped && (
-            <div className="seeking-clamped-badge" role="status">
+            <div
+              key={`seek-clamped-${seekClampKey}`}
+              className="seeking-clamped-badge"
+              role="status"
+              data-testid="seeking-clamped-badge"
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                zIndex: 50,
+                backgroundColor: 'rgba(220, 38, 38, 0.95)',
+                color: '#FFFFFF',
+                padding: '0.45rem 0.9rem',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+                pointerEvents: 'none',
+                opacity: 1,
+              }}
+            >
               <Icon name="lock" size="sm" />
               <span>لا يمكن التقديم للأمام متجاوزاً ما تمت مشاهدته</span>
             </div>

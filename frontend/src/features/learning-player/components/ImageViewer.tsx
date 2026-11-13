@@ -8,6 +8,7 @@ export interface ImageViewerProps {
   item: FlatCurriculumItem;
   isCompleted: boolean;
   isSubmitting?: boolean;
+  isReadOnly?: boolean;
   onComplete: (itemId: string) => Promise<boolean>;
 }
 
@@ -15,6 +16,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   item,
   isCompleted,
   isSubmitting = false,
+  isReadOnly = false,
   onComplete,
 }) => {
   const [completedLocally, setCompletedLocally] = useState<boolean>(isCompleted);
@@ -82,6 +84,10 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
             <Badge variant="success" className="px-3 py-1.5 text-xs font-bold gap-1.5">
               <Icon name="checkCircle" size="sm" />
               <span>تم إتمام هذا المخطط بنجاح</span>
+            </Badge>
+          ) : isReadOnly ? (
+            <Badge variant="neutral" className="px-3 py-1.5 text-xs font-medium" data-testid="image-review-only-badge">
+              وضع المراجعة والاطلاع فقط
             </Badge>
           ) : (
             <Button

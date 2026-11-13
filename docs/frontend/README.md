@@ -1,90 +1,47 @@
-# Cairo Metro LMS — Frontend Architecture & Design System Documentation
+# MetroLMS — Frontend Documentation Index (`docs/frontend/README.md`)
 
-Welcome to the frontend architecture and engineering planning specification for the modernization of the **Cairo Metro Learning Management System (LMS)**.
-
-This documentation suite establishes the authoritative architectural blueprint, visual design standards, component contracts, and incremental implementation roadmap prior to writing application code.
-
----
-
-## 1. Project Goals & Architectural Charter
-
-The primary engineering goal of this project is **maintainability and change velocity**:
-* **Minimize Future Change Effort:** Modifying a shared brand asset, an icon, a color token, typography, a button style, or a shell navigation element must be executed in **exactly one location** and propagate automatically throughout all screens without manual find-and-replace.
-* **Low Coupling, High Cohesion:** Feature domains (`courses`, `learning-player`, `training-groups`, `course-builder`, `course-review`, `user-management`) are completely encapsulated with strict boundaries. Features cannot import internal files from sibling features.
-* **Domain-Agnostic UI Primitives:** Reusable components (`Button`, `Card`, `Badge`, `Modal`, `DataTable`, `FormInput`) are isolated in `@shared/ui` and have no knowledge of metro domain concepts.
-* **Deterministic Business Logic:** Core algorithms for progress tracking, deadline attention warnings, and certificate eligibility are preserved with 100% mathematical and behavioral equivalence to the legacy prototype through characterization tests.
-* **Intranet & Offline Resilience:** Fully operational in closed intranet environments without dependencies on external CDNs or Google Fonts.
+> **Document Status:** `ACTIVE — SUPPORTING (FRONTEND DOCUMENTATION INDEX)`
+> **Canonical Role:** Indexes all **10 top-level files** in `docs/frontend/` plus its two subdirectories ([`checklists/`](checklists/README.md) with `16` files and [`reports/`](reports/README.md) with `66` files = `92` total Markdown files in `docs/frontend/`). Links directly to canonical owners without duplicating their rules.
+> **Last Updated:** 2026-11-07 (`CP-001` — Final Documentation Cleanup & `WP-1.1` Readiness Alignment)
 
 ---
 
-## 2. Summary of Approved Technology Decisions
+## 1. Active Authoritative & Supporting Frontend Specifications (`5` Files in `docs/frontend/`)
 
-| Concern | Approved Selection | Architectural Rationale |
-| :--- | :--- | :--- |
-| **Framework & Language** | **React 19 + TypeScript 5** | Strict type safety, component composability, elimination of runtime errors. |
-| **Build Tooling** | **Vite** | Ultra-fast development server (HMR), optimized Rollup production bundling. |
-| **Styling Engine** | **Tailwind CSS v4** | CSS-first configuration via `@theme` in `tokens.css`; zero runtime overhead; native logical properties for RTL. |
-| **Single Source of Truth** | **CSS Custom Properties** | One authoritative definition per token in `tokens.css`; no duplicated JS config values. |
-| **Iconography** | **`lucide-react`** | Centrally managed typed registry (`<Icon name="..." />`); offline SVG bundle; zero CDN dependencies. |
-| **Data Mocking** | **MSW v2 (Mock Service Worker)** | Network-level mock API with a stateful in-memory store supporting reads and mutations. |
-| **Testing Foundation** | **Vitest + React Testing Library** | Native Vite integration, fast dual-run regression testing, behavioral component verification. |
-| **Boundary Enforcement** | **`eslint-plugin-boundaries`** | Automated lint-time compile errors preventing illegal cross-feature imports. |
-| **Delivery Model** | **Incremental Vertical Slices** | Staged implementation with explicit acceptance criteria and review checkpoints after each phase. |
+| Document | Classification | Canonical Scope | Cross-Reference for Superseded / Related Domains |
+| :--- | :---: | :--- | :--- |
+| **[`README.md`](README.md)** *(this file)* | `ACTIVE — SUPPORTING` | Directory index for `docs/frontend/`. | Master Hub: [`docs/README.md`](../README.md) |
+| **[`architecture.md`](architecture.md)** | `ACTIVE — AUTHORITATIVE` | React 19 component hierarchy, feature-sliced folder structure (`src/app`, `src/core`, `src/features`, `src/pages`, `src/shared`), state management, and routing topology. | Auth/Session rules: [`authentication-and-session-contract.md`](../architecture/authentication-and-session-contract.md) |
+| **[`design-system.md`](design-system.md)** | `ACTIVE — AUTHORITATIVE` | Cairo Metro brand palette, Arabic-first RTL layout rules, Cairo/Tajawal typography scale, spacing tokens, and shared UI primitives (`Button`, `Badge`, `Modal`, `Tabs`, `Toast`). | `/design-system` production `404` route guard (`MFR-25`): [`security-and-xss-baseline.md`](../architecture/security-and-xss-baseline.md) |
+| **[`loading-and-error-handling.md`](loading-and-error-handling.md)** | `ACTIVE — AUTHORITATIVE` | Skeleton loading patterns, empty states, inline validation errors, and global error boundary UX. | DRF HTTP error envelopes: [`django-sqlserver-integration-contract.md`](../backend/django-sqlserver-integration-contract.md) |
+| **[`authorization-and-permissions-design.md`](authorization-and-permissions-design.md)** | `ACTIVE — SUPPORTING` | **Sections 3–10** (Three-Layer Permission Engine: `roleDefaults`, `roleCeilings`, `userOverrides`, and capability keys). | **Sections 1–2** (older 4-role narrative) are superseded by the 6-tier role hierarchy (`INV-R1`–`INV-R10`) in [`domain-business-rules.md`](../requirements/domain-business-rules.md) & [`security-and-xss-baseline.md`](../architecture/security-and-xss-baseline.md). |
 
 ---
 
-## 3. Documentation Index
+## 2. Frozen Feature Increment Roadmaps (`3` Files — `FROZEN — DO NOT MODIFY`)
 
-This planning suite consists of four specialized specifications:
+The three `implementation-roadmap*.md` files record the original **Frontend Feature Construction Track (Increments 0–12)**. For the **active execution plan (`Phases 1–4`)**, always use **[`docs/project-state/active-roadmap.md`](../project-state/active-roadmap.md)**:
 
-1. **[Architecture Specification (`architecture.md`)](./architecture.md):**
-   * Target folder structure inside `frontend/src/`.
-   * Responsibility and ownership of every directory layer.
-   * Inter-feature communication rules and `eslint-plugin-boundaries` configuration.
-   * Comprehensive Mermaid diagrams (System Architecture, Layer Dependencies, Component Reuse, Data Mutation Flow, Change Propagation, First Vertical Slice).
-   * Concrete walkthroughs demonstrating zero-side-effect changes.
-
-2. **[Design System Specification (`design-system.md`)](./design-system.md):**
-   * Cairo Metro branding, approved logos, and usage guidelines.
-   * Typed Lucide icon registry, standard sizes, and fallback handling.
-   * Authoritative color system tokens, surface hierarchy, and mathematically verified WCAG 2.1 AA contrast matrix.
-   * Arabic typography with Cairo local font packaging rules and offline dependency status.
-   * Reusable component specifications (Button, Card, Badge, Modal, Input, DataTable) and interaction states.
-   * Token change management procedures.
-
-3. **[Incremental Implementation Roadmap (`implementation-roadmap.md`)](./implementation-roadmap.md):**
-   * Detailed breakdown of the 12 sequenced user-reviewable increments (**Increment 0 through Increment 11**), structured across 4 Strategic Feature Milestones.
-   * Specific scope, deliverables, dependencies, risks, testing strategies, and acceptance criteria for each increment.
-   * Deferred verification plan for legacy business logic (`calculateTraineeProgress`, `checkTraineeAttention`, `evaluateCertEligibility`, `calculateGroupMetrics`).
-   * Legacy application preservation protocol.
-
-4. **[Legacy System Inventory & Migration Mapping (`legacy-inventory.md`)](./legacy-inventory.md):**
-   * Complete inventory of all 25 legacy views, render functions, and role restrictions.
-   * Analysis of static JSON seed files vs dynamic in-memory generation reality (e.g., training groups).
-   * Client-side storage tier breakdown (`localStorage`, `sessionStorage`, Python server `/api/save_json`).
-   * Core operational workflows and full parity verification matrix.
+| Document | Classification | Scope |
+| :--- | :---: | :--- |
+| **[`implementation-roadmap.md`](implementation-roadmap.md)** | `FROZEN — DO NOT MODIFY` | Original feature construction plan for **Increments 0 through 10** (completed). |
+| **[`implementation-roadmap-increment-11.md`](implementation-roadmap-increment-11.md)** | `FROZEN — DO NOT MODIFY` | Specification for **Increment 11** (`Subphases 5A–5E`, completed at `1,174` passing baseline tests across `66` files). |
+| **[`implementation-roadmap-increment-12.md`](implementation-roadmap-increment-12.md)** | `FROZEN — DO NOT MODIFY` | Specification for **Increment 12** (Platform Statistics & Analytics `/stats`). |
 
 ---
 
-## 4. Current Planning & Implementation Status
- 
-* **Legacy Prototype Status:** Intact, running on port 8000 via [`server.py`](file:///c:/Users/Administrator/Desktop/metro%20courses/server.py), zero source files modified.
-* **React Codebase Status:** **In Active Incremental Development** inside `frontend/`.
-* **Completed & Verified Increments:**
-  * **Increment 0:** Project Foundation, Tailwind CSS v4 design tokens, and local Cairo typography.
-  * **Increment 1:** Centralized branding, typed Lucide icon registry, and shared UI primitives laboratory (`/design-system`).
-  * **Increment 2:** Shared application shell, responsive top navbar, desktop sidebar, and mobile drawer.
-  * **Increment 3:** Dedicated Arabic RTL login page (`/login`), synthetic demo accounts, MSW v2 mock authentication endpoints, token/session abstraction (`sessionStorage`), and route protection guards (`ProtectedRoute`).
-* **Roadmap Hierarchy & Next Stage:**
-  * **Milestone 1: Architectural Foundation & Shared Primitives** (Increments 0, 1, 2) — **COMPLETED**
-  * **Milestone 2: Authentication & Core Learner Experience** (Increments 3, 4, 5, 6) — *Increment 3 Completed; Increment 4 Awaiting Approval*
-  * **Milestone 3: Dashboards, Authoring & Quality Assurance** (Increments 7, 8, 9)
-  * **Milestone 4: Enterprise Operations & Full Parity** (Increments 10, 11)
+## 3. Historical Legacy Migration Audits (`2` Files — `HISTORICAL — PRESERVE`)
+
+Completed during Increment 10–11 planning against [`legacy-reference/`](../../legacy-reference/README.md); preserved as historical migration evidence:
+
+| Document | Classification | Scope |
+| :--- | :---: | :--- |
+| **[`legacy-feature-parity-audit.md`](legacy-feature-parity-audit.md)** | `HISTORICAL — PRESERVE` | Evidence-based parity matrix (`LEG-001`–`LEG-045`) comparing the legacy Vanilla JS SPA against the React frontend prior to Increment 11. |
+| **[`legacy-inventory.md`](legacy-inventory.md)** | `HISTORICAL — PRESERVE` | Inventory of all 25 legacy views, controllers, storage keys, and their React route mappings. |
 
 ---
 
-## 5. Next Steps
+## 4. Subdirectories (`checklists/` & `reports/`)
 
-* **Current Status:** Increment 3 verification complete with 38 passing Vitest tests, zero ESLint issues, clean production build, and browser verification recordings.
-* **Awaiting Explicit Client Approval:** Increment 3 review checkpoint before starting **Increment 4: Course Catalog & Details (Read-Only)**.
-
+- **[`docs/frontend/checklists/README.md`](checklists/README.md)** (`16` files total): Indexes the `1` active Phase 5 checklist (`phase-05-developer-preview-and-isolated-testing-checklist.md`), the `3` frozen completed Phase 2–4 checklists, and the `11` historical Increment 5–11 feature checklists.
+- **[`docs/frontend/reports/README.md`](reports/README.md)** (`66` files total): Indexes the `1` Phase A baseline report, the `20` historical Notification & Phase 3–5 implementation/audit evidence reports, and the `44` superseded `SUP-01` (`v1.3`–`v3.26`) reports.

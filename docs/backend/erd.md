@@ -3,7 +3,7 @@
 **Document Version:** 1.0.0  
 **Status:** Complete / Standalone Architecture Specification  
 **Classification:** Documentation-Only Architecture Deliverable  
-**Companion Document:** [`docs/backend/database-schema.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/database-schema.md)  
+**Companion Document:** [`docs/backend/database-schema.md`](database-schema.md)  
 **Target RDBMS Engine:** PostgreSQL 16+ (Standard Relational Engine)  
 **Total Schema Entities Covered:** 42 Relational Tables across 5 Core Domains  
 
@@ -11,7 +11,7 @@
 
 ## Executive Summary & Document Purpose
 
-This document provides the authoritative, standalone **Entity-Relationship Diagram (ERD)** specification for the production database of the **Metro Courses Learning Management System (LMS)**. It complements and visually models the comprehensive data dictionary defined in [`docs/backend/database-schema.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/database-schema.md).
+This document provides the authoritative, standalone **Entity-Relationship Diagram (ERD)** specification for the production database of the **Metro Courses Learning Management System (LMS)**. It complements and visually models the comprehensive data dictionary defined in [`docs/backend/database-schema.md`](database-schema.md).
 
 Every table, column, primary key, foreign key, cardinality, and deletion rule represented in this specification reflects verified business rules and functional requirements derived from the active application codebase, domain contracts, administrative workflows, and legacy system audit.
 
@@ -75,7 +75,7 @@ External object storage is represented strictly as **metadata tables**:
 
 The high-level ERD illustrates the foundational backbone of the Metro Courses LMS, showing the primary relational tables connecting the five core domains: **Identity & Permissions**, **Courses & Curriculum**, **Groups & Renewal Cycles**, **Enrollment & Learning Progress**, and **Moderated Discussions, Contacts, Media & Telemetry**.
 
-Mermaid Source File: [`docs/backend/diagrams/erd-overview.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-overview.mmd)
+Mermaid Source File: [`docs/backend/diagrams/erd-overview.mmd`](diagrams/erd-overview.mmd)
 
 ```mermaid
 erDiagram
@@ -145,7 +145,7 @@ To maintain visual clarity, readability, and engineering utility, the 42 tables 
 
 This domain models organizational hierarchy, user authentication, legacy alias mapping, role capabilities, individual permission overrides, administrative delegations, approval requests, and security audit logging.
 
-Mermaid Source File: [`docs/backend/diagrams/erd-identity-permissions.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-identity-permissions.mmd)
+Mermaid Source File: [`docs/backend/diagrams/erd-identity-permissions.mmd`](diagrams/erd-identity-permissions.mmd)
 
 ```mermaid
 erDiagram
@@ -338,7 +338,7 @@ erDiagram
 
 This domain models the educational catalog, multi-instructor staffing, curriculum hierarchy (chapters and lesson items), prerequisite dependency graphs, and the administrative 3-way review and staging system.
 
-Mermaid Source File: [`docs/backend/diagrams/erd-courses-curriculum.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-courses-curriculum.mmd)
+Mermaid Source File: [`docs/backend/diagrams/erd-courses-curriculum.mmd`](diagrams/erd-courses-curriculum.mmd)
 
 ```mermaid
 erDiagram
@@ -513,7 +513,7 @@ erDiagram
 
 This domain models organizational training groups (cohorts), recurring compliance renewal cycles, cycle-specific course assignments, membership enrollment, join requests, and shared group document repositories.
 
-Mermaid Source File: [`docs/backend/diagrams/erd-groups-cycles.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-groups-cycles.mmd)
+Mermaid Source File: [`docs/backend/diagrams/erd-groups-cycles.mmd`](diagrams/erd-groups-cycles.mmd)
 
 ```mermaid
 erDiagram
@@ -674,7 +674,7 @@ erDiagram
 
 This domain models the core academic progression engine: student course registration, multi-attempt learning execution, granular playback telemetry, and verified certificate generation.
 
-Mermaid Source File: [`docs/backend/diagrams/erd-learning-progress.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-learning-progress.mmd)
+Mermaid Source File: [`docs/backend/diagrams/erd-learning-progress.mmd`](diagrams/erd-learning-progress.mmd)
 
 ```mermaid
 erDiagram
@@ -759,7 +759,7 @@ erDiagram
 
 This domain models course discussion forums, content moderation, contact overrides, external media storage tracking, and high-fidelity learning session telemetry.
 
-Mermaid Source File: [`docs/backend/diagrams/erd-discussions-media-analytics.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-discussions-media-analytics.mmd)
+Mermaid Source File: [`docs/backend/diagrams/erd-discussions-media-analytics.mmd`](diagrams/erd-discussions-media-analytics.mmd)
 
 ```mermaid
 erDiagram
@@ -971,7 +971,7 @@ To prevent data corruption, duplicates, and race conditions, the following compo
 
 ## 6. Comprehensive Cross-Check & Schema Validation Matrix
 
-Every table defined in the production database schema ([`docs/backend/database-schema.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/database-schema.md)) has been cross-referenced against the ERD diagrams to ensure 100% complete coverage and structural fidelity.
+Every table defined in the production database schema ([`docs/backend/database-schema.md`](database-schema.md)) has been cross-referenced against the ERD diagrams to ensure 100% complete coverage and structural fidelity.
 
 ### 6.1 Entity-by-Entity Cross-Check Matrix (All 42 Tables)
 
@@ -1060,12 +1060,12 @@ To ensure that this architecture specification remains maintainable across diffe
 
 | Diagram Name | Source File Path | Description | Table Count |
 | :--- | :--- | :--- | :-: |
-| **System Overview** | [`docs/backend/diagrams/erd-overview.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-overview.mmd) | High-level system backbone connecting all domains. | 22 (Key entities) |
-| **Domain 1: Identity & Permissions** | [`docs/backend/diagrams/erd-identity-permissions.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-identity-permissions.mmd) | Identity, credentials, capabilities, delegations, and audit logs. | 12 |
-| **Domain 2: Courses & Curriculum** | [`docs/backend/diagrams/erd-courses-curriculum.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-courses-curriculum.mmd) | Course catalog, staffing, curriculum hierarchy, review staging. | 11 |
-| **Domain 3: Groups & Renewal Cycles** | [`docs/backend/diagrams/erd-groups-cycles.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-groups-cycles.mmd) | Cohorts, renewal cycles, cycle course assignments, materials. | 9 |
-| **Domain 4: Enrollment & Progress** | [`docs/backend/diagrams/erd-learning-progress.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-learning-progress.mmd) | Enrollments, multi-attempt progression, progress, certificates. | 4 |
-| **Domain 5: Discussions & Telemetry** | [`docs/backend/diagrams/erd-discussions-media-analytics.mmd`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/erd-discussions-media-analytics.mmd) | Comments, reports, WhatsApp overrides, storage, telemetry. | 6 |
+| **System Overview** | [`docs/backend/diagrams/erd-overview.mmd`](diagrams/erd-overview.mmd) | High-level system backbone connecting all domains. | 22 (Key entities) |
+| **Domain 1: Identity & Permissions** | [`docs/backend/diagrams/erd-identity-permissions.mmd`](diagrams/erd-identity-permissions.mmd) | Identity, credentials, capabilities, delegations, and audit logs. | 12 |
+| **Domain 2: Courses & Curriculum** | [`docs/backend/diagrams/erd-courses-curriculum.mmd`](diagrams/erd-courses-curriculum.mmd) | Course catalog, staffing, curriculum hierarchy, review staging. | 11 |
+| **Domain 3: Groups & Renewal Cycles** | [`docs/backend/diagrams/erd-groups-cycles.mmd`](diagrams/erd-groups-cycles.mmd) | Cohorts, renewal cycles, cycle course assignments, materials. | 9 |
+| **Domain 4: Enrollment & Progress** | [`docs/backend/diagrams/erd-learning-progress.mmd`](diagrams/erd-learning-progress.mmd) | Enrollments, multi-attempt progression, progress, certificates. | 4 |
+| **Domain 5: Discussions & Telemetry** | [`docs/backend/diagrams/erd-discussions-media-analytics.mmd`](diagrams/erd-discussions-media-analytics.mmd) | Comments, reports, WhatsApp overrides, storage, telemetry. | 6 |
 | **Total Schema Coverage** | **All 5 Domain Files** | **Complete Relational Database Specification** | **42 Tables** |
 
 ### 7.2 Instructions for Rendering Standalone SVG / PNG Diagrams
@@ -1107,7 +1107,7 @@ npx -y @mermaid-js/mermaid-cli -i docs/backend/diagrams/erd-discussions-media-an
 
 #### C. GitHub & GitLab Native Rendering
 
-GitHub and GitLab natively parse ````mermaid ... ```` fenced blocks in Markdown files. Viewing [`docs/backend/erd.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/erd.md) directly in GitHub repository browsers renders all six diagrams interactively without requiring pre-rendered image files.
+GitHub and GitLab natively parse ````mermaid ... ```` fenced blocks in Markdown files. Viewing [`docs/backend/erd.md`](erd.md) directly in GitHub repository browsers renders all six diagrams interactively without requiring pre-rendered image files.
 
 ---
 
@@ -1115,9 +1115,9 @@ GitHub and GitLab natively parse ````mermaid ... ```` fenced blocks in Markdown 
 
 ### 8.1 Deliverable Verification Checklist
 
-- [x] **Standalone Document Created:** [`docs/backend/erd.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/erd.md) created and self-contained.
-- [x] **Mermaid Source Files Created:** All 6 `.mmd` files organized in [`docs/backend/diagrams/`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/diagrams/).
-- [x] **Total Table Coverage:** All 42 tables from [`docs/backend/database-schema.md`](file:///c:/Users/Administrator/Desktop/metro%20courses/docs/backend/database-schema.md) fully represented with zero omitted entities.
+- [x] **Standalone Document Created:** [`docs/backend/erd.md`](erd.md) created and self-contained.
+- [x] **Mermaid Source Files Created:** All 6 `.mmd` files organized in [`docs/backend/diagrams/`](diagrams/).
+- [x] **Total Table Coverage:** All 42 tables from [`docs/backend/database-schema.md`](database-schema.md) fully represented with zero omitted entities.
 - [x] **Notation & Legend:** Crow's Foot notation, cardinality symbols, PK/FK/UK conventions, identifying relationships, and deletion semantics fully explained.
 - [x] **Cross-Domain Reference Matrix:** All 39 cross-domain foreign keys cataloged with deletion rules and business invariants.
 - [x] **Schema Fidelity:** Decoupling of group membership from academic history, canonical user identity normalization, multi-attempt learning, review staging concurrency, and metadata binary separation strictly validated.

@@ -2,6 +2,7 @@ import type {
   GroupAdminStatus,
   GroupEnrollmentPolicy,
   GroupStatus,
+  GroupType,
   PostDeadlinePolicy,
   CourseRole,
   GroupRenewalSchedule,
@@ -58,6 +59,7 @@ export interface UpdateGroupRequestDTO {
 export interface AssignCoursesRequestDTO {
   courses: {
     courseId: string;
+    courseRole?: CourseRole; // default: 'core' (D-GRP-03)
     order?: number;
     customStartDateTime?: string | null;
     customDeadlineDateTime?: string | null;
@@ -229,5 +231,66 @@ export interface CandidateLecturerDTO {
 export interface UpdateGroupAssistantsRequestDTO {
   assistantLecturerIds: string[];
 }
+
+// ── Trainee Normalized Groups API DTOs (D-GRP-01..08) ────────────────
+
+export interface GroupTimeInfo {
+  situation:
+    | 'active_regular'
+    | 'scheduled_regular'
+    | 'active_reminder'
+    | 'scheduled_reminder'
+    | 'expired_reminder_with_next'
+    | 'expired_reminder_without_next'
+    | 'expired_regular';
+  primaryTargetDate: string | null;     // ISO string (null if unavailable)
+  secondaryDate: string | null;          // ISO string (null if unavailable)
+  daysRemaining: number | null;
+  hoursRemaining: number | null;
+  daysPassed: number | null;
+  isOverdue: boolean;
+}
+
+export interface TraineeCourseSummaryDTO {
+  courseId: string;
+  courseTitle: string;
+  courseCode?: string;          // Compact code (e.g. "CRS001") for concise carousel pills (D-GRP-08)
+  courseRole: CourseRole;       // 'core' | 'reminder' (D-GRP-03, D-GRP-05, D-GRP-08)
+  order: number;
+}
+
+export interface TraineeGroupCurrentCycleDTO {
+  id: string;
+  cycleNumber: number;
+  title: string;
+  status: 'active' | 'completed' | 'archived';
+  startDateTime: string | null;
+  deadlineDateTime: string | null;
+  postDeadlinePolicy: PostDeadlinePolicy;
+}
+
+export interface TraineeGroupItemDTO {
+  id: string;
+  enrollmentCode?: string;
+  name: string;
+  description: string;
+  groupType: GroupType;             // 'regular' | 'reminder' (D-GRP-03, D-GRP-06)
+  operationalStatus: GroupStatus;   // 'active' | 'scheduled' | 'expired'
+  traineeCount: number;             // Authoritative enrolled trainee count (group.traineeIds.length)
+  startDateTime: string | null;
+  deadlineDateTime: string | null;
+  postDeadlinePolicy: PostDeadlinePolicy;
+  renewalSchedule?: {
+    autoRenewalEnabled: boolean;
+    intervalDays: number | null;
+    nextScheduledRenewalDate: string | null;
+  };
+  currentCycle: TraineeGroupCurrentCycleDTO | null;
+  courses: TraineeCourseSummaryDTO[];
+  timeInfo: GroupTimeInfo;
+  navigationUrl: string;            // e.g. "/my-groups/GRP-101"
+}
+
+export type GetMyGroupsResponseDTO = TraineeGroupItemDTO[];
 
 

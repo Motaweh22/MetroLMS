@@ -1,0 +1,89 @@
+# MetroLMS — Domain Business Rules Specification
+## Subsystem / Domain: Domain 10 — Reminder Programs & In-Place Renewal
+
+> **Document Title:** Domain 10 — Reminder Programs & In-Place Renewal Business Rules  
+> **Document Identifier:** `METROLMS-DOM-GRP-010`  
+> **Document Status:** `APPROVED — PHASE 2B BASELINE`  
+> **Canonical Authority Level:** Level 4 Domain-Specific Specification  
+> **Target System:** MetroLMS (Cairo Metro E-Learning Platform)  
+> **Prepared For:** Domain Developers, System Architects, Quality Engineers  
+> **Governing Decisions:** [`D-GRP-01`](../../architecture/decision-register.md#d-grp-01), [`D-GRP-02`](../../architecture/decision-register.md#d-grp-02), [`D-GRP-04`](../../architecture/decision-register.md#d-grp-04), [`D-GRP-06`](../../architecture/decision-register.md#d-grp-06), [`D-GRP-07`](../../architecture/decision-register.md#d-grp-07), [`D-13`](../../architecture/decision-register.md#d-13), `API-REC-01` / `API-REC-08A` / `API-REC-08B` (`OWNER APPROVED — 2026-11-13`)  
+> **Last Updated:** 2026-11-13 (Owner Decision Recording: No Early Manual Renewal Before Current Cycle Completion — `INV-DOM10-11`)
+
+---
+
+## 1. Domain Overview & Mission
+
+- **Domain Mission:** Govern recurring reminder training programs, day-based recurrence scheduling, and in-place renewal cycle progression (`GroupRenewalCycle`) so that Cairo Metro refresher compliance programs run continuously under a single stable group identity while sealing historical cycle records for audit and versioned certification (`D-13`).
+- **Domain Boundaries:**
+  - *In Scope:* `GroupRenewalCycle` creation (`CYC-<groupId>-<NN>`), unified manual and automated renewal pipeline, day-based recurrence (`intervalDays` / `renewalIntervalDays`), `lastAutoRenewedCycleId` idempotency guard, overdue cycle start-date safeguard, historical attempt sealing (`isSealed = true`), and fresh attempt provisioning for the new cycle.
+  - *Out of Scope:* Initial group creation and trainee dashboard UI badges (Domain 08), trainee roster addition/removal (`D-07`, Domain 09), and course version diffing internals (`LLD-002`).
+- **Actors & Responsibilities:**
+  - *System Scheduler (Target Backend — `API-REC-01` & `Domain 20 / D4` `OWNER APPROVED` `2026-11-13`: Windows Task Scheduler invoking planned Django management command `process_due_group_renewals`, not yet implemented; Current Prototype: `useAutoRenewalScheduler` calling `inMemoryStore.checkAndProcessAllDueRenewals` / `checkAndProcessAutoRenewal`):* Evaluates due reminder groups (`autoRenewalEnabled === true` and `now >= nextScheduledRenewalDate`) and invokes automated renewal via Django Renewal Services.
+  - *Admin (`admin`) / Superior (`superior`):* Triggers manual renewals (Current Prototype: `inMemoryStore.createRenewalCycle`; Target Backend: proposed unified `renew_group_in_place` service), configures `intervalDays`, and inspects historical cycle archives.
+  - *Trainee (`user`):* Completes fresh `CourseAttempt`s provisioned for the new `GroupRenewalCycle` while retaining read-only access to sealed historical certificates (`D-13`).
+- **Core Entities:** `TrainingGroup`, `GroupRenewalCycle`, `RenewalSchedule`, `CourseAttempt`, `CourseVersion`.
+
+---
+
+## 2. Formal Invariants & Business Constraints
+
+| Invariant ID | Rule Title | Formal Logic Expression | Enforcement Point |
+| :--- | :--- | :--- | :--- |
+| **`INV-DOM10-01`** | **In-Place Renewal Identity (`D-GRP-01`, `D-GRP-04`)** | Renewals mutate `group.currentCycleId` and append a new `GroupRenewalCycle` (`CYC-<groupId>-<NN>`) on the **same** `TrainingGroup.id`; creating successor groups is prohibited. | Renewal Pipeline (`LLD-003`) |
+| **`INV-DOM10-02`** | **Day-Based Recurrence Anchoring (`D-GRP-02`)** | Recurrence intervals use exact day counts (`intervalDays` $\in [1, 730]$). Next renewal date is $\text{CycleDeadline} + \text{intervalDays}$ calendar days. Approximate month/year conversions (`30d/365d` coercion) are prohibited. | Schedule Calculator |
+| **`INV-DOM10-03`** | **Historical Cycle & Attempt Sealing (`D-GRP-04`)** | Upon renewal, the closing cycle transitions to `status: 'completed'`; all `CourseAttempt`s belonging to the closing cycle are sealed (`isSealed = true`) and immutable. | Renewal Transaction |
+| **`INV-DOM10-04`** | **Fresh Cycle Attempt Provisioning (`D-13`)** | Enrolled trainees in `group.traineeIds` receive fresh `CourseAttempt`s bound to the new `cycleId` and current published `courseVersionId` without resetting or overwriting sealed prior-cycle attempts. | Attempt Provisioner |
+| **`INV-DOM10-05`** | **Idempotency Guard (`lastAutoRenewedCycleId`)** | Automated renewal checks `group.lastAutoRenewedCycleId !== group.currentCycleId` and acquires a row lock (`SELECT FOR UPDATE` in Django + SQL Server) so a cycle is never auto-renewed twice. | Auto-Renewal Scheduler |
+| **`INV-DOM10-06`** | **Overdue Safeguard & Single-Cycle Advancement (`INV-DOM20-06`)** | If `now` is past the scheduled renewal date, the new cycle starts at `now` (`startDate = now`) rather than backdating. Per `INV-DOM20-06` (`Option B — OWNER APPROVED`, `2026-11-13`), missed intermediate cycles are skipped and at most one recovery cycle is created (no phantom or artificial historical cycles). | Renewal Pipeline (`LLD-003`) & Domain 20 |
+| **`INV-DOM10-07`** | **Valid End Date Required for Auto-Renewal (`2026-11-13`)** | Automatic recurring renewal requires a valid, explicitly defined end date (`deadlineDateTime`) on the group/cycle, `autoRenewalEnabled === true`, `intervalDays` $\in [1, 730]$ (`D-GRP-02`), and `adminStatus !== 'archived'` (`D-GRP-07`). Groups without an end date are NOT eligible for automatic renewal, and enabling `autoRenewalEnabled` without a valid end date MUST be rejected. | Group Validation & Renewal Pipeline |
+| **`INV-DOM10-08`** | **Manual Renewal Eligibility (`API-REC-08A`, `API-REC-08B` & End-Date Requirement — `OWNER APPROVED`, `2026-11-13`)** | A manual renewal request (`POST /api/admin/groups/:groupId/renew`) is eligible ONLY when: (1) the group is a Reminder Group (`groupType === 'reminder'`, prohibited for Regular Groups per `API-REC-08B`), (2) the group is NOT archived (`adminStatus !== 'archived'` per `D-GRP-07` & `API-REC-08A`; never implicitly unarchives), (3) a valid end date (`deadlineDateTime`) is explicitly defined for the relevant group/cycle (applies even when `autoRenewalEnabled === false`; Frontend disables Manual Renew and displays `"يرجى تحديد موعد انتهاء أولًا"`, and Backend independently validates and rejects missing/invalid end date), (4) the requesting actor satisfies existing authorization rules, and (5) all other approved renewal eligibility rules (`D-GRP-02`, `D-06`, `LLD-003`) are satisfied. | Frontend UI, Manual Renewal Endpoint & `renew_group_in_place` |
+| **`INV-DOM10-09`** | **Auto-Renewal Deactivation & Confirmation on End-Date Removal (Option A — `OWNER APPROVED`, `2026-11-13`)** | When an administrator attempts to remove `deadlineDateTime` from a group with `groupType === 'reminder'` and `autoRenewalEnabled === true`, the UI MUST display a confirmation warning before applying the change (*Cancel* keeps `deadlineDateTime` and `autoRenewalEnabled === true` unchanged; *Confirm and Disable Automatic Renewal* removes `deadlineDateTime`, automatically sets `autoRenewalEnabled = false`, and **preserves `groupType === 'reminder'`** — never converting to `'regular'`). The group continues operating as a non-expiring (`'active'`) group, automatic renewal skips it, and manual renewal remains unavailable without a valid end date (`INV-DOM10-08`). | Frontend UI, Group Update Service & Scheduler Sweep |
+| **`INV-DOM10-10`** | **Cancellation of Not-Yet-Started Future Renewal Cycles (`OWNER APPROVED`, `2026-11-13`)** | Upon confirmed end-date removal and auto-renewal deactivation (`INV-DOM10-09`), any already-created future `GroupRenewalCycle` whose `startDateTime` is later than the authoritative current time (`startDateTime > now`) MUST be retained (never hard-deleted) with target lifecycle status **`Cancelled`** and cancellation history preserved. MUST NOT cancel the currently active cycle, any already-started cycle (`startDateTime <= now`), or completed/historical cycles, and MUST NOT delete learner progress, completed courses, issued certificates (`D-13`), or learner accounts. *(Note: `Cancelled` is an Owner-approved target lifecycle status not yet present in prototype `types.ts`; future model/DTO/schema representation remains `PROVISIONAL` pending Phase 5 Owner Input & Schema Review.)* | Group Update Service & Cycle Lifecycle |
+| **`INV-DOM10-11`** | **No Early Manual Renewal Before Cycle Completion (`OWNER APPROVED`, `2026-11-13`)** | A renewal MUST NOT be initiated before the current active cycle reaches its defined `deadlineDateTime` (evaluated using the authoritative cycle `deadlineDateTime` field and canonical application time/timezone basis). Early manual renewal is prohibited (reject request; do NOT shorten, replace, or prematurely terminate the current cycle). Manual renewal becomes eligible only once `now >= currentCycle.deadlineDateTime` and all other `INV-DOM10-08` rules pass (`autoRenewalEnabled === true` is NOT required, and manual renewal after `deadlineDateTime` need not wait for `intervalDays`). Automatic renewal preserves the same no-overlap rule. | Manual Renewal Endpoint, `renew_group_in_place` & Scheduler Sweep |
+
+---
+
+## 3. State Transition Rules
+
+### 3.1 Renewal Cycle Lifecycle (`GroupRenewalCycle.status`)
+1. **`active`:** Current cycle referenced by `group.currentCycleId`. Trainees accumulate progress on unsealed `CourseAttempt`s bound to this `cycleId`.
+2. **`active` -> `completed`:** Triggered atomically when manual or automated renewal executes. Closing cycle's `traineeIds` snapshot and `CourseAttempt`s (`isSealed = true`) become immutable.
+3. **`completed` -> `archived` (optional historical archival):** Preserves audit records while remaining excluded from active cycle selection.
+4. **`Cancelled` (Target Lifecycle Status — `INV-DOM10-10`, `OWNER APPROVED`, `2026-11-13`):** Applied exclusively to already-created future `GroupRenewalCycle` records that have not yet started (`startDateTime > now`) when an administrator confirms end-date removal and automatic renewal deactivation (`INV-DOM10-09`). The record is retained (never hard-deleted) for auditability; does not apply to active or already-started cycles (`startDateTime <= now`). *(Target status not yet implemented in prototype `GroupRenewalCycle.status`.)*
+
+### 3.2 Target Unified 8-Step Renewal Pipeline vs. Current Prototype
+The **Target Backend Architecture** unifies manual and automated renewals behind one atomic service (`renew_group_in_place`, proposed in [`LLD-003`](../../02-architecture-and-design/lld/LLD-003-group-renewal-cycle-manager.md)). In the **Current Frontend Prototype** (`frontend/src/mocks/store/inMemoryStore.ts`), manual (`createRenewalCycle`) and automated (`checkAndProcessAutoRenewal`) renewals are separate methods:
+1. Validate group eligibility (`adminStatus !== 'archived'`, `groupType === 'reminder'`). *(Prototype note: `checkAndProcessAutoRenewal` enforces `adminStatus !== 'archived'` and `autoRenewalEnabled`, whereas `createRenewalCycle` does not currently block archived or regular groups.)*
+2. Enforce idempotency (`lastAutoRenewedCycleId` check for auto-renewal).
+3. Close current cycle (`status = 'completed'`, snapshot `traineeIds`, `completedAt = now`).
+4. Seal all active `CourseAttempt`s in the closing cycle (`isSealed = true`).
+5. Compute new cycle dates (`startDate = now` when overdue per `LLD-003`, `deadline = startDate + durationDays`).
+6. Create and append `GroupRenewalCycle` (`CYC-<groupId>-<NN>`, `status = 'active'`).
+7. Advance `group.currentCycleId`, `lastAutoRenewedCycleId` (if auto), and `nextScheduledRenewalDate = newCycle.deadlineDateTime + intervalDays`.
+8. Provision fresh `CourseAttempt`s for `group.traineeIds` against current published course versions and emit audit/notification records.
+
+---
+
+## 4. Boundary Conditions & Edge Cases
+
+- **Archived Reminder Group:** Setting `adminStatus = 'archived'` halts automated renewal execution for that group (`D-GRP-07`).
+- **Groups Without an End Date & Reminder Mode Deactivation Confirmation (`INV-DOM08-07`, `INV-DOM10-07`, `INV-DOM10-08`, `INV-DOM10-09`):** A group without a defined end date continues operating as an ongoing non-expiring group (`'active'`), must not be assigned an artificial end date, and is ineligible for both automatic recurring renewal and manual renewal. Enabling `autoRenewalEnabled = true` without a valid end date MUST be rejected. Per **Option A (`OWNER APPROVED`, `2026-11-13`)**, when an administrator attempts to remove `deadlineDateTime` from a group where `groupType === 'reminder'` and `autoRenewalEnabled === true`:
+  - *Confirmation Warning (Target UX Requirement):* The UI MUST display a confirmation warning before applying the change (suggested Arabic message: `"هذه المجموعة تعمل حاليًا في وضع التذكير والتجديد المتكرر. إزالة موعد الانتهاء ستؤدي إلى إلغاء التجديد التلقائي، مع استمرار المجموعة دون تاريخ انتهاء. هل تريد المتابعة؟"`) with actions **Cancel** and **Confirm and Disable Automatic Renewal**.
+  - *If Cancelled:* Keep existing `deadlineDateTime` unchanged, keep `autoRenewalEnabled === true`, and leave recurring configuration unchanged.
+  - *If Confirmed:* Execute the 8-step transition: (1) remove `deadlineDateTime` (absent/null per approved API/domain representation), (2) automatically set `autoRenewalEnabled = false`, (3) **preserve `groupType === 'reminder'`** (deactivating Reminder Mode here means disabling automatic recurring renewal, NOT converting the group to `'regular'`), (4) keep the group operating as a non-expiring (`'active'`) group, (5) identify any already-created future `GroupRenewalCycle` with `startDateTime > now`, (6) mark those not-yet-started future cycles as **`Cancelled`** (target lifecycle status; never hard-deleted), (7) retain their records and cancellation history, and (8) prevent automatic renewal from creating further cycles while disabled. Active cycles, already-started cycles (`startDateTime <= now`), completed/historical cycles, learner progress, completed courses, issued certificates (`D-13`), and learner accounts remain untouched. Manual renewal remains unavailable without a valid end date (`INV-DOM10-08`), even though `groupType === 'reminder'` is preserved (`autoRenewalEnabled === true` is not a prerequisite for manual renewal when all other eligibility conditions are met). *(Prototype Discrepancy: `GroupEditorPage.tsx` does not yet implement this confirmation dialog, `GroupRenewalCycle.status` in `types.ts` does not yet include `Cancelled`, and `inMemoryStore.ts` `updateGroup` / `checkAndProcessAutoRenewal` currently do not auto-deactivate `autoRenewalEnabled` and fall back to `startDateTime` when `deadlineDateTime` is absent; `createRenewalCycle` / UI do not yet enforce the end-date check or disabled guidance.)*
+- **Unresolved Renewal Edge Cases (Not Decided Here):**
+  - See [`METROLMS-DOM-OPS-020`](domain-20-scheduling-deadlines-and-background-jobs.md) §3.4 for remaining open scheduler/recovery-anchor edge cases.
+- **Reminder Group with Core-Only Current Courses (`D-GRP-06`):** Because `hasHistoricalReminderCourses === true` persists monotonically, a reminder group that temporarily has only `'core'` courses in its current assignment remains eligible for reminder program tracking and renewal until explicitly disabled.
+- **No Phantom Future Cycles:** `nextScheduledRenewalDate` is a schedule pointer only; `GroupRenewalCycle` rows are materialized strictly one cycle at a time when due or manually triggered.
+- **Approaching-Deadline Notification Dispatch (Prototype-Only Observed Behavior):** In `inMemoryStore.checkAndProcessAllDueRenewals`, active non-archived groups within a 7-day horizon before `deadlineDateTime` dispatch deduplicated `deadline_reminder` notifications (`dedupeKey: deadline_reminder:${group.id}:${cycleKey}:${canonicalUserId}`) to trainees with incomplete courses. This behavior is currently implemented in the prototype only and has not yet been elevated to a formal Level 1 Owner requirement.
+
+---
+
+## 5. Traceability Matrix
+
+| Business Rule / Invariant | Governing Decision / Requirement | LLD / Technical Spec | Verification Evidence (Deferred to Gate B) |
+| :--- | :--- | :--- | :--- |
+| `INV-DOM10-01`, `INV-DOM10-03`, `INV-DOM10-04` | [`D-GRP-01`](../../architecture/decision-register.md#d-grp-01), [`D-GRP-04`](../../architecture/decision-register.md#d-grp-04), [`D-13`](../../architecture/decision-register.md#d-13) | [`LLD-003`](../../02-architecture-and-design/lld/LLD-003-group-renewal-cycle-manager.md), [`METROLMS-TECH-DOM-010`](../../03-technical-documentation/domains/groups/domain-10-reminder-programs-and-in-place-renewal.md) | Phase 4 Gate B |
+| `INV-DOM10-02`, `INV-DOM10-05`, `INV-DOM10-06` | [`D-GRP-02`](../../architecture/decision-register.md#d-grp-02), [`D-GRP-06`](../../architecture/decision-register.md#d-grp-06) | [`LLD-003`](../../02-architecture-and-design/lld/LLD-003-group-renewal-cycle-manager.md), [`METROLMS-TECH-DOM-010`](../../03-technical-documentation/domains/groups/domain-10-reminder-programs-and-in-place-renewal.md) | Phase 4 Gate B |
+

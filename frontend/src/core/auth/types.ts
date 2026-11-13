@@ -39,8 +39,10 @@ export interface LoginCredentials {
 
 export interface AuthResponse {
   user: User;
-  token: string;
-  expiresAt: number;
+  /** Present strictly in development MSW mock responses; absent in production Django session responses */
+  token?: string;
+  /** Present strictly in development MSW mock responses; absent in production Django session responses */
+  expiresAt?: number;
 }
 
 /**
@@ -51,11 +53,16 @@ export interface AuthResponse {
  */
 export interface EmergencyContinuityProof {
   personaId: string;
-  provenAt: number;
+  personaRole: string;
+  tokenSubject: string;
   tokenTimestamp: number;
+  personaExpiresAt: number;
+  provenAt: number;
   /** Non-reversible SHA-256 digest of the exact Developer origin snapshot from which continuity was proven */
   originSnapshotFingerprint: string;
 }
+
+export type LogoutStatus = 'LOGOUT_CONFIRMED' | 'LOGOUT_UNCONFIRMED' | null;
 
 export interface AuthContextValue {
   user: User | null;
@@ -64,6 +71,10 @@ export interface AuthContextValue {
   error: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
+  /** Server-side logout confirmation status (T-1.3.2) */
+  logoutStatus: LogoutStatus;
+  /** Re-attempts server-side logout confirmation when in LOGOUT_UNCONFIRMED state */
+  retryLogout: () => Promise<void>;
   switchDemoUser: (role: UserRole) => Promise<void>;
   clearError: () => void;
   /** Whether an isolated test session is currently active (Increment 5.3 / Decision D-10) */
@@ -74,10 +85,14 @@ export interface AuthContextValue {
   launchIsolatedTestSession: (personaId: string) => Promise<boolean>;
   /** Returns to the exact Developer origin session in a single transaction */
   returnToDeveloperSession: () => Promise<boolean>;
+  /** Emergency return from an expired synthetic test persona session using valid memory-only continuity proof (Increment 5.4 / WP-5.4.4) */
+  returnFromExpiredPersonaSession?: () => Promise<boolean>;
   /** Re-triggers session revalidation following a temporary network failure (Increment 5.4 / WP-5.4.1) */
   retryRevalidation?: () => Promise<void>;
   /** Whether the system is in an unauthenticated emergency state with valid memory-only continuity proof */
   isEmergencyState?: boolean;
   /** Memory-only emergency continuity proof for the current AuthProvider lifecycle */
   emergencyProof?: EmergencyContinuityProof | null;
+  /** Monotonic session transition epoch for asynchronous race and stale response rejection (WP-5.4.2) */
+  sessionEpoch: number;
 }

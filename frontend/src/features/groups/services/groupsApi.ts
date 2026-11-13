@@ -25,6 +25,7 @@ import type {
   GroupPreviewInfoDTO,
   CandidateTraineeDTO,
   CandidateLecturerDTO,
+  TraineeGroupItemDTO,
 } from '@/core/groups/dtos';
 
 export type EnrichedTrainingGroup = TrainingGroup & {
@@ -47,10 +48,10 @@ export const groupsApi = {
   // ── 1. Trainee View Operations ───────────────────────────────────────
 
   /**
-   * Fetch groups assigned to the currently authenticated user (Increment 7 trainee view)
+   * Fetch groups assigned to the currently authenticated user (Trainee Normalized Contract D-GRP-01..08)
    */
-  async getMyGroups(options?: RequestOptions): Promise<EnrichedTrainingGroup[]> {
-    return apiClient<EnrichedTrainingGroup[]>('/api/groups/my', {
+  async getMyGroups(options?: RequestOptions): Promise<TraineeGroupItemDTO[]> {
+    return apiClient<TraineeGroupItemDTO[]>('/api/groups/my', {
       method: 'GET',
       ...options,
     });
@@ -356,16 +357,19 @@ export const groupsApi = {
 
   /**
    * Remove a member from a training group (Admin or Assigned Supervisor)
+   * Supports D-07 per-course removal choices via removeCourseIds
    */
   async removeGroupMember(
     groupId: string,
     userId: string,
+    removeCourseIds?: string[],
     options?: RequestOptions
   ): Promise<{ success: boolean; message: string }> {
     return apiClient<{ success: boolean; message: string }>(
       `/api/admin/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
       {
         method: 'DELETE',
+        body: removeCourseIds !== undefined ? JSON.stringify({ removeCourseIds }) : undefined,
         ...options,
       }
     );

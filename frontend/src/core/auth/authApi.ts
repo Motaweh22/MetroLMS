@@ -1,4 +1,4 @@
-import { apiClient } from '@/core/api/apiClient';
+import { apiClient, type RequestOptions } from '@/core/api/apiClient';
 import type { LoginCredentials, AuthResponse, User } from './types';
 
 /**
@@ -15,28 +15,31 @@ export const authApi = {
   /**
    * Performs user login
    */
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+  async login(credentials: LoginCredentials, options?: RequestOptions): Promise<AuthResponse> {
     return apiClient<AuthResponse>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
+      ...options,
     });
   },
 
   /**
    * Performs user logout
    */
-  async logout(): Promise<{ success: boolean; message: string }> {
+  async logout(options?: RequestOptions): Promise<{ success: boolean; message: string }> {
     return apiClient<{ success: boolean; message: string }>('/api/auth/logout', {
       method: 'POST',
+      ...options,
     });
   },
 
   /**
    * Fetches the currently authenticated user profile
    */
-  async getCurrentUser(): Promise<{ user: User }> {
+  async getCurrentUser(options?: RequestOptions): Promise<{ user: User }> {
     return apiClient<{ user: User }>('/api/auth/me', {
       method: 'GET',
+      ...options,
     });
   },
 };

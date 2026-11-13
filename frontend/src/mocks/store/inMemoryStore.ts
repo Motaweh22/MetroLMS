@@ -12,6 +12,8 @@ import type {
   ChapterItem,
   Course,
   CourseEnrollment,
+  EnrollmentRecord,
+  EnrollmentSourceGrant,
   CourseFilterParams,
   CourseStatus,
   CourseAuditAction,
@@ -32,6 +34,13 @@ import type {
   LecturerSubmissionsResponseDTO,
   DiscardStagedEditsResponseDTO,
   EnrollmentResponse,
+  AttemptProgress,
+  CourseAccessMode,
+  EligibleAttemptOption,
+  PublishedCourseVersion,
+  PublishedCourseVersionItem,
+  ComputedAttemptProgress,
+  CertificateRecord,
 } from '@/core/courses/types';
 import type { LessonProgress, CourseProgress } from '@/features/learning-player/types';
 import type { User, UserRole } from '@/core/auth/types';
@@ -207,6 +216,15 @@ export class MockStoreError extends Error {
   }
 }
 
+export class AttemptAmbiguityError extends MockStoreError {
+  eligibleAttempts: EligibleAttemptOption[];
+  constructor(message: string, eligibleAttempts: EligibleAttemptOption[]) {
+    super(message, 409, 'AMBIGUOUS_ATTEMPT_CONTEXT');
+    this.name = 'AttemptAmbiguityError';
+    this.eligibleAttempts = eligibleAttempts;
+  }
+}
+
 export function resolveCanonicalCourseId(courseId?: string | null): string {
   if (!courseId) return '';
   const raw = courseId.trim().toLowerCase();
@@ -242,6 +260,58 @@ export const DEV_TEST_MEDIA_URLS = {
 } as const;
 
 /**
+ * Escapes special regular expression characters in a string.
+ */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Determines whether a cycle ID structurally and unambiguously proves ownership by a specific group (D-06, MFR-41).
+ * Requires exact group token boundary matching (e.g. CYC-${groupId}-... or ${groupId}-...).
+ * Rejects prefix/substring overlaps (e.g. GRP-20 matching CYC-GRP-201-01) and generic cycles (e.g. CYCLE-1).
+ */
+export function isCycleOwnedByGroup(cycleId?: string | null, groupId?: string | null): boolean {
+  if (!cycleId || !groupId) return false;
+  const normCycle = cycleId.trim();
+  const normGroup = groupId.trim();
+  if (!normCycle || !normGroup) return false;
+
+  const escapedGroup = escapeRegExp(normGroup);
+  const pattern = new RegExp(`^(?:cyc[-_:])?${escapedGroup}(?:[-_:].*)?$`, 'i');
+  return pattern.test(normCycle);
+}
+
+/**
+ * Resolves a deterministic, collision-safe attempt identifier for a group-originated enrollment (D-06, MFR-41).
+ * When cycleId structurally embeds the owning groupId (e.g. CYC-GRP-201-01 for GRP-201),
+ * preserves the canonical fixture-compatible form (`ATT-${userId}-${courseId}-${cycleId}`).
+ * When cycleId cannot structurally prove ownership (e.g. generic CYCLE-1, CYC-01, or prefix overlaps),
+ * explicitly qualifies with groupId (`ATT-${userId}-${courseId}-${groupId}-${cycleId}`).
+ */
+export function resolveGroupAttemptId(
+  userId: string,
+  courseId: string,
+  groupId: string,
+  cycleId?: string | null
+): string {
+  const normUser = resolveCanonicalUserId(userId.trim());
+  const normCourse = courseId.trim();
+  const normGroup = groupId.trim();
+  const normCycle = cycleId?.trim();
+
+  if (!normCycle) {
+    return `ATT-${normUser}-${normCourse}-${normGroup}`;
+  }
+
+  if (isCycleOwnedByGroup(normCycle, normGroup)) {
+    return `ATT-${normUser}-${normCourse}-${normCycle}`;
+  }
+
+  return `ATT-${normUser}-${normCourse}-${normGroup}-${normCycle}`;
+}
+
+/**
  * Stateful In-Memory Mock Store
  * 
  * Provides an isolated, mutable repository for mock data (courses, enrollments, progress,
@@ -250,11 +320,18 @@ export const DEV_TEST_MEDIA_URLS = {
 class InMemoryStore {
   private courses: Course[] = [];
   private enrollments: CourseEnrollment[] = [];
-  private userProgress: Record<string, Record<string, Record<string, LessonProgress>>> = {};
+  // Phase 2 / WP-2.1 / T-2.1.2: Per-Attempt Progress Isolation (D-06, MFR-02, MFR-41)
+  private attemptProgress: Record<string, AttemptProgress> = {};
+  // Legacy compatibility mirror for existing userProgress tests
+  public userProgress: Record<string, Record<string, Record<string, LessonProgress>>> = {};
   private lastWatched: Record<string, Record<string, string>> = {};
   private groups: TrainingGroup[] = [];
   private notifications: NotificationItem[] = [];
   private courseDrafts: Record<string, Course> = {};
+  // Phase 2 / WP-2.3 / T-2.3.1: Immutable PublishedCourseVersion Snapshot Ledger (MFR-10, Rule B)
+  private publishedCourseVersions: Record<string, PublishedCourseVersion[]> = {};
+  // Phase 2 / WP-2.3 / T-2.3.2: Version-Scoped Certificate Ledger (D-13, MFR-46)
+  private certificates: CertificateRecord[] = [];
   private stagedAdminEdits: Record<string, StagedAdminEditsRecord> = {};
   private reviewerWorkingNotes: Record<string, ReviewerWorkingNotes> = {};
   // Increment 10 Training Groups State Collections
@@ -333,6 +410,25 @@ class InMemoryStore {
   }
 
   /**
+   * Internal helper to register or synchronize an AttemptProgress record for a CourseAttempt.
+   */
+  private registerAttemptProgress(attempt: CourseAttempt): void {
+    if (!this.attemptProgress[attempt.id]) {
+      this.attemptProgress[attempt.id] = {
+        attemptId: attempt.id,
+        courseId: attempt.courseId,
+        userId: attempt.userId,
+        progressPercent: attempt.progressPercent || 0,
+        completedItemIds: [...(attempt.completedItemIds || [])],
+        lastWatchedItemId: attempt.lastWatchedItemId || null,
+        isCompleted: attempt.status === 'completed' || Boolean(attempt.completedAt),
+        updatedAt: attempt.updatedAt || new Date().toISOString(),
+        itemsProgress: { ...(attempt.lessonProgress || {}) },
+      };
+    }
+  }
+
+  /**
    * Reset the store to initial fixture state.
    * Useful for test isolation between test cases.
    */
@@ -344,6 +440,7 @@ class InMemoryStore {
     this.enrollments = JSON.parse(JSON.stringify(INITIAL_MOCK_ENROLLMENTS));
     this.groups = JSON.parse(JSON.stringify(INITIAL_MOCK_GROUPS));
     this.notifications = JSON.parse(JSON.stringify(INITIAL_MOCK_NOTIFICATIONS));
+    this.attemptProgress = {};
     this.userProgress = {};
     this.lastWatched = {};
     this.courseDrafts = {};
@@ -507,7 +604,7 @@ class InMemoryStore {
       // Provision baseline attempts for group members
       for (const tid of group.traineeIds || []) {
         for (const c of cycleCourses) {
-          const attemptId = `ATT-${tid}-${c.courseId}-${cycle1.id}`;
+          const attemptId = resolveGroupAttemptId(tid, c.courseId, group.id, cycle1.id);
           const attempt = createCourseAttempt({
             id: attemptId,
             userId: tid,
@@ -612,6 +709,30 @@ class InMemoryStore {
       }
     }
 
+    // Ensure all pre-seeded enrollments have a valid sources array and standalone attempt (D-06, MFR-41)
+    for (const enr of this.enrollments) {
+      if (!Array.isArray(enr.sources)) {
+        enr.sources = [];
+      }
+      for (const grant of enr.sources) {
+        if (grant.kind === 'self') {
+          const exists = this.courseAttempts.some((a) => a.id === grant.attemptId);
+          if (!exists) {
+            this.courseAttempts.push(
+              createCourseAttempt({
+                id: grant.attemptId,
+                userId: enr.userId,
+                courseId: enr.courseId,
+                cycleId: null,
+                groupId: null,
+                createdAt: grant.grantedAt || enr.enrolledAt,
+              })
+            );
+          }
+        }
+      }
+    }
+
     // Register or restore Content Testing Lab Course fixture
     const labCourse = createInitialContentLabFixture();
     this.courses.push(labCourse);
@@ -682,6 +803,20 @@ class InMemoryStore {
         } catch {
           // ignore error
         }
+      }
+    }
+
+    // Phase 2 / WP-2.1 / T-2.1.2: Initialize AttemptProgress for all pre-seeded attempts
+    for (const attempt of this.courseAttempts) {
+      this.registerAttemptProgress(attempt);
+    }
+
+    // Phase 2 / WP-2.3 / T-2.3.1: Seed initial PublishedCourseVersion (Version 1) for all published courses
+    this.publishedCourseVersions = {};
+    this.certificates = [];
+    for (const course of this.courses) {
+      if (course.status === 'published' || course.status === 'live') {
+        this.seedInitialPublishedCourseVersion(course);
       }
     }
   }
@@ -773,6 +908,11 @@ class InMemoryStore {
         this.materialFiles.push(file);
       }
     }
+
+    // Phase 2 / WP-2.1 / T-2.1.2: Initialize AttemptProgress for all pre-seeded attempts
+    for (const attempt of this.courseAttempts) {
+      this.registerAttemptProgress(attempt);
+    }
   }
 
   /**
@@ -836,6 +976,8 @@ class InMemoryStore {
       this.courses.splice(idx, 1);
       delete this.courseDrafts[removedId];
       delete this.courseDrafts[courseId];
+      delete this.publishedCourseVersions[removedId];
+      delete this.publishedCourseVersions[courseId];
       return true;
     }
     return false;
@@ -854,6 +996,786 @@ class InMemoryStore {
       }
     }
     return items;
+  }
+
+  /**
+   * Phase 2 / WP-2.3 / T-2.3.1 (MFR-10, Rule B):
+   * Computes a deterministic 64-bit FNV-1a fingerprint over ONLY the approved
+   * substantive ChapterItem fields in a fixed canonical key order:
+   *   [type, videoUrl, pdfUrl, mediaId, content, durationSeconds]
+   * Metadata-only fields (title, description, order, formatted duration string)
+   * are strictly excluded so metadata edits never trigger completion resets.
+   */
+  public computeItemSubstantiveFingerprint(item: Partial<ChapterItem>): string {
+    const normalizeStr = (val: unknown): string | null => {
+      if (val === undefined || val === null || val === '') return null;
+      return String(val);
+    };
+
+    const canonicalSubstantivePayload = {
+      type: normalizeStr(item.type) ?? 'video',
+      videoUrl: normalizeStr(item.videoUrl),
+      pdfUrl: normalizeStr(item.pdfUrl),
+      mediaId: normalizeStr(item.mediaId),
+      content: normalizeStr(item.content),
+      durationSeconds:
+        typeof item.durationSeconds === 'number' && Number.isFinite(item.durationSeconds)
+          ? item.durationSeconds
+          : null,
+    };
+
+    const json = JSON.stringify(canonicalSubstantivePayload);
+    let h1 = 0x811c9dc5;
+    let h2 = 0x811c9dc5 ^ 0x55555555;
+    for (let i = 0; i < json.length; i++) {
+      const code = json.charCodeAt(i);
+      h1 ^= code;
+      h1 = Math.imul(h1, 0x01000193);
+      h2 ^= code;
+      h2 = Math.imul(h2, 0x01000193);
+    }
+    const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+    const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+    return `fnv1a64_${hex1}${hex2}`;
+  }
+
+  /**
+   * Returns all immutable PublishedCourseVersion snapshots for a course in ascending versionNumber order.
+   */
+  public getPublishedCourseVersions(courseId: string): PublishedCourseVersion[] {
+    const course = this.getCourseById(courseId);
+    const key = course ? course.id : courseId.trim();
+    const list =
+      this.publishedCourseVersions[key] ||
+      this.publishedCourseVersions[courseId.trim()] ||
+      [];
+    return JSON.parse(JSON.stringify(list));
+  }
+
+  /**
+   * Returns the latest immutable PublishedCourseVersion snapshot for a course, or null if unpublished.
+   */
+  public getLatestPublishedCourseVersion(courseId: string): PublishedCourseVersion | null {
+    const versions = this.getPublishedCourseVersions(courseId);
+    if (versions.length === 0) return null;
+    return versions[versions.length - 1];
+  }
+
+  /**
+   * Returns a specific immutable PublishedCourseVersion snapshot by versionNumber, or null if not found.
+   */
+  public getPublishedCourseVersion(
+    courseId: string,
+    versionNumber: number
+  ): PublishedCourseVersion | null {
+    const versions = this.getPublishedCourseVersions(courseId);
+    return versions.find((v) => v.versionNumber === versionNumber) || null;
+  }
+
+  /**
+   * Seeds the initial Version 1 PublishedCourseVersion snapshot for a pre-seeded published course.
+   */
+  private seedInitialPublishedCourseVersion(course: Course): PublishedCourseVersion {
+    const existing = this.publishedCourseVersions[course.id];
+    if (existing && existing.length > 0) {
+      return existing[existing.length - 1];
+    }
+
+    const versionItems: PublishedCourseVersionItem[] = [];
+    for (const ch of course.chapters || []) {
+      for (const item of ch.items || []) {
+        const fp = this.computeItemSubstantiveFingerprint(item);
+        const cv =
+          typeof item.contentVersion === 'number' && item.contentVersion >= 1
+            ? item.contentVersion
+            : 1;
+        item.contentVersion = cv;
+        item.contentFingerprint = fp;
+        versionItems.push({
+          itemId: item.id,
+          chapterId: ch.id,
+          type: item.type,
+          durationSeconds:
+            item.durationSeconds ?? (typeof item.duration === 'number' ? item.duration : null),
+          contentVersion: cv,
+          contentFingerprint: fp,
+        });
+      }
+    }
+
+    const publishedAt =
+      course.publishedAt || course.updatedAt || course.createdAt || new Date().toISOString();
+    const publishedBy = course.publishedBy || course.lecturerId || 'SYSTEM';
+
+    course.publishedAt = publishedAt;
+    course.publishedBy = publishedBy;
+    course.versionNumber = 1;
+    course.currentVersionNumber = 1;
+
+    const clonedItems: PublishedCourseVersionItem[] = JSON.parse(JSON.stringify(versionItems));
+    const initialSnapshot: PublishedCourseVersion = {
+      id: `PCV-${course.id}-v1`,
+      courseId: course.id,
+      versionNumber: 1,
+      publishedAt,
+      publishedBy,
+      title: course.title,
+      description: course.description,
+      chapters: JSON.parse(JSON.stringify(course.chapters || [])),
+      items: clonedItems,
+      requiredItems: JSON.parse(JSON.stringify(versionItems)),
+    };
+
+    this.publishedCourseVersions[course.id] = [JSON.parse(JSON.stringify(initialSnapshot))];
+    return initialSnapshot;
+  }
+
+  /**
+   * Authoritatively determines whether a CourseAttempt is sealed (historical/closed)
+   * and therefore exempt from retroactive Rule B substantive-change resets.
+   */
+  public isAttemptSealed(attemptOrId: string | CourseAttempt): boolean {
+    const attempt =
+      typeof attemptOrId === 'string'
+        ? this.courseAttempts.find((a) => a.id === attemptOrId)
+        : attemptOrId;
+    if (!attempt) return false;
+
+    if (
+      attempt.isSealed === true ||
+      Boolean(attempt.sealedAt) ||
+      attempt.status === 'expired_incomplete'
+    ) {
+      return true;
+    }
+
+    const canonicalUserId = resolveCanonicalUserId(attempt.userId).toLowerCase().trim();
+    const rawUserId = attempt.userId.toLowerCase().trim();
+    const normCourseId = attempt.courseId.toLowerCase().trim();
+
+    const enrollment = this.enrollments.find(
+      (e) =>
+        e.courseId.toLowerCase().trim() === normCourseId &&
+        (resolveCanonicalUserId(e.userId).toLowerCase().trim() === canonicalUserId ||
+          e.userId.toLowerCase().trim() === rawUserId)
+    );
+
+    const boundGrants = (enrollment?.sources || []).filter((s) => s.attemptId === attempt.id);
+    if (boundGrants.length > 0 && boundGrants.every((s) => s.status !== 'active')) {
+      return true;
+    }
+
+    const hasActiveContinuationGrant = boundGrants.some(
+      (s) => s.kind === 'self' && s.status === 'active'
+    );
+
+    if (!hasActiveContinuationGrant) {
+      if (attempt.cycleId) {
+        const normCycleId = attempt.cycleId.toLowerCase().trim();
+        const cycle = this.renewalCycles.find((c) => c.id.toLowerCase().trim() === normCycleId);
+        if (cycle && cycle.status !== 'active') {
+          return true;
+        }
+      }
+
+      if (attempt.groupId) {
+        const normGroupId = attempt.groupId.toLowerCase().trim();
+        const group = this.groups.find((g) => g.id.toLowerCase().trim() === normGroupId);
+        if (group) {
+          if (group.adminStatus === 'archived') {
+            return true;
+          }
+          if (
+            group.currentCycleId &&
+            attempt.cycleId &&
+            group.currentCycleId.toLowerCase().trim() !== attempt.cycleId.toLowerCase().trim()
+          ) {
+            return true;
+          }
+          const embeddedCycle = (group.cycles || this.getGroupCycles(group.id))?.find(
+            (c) => c.id.toLowerCase().trim() === (attempt.cycleId || '').toLowerCase().trim()
+          );
+          if (embeddedCycle && embeddedCycle.status && embeddedCycle.status !== 'active') {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Explicitly seals a CourseAttempt as a historical record so subsequent curriculum
+   * updates never alter its recorded completion or progress snapshot.
+   */
+  public sealAttempt(attemptId: string, sealedAt?: string): CourseAttempt | null {
+    const attempt = this.courseAttempts.find((a) => a.id === attemptId);
+    if (!attempt) return null;
+    const nowIso = sealedAt || new Date().toISOString();
+    const course = this.getCourseById(attempt.courseId);
+    attempt.isSealed = true;
+    attempt.sealedAt = nowIso;
+    attempt.sealedCourseVersion =
+      course?.versionNumber ?? course?.currentVersionNumber ?? 1;
+    return attempt;
+  }
+
+  /**
+   * Evaluates whether a lesson item is validly completed for the given attempt under Rule B.
+   * - For sealed attempts: preserves historical completion state regardless of subsequent item version bumps.
+   * - For active, unsealed attempts: requires the item to be marked completed AND its recorded
+   *   LessonProgress.contentVersion (defaulting to 1 for pre-versioned completions) to match the
+   *   published ChapterItem.contentVersion (defaulting to 1).
+   */
+  public isLessonCompletedForCurrentItemVersion(
+    attempt: CourseAttempt,
+    item: ChapterItem,
+    lessonProg?: LessonProgress,
+    completedItemIds?: string[]
+  ): boolean {
+    const isMarkedComplete =
+      lessonProg !== undefined
+        ? Boolean(lessonProg.completed)
+        : Boolean(completedItemIds?.includes(item.id));
+    if (!isMarkedComplete) return false;
+
+    if (this.isAttemptSealed(attempt)) {
+      return true;
+    }
+
+    const currentItemVersion =
+      typeof item.contentVersion === 'number' && item.contentVersion >= 1
+        ? item.contentVersion
+        : 1;
+    const completedAtVersion =
+      lessonProg?.contentVersion !== undefined ? lessonProg.contentVersion : 1;
+
+    return completedAtVersion === currentItemVersion;
+  }
+
+  /**
+   * Computes the ordered list of valid completed item IDs for a CourseAttempt against current flatItems.
+   */
+  private getValidCompletedItemIdsForAttempt(
+    attempt: CourseAttempt,
+    flatItems: ChapterItem[],
+    attProg?: AttemptProgress | null
+  ): string[] {
+    const itemsProgress = attProg?.itemsProgress || attempt.lessonProgress || {};
+    const candidateCompletedIds =
+      attProg?.completedItemIds ?? attempt.completedItemIds ?? [];
+    return flatItems
+      .filter((item) =>
+        this.isLessonCompletedForCurrentItemVersion(
+          attempt,
+          item,
+          itemsProgress[item.id],
+          candidateCompletedIds
+        )
+      )
+      .map((item) => item.id);
+  }
+
+  /**
+   * Records a new immutable PublishedCourseVersion snapshot upon authoritative approval/publication,
+   * diffs each ChapterItem against the previous published version (Rule B), increments contentVersion
+   * ONLY when substantive fields changed, and resets completion of substantively modified items across
+   * active, unsealed CourseAttempts while preserving sealed attempts untouched.
+   */
+  private recordPublishedCourseVersionAndReconcileAttempts(
+    course: Course,
+    publishedByUserId: string,
+    publishedAtIso?: string
+  ): { version: PublishedCourseVersion; substantivelyChangedItemIds: string[] } {
+    const effectivePublishedAt = publishedAtIso || new Date().toISOString();
+    const canonicalPublisher = publishedByUserId
+      ? resolveCanonicalUserId(publishedByUserId)
+      : 'SYSTEM';
+
+    const existingVersions = this.publishedCourseVersions[course.id] || [];
+    const previousVersion =
+      existingVersions.length > 0 ? existingVersions[existingVersions.length - 1] : null;
+    const nextVersionNumber = previousVersion ? previousVersion.versionNumber + 1 : 1;
+
+    const previousItemMap = new Map<string, PublishedCourseVersionItem>();
+    if (previousVersion) {
+      for (const prevItem of previousVersion.items || []) {
+        previousItemMap.set(prevItem.itemId, prevItem);
+      }
+    }
+
+    const substantivelyChangedItemIds: string[] = [];
+    const versionItems: PublishedCourseVersionItem[] = [];
+
+    for (const ch of course.chapters || []) {
+      for (const item of ch.items || []) {
+        const nextFingerprint = this.computeItemSubstantiveFingerprint(item);
+        const prevItem = previousItemMap.get(item.id);
+
+        let nextItemContentVersion = 1;
+        if (previousVersion && prevItem) {
+          if (prevItem.contentFingerprint !== nextFingerprint) {
+            nextItemContentVersion = prevItem.contentVersion + 1;
+            substantivelyChangedItemIds.push(item.id);
+          } else {
+            nextItemContentVersion = prevItem.contentVersion;
+          }
+        }
+
+        item.contentVersion = nextItemContentVersion;
+        item.contentFingerprint = nextFingerprint;
+
+        versionItems.push({
+          itemId: item.id,
+          chapterId: ch.id,
+          type: item.type,
+          durationSeconds:
+            item.durationSeconds ?? (typeof item.duration === 'number' ? item.duration : null),
+          contentVersion: nextItemContentVersion,
+          contentFingerprint: nextFingerprint,
+        });
+      }
+    }
+
+    course.publishedAt = effectivePublishedAt;
+    course.publishedBy = canonicalPublisher;
+    course.versionNumber = nextVersionNumber;
+    course.currentVersionNumber = nextVersionNumber;
+    course.updatedAt = effectivePublishedAt;
+
+    const newSnapshot: PublishedCourseVersion = {
+      id: `PCV-${course.id}-v${nextVersionNumber}`,
+      courseId: course.id,
+      versionNumber: nextVersionNumber,
+      publishedAt: effectivePublishedAt,
+      publishedBy: canonicalPublisher,
+      title: course.title,
+      description: course.description,
+      chapters: JSON.parse(JSON.stringify(course.chapters || [])),
+      items: JSON.parse(JSON.stringify(versionItems)),
+      requiredItems: JSON.parse(JSON.stringify(versionItems)),
+    };
+
+    if (!this.publishedCourseVersions[course.id]) {
+      this.publishedCourseVersions[course.id] = [];
+    }
+    this.publishedCourseVersions[course.id].push(JSON.parse(JSON.stringify(newSnapshot)));
+
+    // Always reconcile active, unsealed attempts upon publication of a new version (Rule B + D-12):
+    // handles substantive item changes, newly added required items, and removed items while
+    // preserving sealed historical attempts and already-issued version certificates intact.
+    this.reconcileActiveAttemptsForSubstantiveChanges(
+      course.id,
+      substantivelyChangedItemIds,
+      effectivePublishedAt
+    );
+
+    return {
+      version: JSON.parse(JSON.stringify(newSnapshot)),
+      substantivelyChangedItemIds,
+    };
+  }
+
+  /**
+   * Resets completion ONLY for substantively changed items in active, unsealed attempts
+   * of the specified course, recalculating attempt progress against the current published
+   * curriculum (D-12, Rule B) while leaving sealed historical attempts and issued certificates untouched.
+   */
+  private reconcileActiveAttemptsForSubstantiveChanges(
+    courseId: string,
+    changedItemIds: string[],
+    updatedAtIso: string
+  ): void {
+    const changedSet = new Set(changedItemIds);
+    const normCourseId = courseId.toLowerCase().trim();
+    const flatItems = this.getCourseItems(courseId);
+
+    for (const attempt of this.courseAttempts) {
+      if (attempt.courseId.toLowerCase().trim() !== normCourseId) {
+        continue;
+      }
+
+      // Sealed historical attempts are strictly immutable under Rule B
+      if (this.isAttemptSealed(attempt)) {
+        continue;
+      }
+
+      const attProg = this.getAttemptProgress(attempt.id);
+      let wasModified = false;
+
+      if (changedSet.size > 0) {
+        if (Array.isArray(attempt.completedItemIds)) {
+          const beforeLen = attempt.completedItemIds.length;
+          attempt.completedItemIds = attempt.completedItemIds.filter((id) => !changedSet.has(id));
+          if (attempt.completedItemIds.length !== beforeLen) {
+            wasModified = true;
+          }
+        }
+
+        if (attempt.lessonProgress) {
+          for (const changedId of changedItemIds) {
+            const existingLp = attempt.lessonProgress[changedId];
+            if (existingLp && existingLp.completed) {
+              attempt.lessonProgress[changedId] = {
+                ...existingLp,
+                completed: false,
+                completedAt: undefined,
+                updatedAt: updatedAtIso,
+              };
+              wasModified = true;
+            }
+          }
+        }
+
+        if (attProg) {
+          if (Array.isArray(attProg.completedItemIds)) {
+            const beforeLen = attProg.completedItemIds.length;
+            attProg.completedItemIds = attProg.completedItemIds.filter((id) => !changedSet.has(id));
+            if (attProg.completedItemIds.length !== beforeLen) {
+              wasModified = true;
+            }
+          }
+          if (attProg.itemsProgress) {
+            for (const changedId of changedItemIds) {
+              const existingLp = attProg.itemsProgress[changedId];
+              if (existingLp && existingLp.completed) {
+                attProg.itemsProgress[changedId] = {
+                  ...existingLp,
+                  completed: false,
+                  completedAt: undefined,
+                  updatedAt: updatedAtIso,
+                };
+                wasModified = true;
+              }
+            }
+          }
+        }
+      }
+
+      const validCompletedIds = this.getValidCompletedItemIdsForAttempt(
+        attempt,
+        flatItems,
+        attProg
+      );
+      const recalculatedPercent = calculateTraineeProgress(
+        flatItems.length,
+        validCompletedIds.length
+      );
+      const isStillCompleted =
+        flatItems.length > 0 && validCompletedIds.length === flatItems.length;
+
+      const percentOrCompletionChanged =
+        attempt.progressPercent !== recalculatedPercent ||
+        (attempt.completedItemIds?.length ?? 0) !== validCompletedIds.length ||
+        (attempt.status === 'completed') !== isStillCompleted;
+
+      if (wasModified || percentOrCompletionChanged) {
+        attempt.completedItemIds = [...validCompletedIds];
+        attempt.progressPercent = recalculatedPercent;
+        attempt.updatedAt = updatedAtIso;
+
+        if (!isStillCompleted && attempt.status === 'completed') {
+          attempt.status =
+            validCompletedIds.length > 0 || isAttemptStarted(attempt)
+              ? 'in_progress'
+              : 'not_started';
+          attempt.completedAt = null;
+        } else if (isStillCompleted && attempt.status !== 'completed') {
+          attempt.status = 'completed';
+          attempt.completedAt = attempt.completedAt || updatedAtIso;
+        }
+
+        if (attProg) {
+          attProg.completedItemIds = [...validCompletedIds];
+          attProg.progressPercent = recalculatedPercent;
+          attProg.isCompleted = isStillCompleted;
+          attProg.updatedAt = updatedAtIso;
+        }
+
+        // Synchronize legacy userProgress mirror for this trainee if they have no sealed attempts for this course
+        if (wasModified) {
+          const canonicalUserId = resolveCanonicalUserId(attempt.userId).toLowerCase().trim();
+          const rawUserId = attempt.userId.toLowerCase().trim();
+          const hasSealedAttemptForUser = this.courseAttempts.some(
+            (a) =>
+              a.courseId.toLowerCase().trim() === normCourseId &&
+              (resolveCanonicalUserId(a.userId).toLowerCase().trim() === canonicalUserId ||
+                a.userId.toLowerCase().trim() === rawUserId) &&
+              this.isAttemptSealed(a)
+          );
+
+          if (!hasSealedAttemptForUser) {
+            for (const uidKey of [canonicalUserId, rawUserId, attempt.userId]) {
+              const userCourseMap =
+                this.userProgress[uidKey]?.[normCourseId] || this.userProgress[uidKey]?.[courseId];
+              if (userCourseMap) {
+                for (const changedId of changedItemIds) {
+                  if (userCourseMap[changedId]?.completed) {
+                    userCourseMap[changedId] = {
+                      ...userCourseMap[changedId],
+                      completed: false,
+                      completedAt: undefined,
+                      updatedAt: updatedAtIso,
+                    };
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Authoritatively computes the current progress summary for a CourseAttempt under D-12 and Rule B.
+   * - Uses calculateTraineeProgress (`Math.round((completed / total) * 100)` clamped to `[0, 100]`,
+   *   `99%` cap when `completed < total`, and `0%` when `total === 0`).
+   * - Strictly gates `isCompleted` on `totalRequiredItems > 0 && completedRequiredItems === totalRequiredItems`.
+   */
+  public computeAttemptProgress(attemptId: string): ComputedAttemptProgress {
+    const attempt = this.courseAttempts.find((a) => a.id === attemptId);
+    if (!attempt) {
+      throw new MockStoreError('سجل محاولة التدريب المحددة غير موجود', 404);
+    }
+
+    const course = this.getCourseById(attempt.courseId);
+    const flatItems = course ? this.getCourseItems(course.id) : [];
+    const attProg = this.getAttemptProgress(attempt.id);
+    const isSealed = this.isAttemptSealed(attempt);
+
+    const latestPublishedVersion = course
+      ? this.getLatestPublishedCourseVersion(course.id)
+      : null;
+    const courseVersionNumber =
+      isSealed && typeof attempt.sealedCourseVersion === 'number'
+        ? attempt.sealedCourseVersion
+        : latestPublishedVersion?.versionNumber ??
+          course?.versionNumber ??
+          course?.currentVersionNumber ??
+          1;
+
+    const completedItemIds = this.getValidCompletedItemIdsForAttempt(attempt, flatItems, attProg);
+    const totalRequiredItems = flatItems.length;
+    const completedRequiredItems = completedItemIds.length;
+    const progressPercent = calculateTraineeProgress(totalRequiredItems, completedRequiredItems);
+    const isCompleted =
+      totalRequiredItems > 0 && completedRequiredItems === totalRequiredItems;
+
+    return {
+      attemptId: attempt.id,
+      userId: resolveCanonicalUserId(attempt.userId),
+      courseId: course?.id || attempt.courseId,
+      courseVersionNumber,
+      completedRequiredItems,
+      totalRequiredItems,
+      completedItemIds,
+      progressPercent,
+      isCompleted,
+      isSealed,
+    };
+  }
+
+  /**
+   * Issues a version-scoped CertificateRecord (`Certificate — Course Version N` / `شهادة إتمام — الإصدار N`)
+   * for a completed attempt on a published course version (D-13, MFR-46).
+   *
+   * Strict invariants enforced:
+   * 1. Course must exist and be in a published state (`published` or `live`) with an immutable `PublishedCourseVersion`.
+   * 2. Attempt must exist and belong to `userId` and `courseId`.
+   * 3. Preview accounts (admin/lecturer/developer/super_admin/assistant_admin) never receive trainee certificates (`MFR-21`).
+   * 4. Learner must hold an active entitlement to the attempt and `accessMode` must be `'full'` (never `'review_only'` / `keep_no_cert`).
+   * 5. Attempt must strictly satisfy `100%` completion (`totalRequiredItems > 0 && completedRequiredItems === totalRequiredItems`) for the target `courseVersionNumber` (`D-12`).
+   * 6. Idempotent per `(userId, courseId, attemptId, courseVersionNumber)`: never creates duplicate certificates.
+   * 7. Preserves all prior version certificates intact when issuing a certificate for a newer version.
+   */
+  public issueCourseVersionCertificate(params: {
+    userId: string;
+    courseId: string;
+    attemptId: string;
+    courseVersionNumber?: number;
+    issuedAt?: string;
+  }): CertificateRecord | null {
+    const course = this.getCourseById(params.courseId);
+    if (!course || (course.status !== 'published' && course.status !== 'live')) {
+      return null;
+    }
+
+    const attempt = this.courseAttempts.find((a) => a.id === params.attemptId);
+    if (!attempt) {
+      return null;
+    }
+
+    if (attempt.courseId.toLowerCase().trim() !== course.id.toLowerCase().trim()) {
+      return null;
+    }
+
+    const canonicalUserId = resolveCanonicalUserId(params.userId);
+    const attemptCanonicalUserId = resolveCanonicalUserId(attempt.userId);
+    if (
+      attemptCanonicalUserId.toLowerCase().trim() !== canonicalUserId.toLowerCase().trim() &&
+      attempt.userId.toLowerCase().trim() !== params.userId.toLowerCase().trim()
+    ) {
+      return null;
+    }
+
+    // Preview isolation (MFR-21): Non-trainee roles never receive trainee completion certificates
+    const managedUser = this.getManagedUserById(canonicalUserId);
+    if (managedUser && managedUser.role !== 'user') {
+      return null;
+    }
+
+    // Verify active learner entitlement and full access mode (reject revoked grants & review_only / keep_no_cert)
+    try {
+      this.assertLearnerAttemptEntitlement(canonicalUserId, course.id, attempt);
+    } catch {
+      return null;
+    }
+
+    const accessMode = this.getAttemptAccessMode(canonicalUserId, course.id, attempt.id);
+    if (accessMode !== 'full') {
+      return null;
+    }
+
+    // Resolve target published course version snapshot
+    let latestVersion = this.getLatestPublishedCourseVersion(course.id);
+    if (!latestVersion) {
+      latestVersion = this.seedInitialPublishedCourseVersion(course);
+    }
+
+    const targetVersionNumber =
+      params.courseVersionNumber ??
+      latestVersion.versionNumber ??
+      course.versionNumber ??
+      course.currentVersionNumber ??
+      1;
+
+    const versionSnapshot = this.getPublishedCourseVersion(course.id, targetVersionNumber);
+    if (!versionSnapshot) {
+      return null;
+    }
+
+    const requiredVersionItems =
+      versionSnapshot.requiredItems || versionSnapshot.items || [];
+    if (requiredVersionItems.length === 0) {
+      return null;
+    }
+
+    // Verify strict 100% completion of all required items for the target published version (D-12, D-13)
+    const computed = this.computeAttemptProgress(attempt.id);
+    if (targetVersionNumber === computed.courseVersionNumber) {
+      if (
+        !computed.isCompleted ||
+        computed.totalRequiredItems <= 0 ||
+        computed.completedRequiredItems !== computed.totalRequiredItems ||
+        computed.progressPercent !== 100
+      ) {
+        return null;
+      }
+    } else {
+      const attProg = this.getAttemptProgress(attempt.id);
+      const itemsProgress = attProg?.itemsProgress || attempt.lessonProgress || {};
+      const allVersionItemsCompleted = requiredVersionItems.every((vItem) => {
+        const lp = itemsProgress[vItem.itemId];
+        if (!lp || !lp.completed) return false;
+        return (lp.contentVersion ?? 1) === vItem.contentVersion;
+      });
+      if (!allVersionItemsCompleted) {
+        return null;
+      }
+    }
+
+    // Enforce idempotency per (userId, courseId, attemptId, courseVersionNumber)
+    const existingCert = this.certificates.find(
+      (c) =>
+        resolveCanonicalUserId(c.userId).toLowerCase().trim() ===
+          canonicalUserId.toLowerCase().trim() &&
+        c.courseId.toLowerCase().trim() === course.id.toLowerCase().trim() &&
+        c.attemptId === attempt.id &&
+        c.courseVersionNumber === targetVersionNumber
+    );
+    if (existingCert) {
+      return JSON.parse(JSON.stringify(existingCert));
+    }
+
+    const userMeta = this.resolveMockUserMeta(canonicalUserId);
+    const issuedAtIso = params.issuedAt || attempt.completedAt || new Date().toISOString();
+
+    const certRecord: CertificateRecord = {
+      id: `CERT-${canonicalUserId}-${course.id}-${attempt.id}-v${targetVersionNumber}`,
+      userId: canonicalUserId,
+      courseId: course.id,
+      attemptId: attempt.id,
+      attemptNumber: attempt.attemptNumber ?? 1,
+      courseVersionNumber: targetVersionNumber,
+      courseVersion: targetVersionNumber,
+      certificateLabel: `Certificate — Course Version ${targetVersionNumber}`,
+      certificateLabelAr: `شهادة إتمام — الإصدار ${targetVersionNumber}`,
+      courseTitleSnapshot: versionSnapshot.title || course.title,
+      traineeNameSnapshot: userMeta.name,
+      verificationCode: `METRO-CERT-${course.id.toUpperCase()}-V${targetVersionNumber}-${attempt.id}`,
+      issuedAt: issuedAtIso,
+    };
+
+    this.certificates.push(certRecord);
+    return JSON.parse(JSON.stringify(certRecord));
+  }
+
+  /**
+   * Returns all version-scoped certificates issued to a user, optionally filtered by courseId,
+   * ordered by courseVersionNumber ascending then issuedAt ascending.
+   */
+  public getUserCertificates(userId: string, courseId?: string): CertificateRecord[] {
+    const canonicalUserId = resolveCanonicalUserId(userId).toLowerCase().trim();
+    const rawUserId = userId.toLowerCase().trim();
+    const normCourseId = courseId?.toLowerCase().trim();
+
+    const matched = this.certificates.filter((c) => {
+      const userMatches =
+        resolveCanonicalUserId(c.userId).toLowerCase().trim() === canonicalUserId ||
+        c.userId.toLowerCase().trim() === rawUserId;
+      if (!userMatches) return false;
+      if (normCourseId && c.courseId.toLowerCase().trim() !== normCourseId) {
+        return false;
+      }
+      return true;
+    });
+
+    matched.sort((a, b) => {
+      if (a.courseVersionNumber !== b.courseVersionNumber) {
+        return a.courseVersionNumber - b.courseVersionNumber;
+      }
+      return new Date(a.issuedAt).getTime() - new Date(b.issuedAt).getTime();
+    });
+
+    return JSON.parse(JSON.stringify(matched));
+  }
+
+  /**
+   * Returns all version-scoped certificates bound to a specific attemptId, ordered by courseVersionNumber ascending.
+   */
+  public getAttemptCertificates(attemptId: string): CertificateRecord[] {
+    const matched = this.certificates.filter((c) => c.attemptId === attemptId);
+    matched.sort((a, b) => a.courseVersionNumber - b.courseVersionNumber);
+    return JSON.parse(JSON.stringify(matched));
+  }
+
+  /**
+   * Returns all version-scoped certificates issued for a course across all learners and attempts.
+   */
+  public getCourseCertificates(courseId: string): CertificateRecord[] {
+    const normCourseId = courseId.toLowerCase().trim();
+    const matched = this.certificates.filter(
+      (c) => c.courseId.toLowerCase().trim() === normCourseId
+    );
+    matched.sort((a, b) => {
+      if (a.courseVersionNumber !== b.courseVersionNumber) {
+        return a.courseVersionNumber - b.courseVersionNumber;
+      }
+      return new Date(a.issuedAt).getTime() - new Date(b.issuedAt).getTime();
+    });
+    return JSON.parse(JSON.stringify(matched));
   }
 
   /**
@@ -892,6 +1814,89 @@ class InMemoryStore {
   }
 
   /**
+   * Helper: ensure an EnrollmentRecord exists and synchronize a deterministic EnrollmentSourceGrant.
+   * Multi-Source Enrollment Provenance (D-06, D-07, MFR-41).
+   */
+  public addOrUpdateEnrollmentGrant(params: {
+    userId: string;
+    courseId: string;
+    grant: EnrollmentSourceGrant;
+    enrolledAt?: string;
+  }): { enrollment: CourseEnrollment; isNewEnrollment: boolean; isNewGrant: boolean } {
+    const canonicalUserId = resolveCanonicalUserId(params.userId);
+    const normalizedUserId = params.userId.trim().toLowerCase();
+    const cId = params.courseId.trim().toLowerCase();
+
+    let enrollment = this.enrollments.find(
+      (e) =>
+        e.courseId.toLowerCase() === cId &&
+        (resolveCanonicalUserId(e.userId).toLowerCase() === canonicalUserId.toLowerCase() ||
+          e.userId.trim().toLowerCase() === normalizedUserId)
+    );
+
+    let isNewEnrollment = false;
+    const nowIso = params.enrolledAt || new Date().toISOString();
+
+    if (!enrollment) {
+      isNewEnrollment = true;
+      enrollment = {
+        id: `ENR-${canonicalUserId}-${params.courseId}`,
+        userId: canonicalUserId,
+        courseId: params.courseId,
+        enrolledAt: nowIso,
+        status: 'active',
+        sources: [],
+      };
+      this.enrollments.push(enrollment);
+      const course = this.getCourseById(params.courseId);
+      if (course) {
+        course.enrollmentCount = (course.enrollmentCount || 0) + 1;
+      }
+    }
+
+    if (!Array.isArray(enrollment.sources)) {
+      enrollment.sources = [];
+    }
+
+    let isNewGrant = false;
+    const existingGrantIndex = enrollment.sources.findIndex((s) => s.sourceId === params.grant.sourceId);
+
+    if (existingGrantIndex >= 0) {
+      enrollment.sources[existingGrantIndex] = {
+        ...enrollment.sources[existingGrantIndex],
+        ...params.grant,
+        // Preserve immutable attempt association on idempotent retry (D-06)
+        attemptId: enrollment.sources[existingGrantIndex].attemptId || params.grant.attemptId,
+        status: params.grant.status || 'active',
+      };
+    } else {
+      isNewGrant = true;
+      enrollment.sources.push(params.grant);
+    }
+
+    enrollment.status = 'active';
+
+    // Ensure bound CourseAttempt and AttemptProgress exist for the grant (MFR-32, D-06)
+    const boundAttemptId = enrollment.sources[existingGrantIndex >= 0 ? existingGrantIndex : enrollment.sources.length - 1].attemptId;
+    const existingAttempt = this.courseAttempts.find((a) => a.id === boundAttemptId);
+    if (!existingAttempt) {
+      this.courseAttempts.push(
+        createCourseAttempt({
+          id: boundAttemptId,
+          userId: canonicalUserId,
+          courseId: params.courseId,
+          cycleId: params.grant.cycleId || null,
+          groupId: params.grant.groupId || null,
+          createdAt: params.grant.grantedAt || nowIso,
+        })
+      );
+    }
+    this.getAttemptProgress(boundAttemptId);
+
+    return { enrollment, isNewEnrollment, isNewGrant };
+  }
+
+  /**
    * Execute course enrollment mutation
    */
   public enrollUser({
@@ -922,26 +1927,52 @@ class InMemoryStore {
       );
     }
 
+    // Canonical user resolution and attempt/source determinism (D-06, MFR-41)
+    const canonicalUserId = resolveCanonicalUserId(userId);
+    const attemptId = `ATT-${canonicalUserId}-${course.id}-standalone`;
+    const sourceId = `self:catalog:${attemptId}`;
+
     // Check duplicate enrollment
     const existing = this.getCourseEnrollment(course.id, userId);
     if (existing) {
-      throw new MockStoreError('أنت مسجل بالفعل في هذه الدورة التدريبية', 409);
+      const hasActiveSelfGrant = (existing.sources || []).some(
+        (s) => s.kind === 'self' && s.sourceId === sourceId && s.status === 'active'
+      );
+      if (hasActiveSelfGrant || (existing.sources || []).length === 0) {
+        throw new MockStoreError('أنت مسجل بالفعل في هذه الدورة التدريبية', 409);
+      }
     }
 
-    // Create unique enrollment record using canonical user ID
-    const canonicalUserId = resolveCanonicalUserId(userId);
-    const enrollment: CourseEnrollment = {
-      id: `ENR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-      courseId: course.id,
-      userId: canonicalUserId,
-      enrolledAt: new Date().toISOString(),
+    const nowIso = new Date().toISOString();
+    const selfGrant: EnrollmentSourceGrant = {
+      sourceId,
+      kind: 'self',
+      attemptId,
+      grantedAt: nowIso,
       status: 'active',
     };
 
-    this.enrollments.push(enrollment);
+    const { enrollment } = this.addOrUpdateEnrollmentGrant({
+      userId: canonicalUserId,
+      courseId: course.id,
+      grant: selfGrant,
+      enrolledAt: nowIso,
+    });
 
-    // Atomically increment aggregate enrollmentCount on the course
-    course.enrollmentCount = (course.enrollmentCount || 0) + 1;
+    // Ensure standalone CourseAttempt is provisioned
+    const existingAttempt = this.courseAttempts.find((a) => a.id === attemptId);
+    if (!existingAttempt) {
+      this.courseAttempts.push(
+        createCourseAttempt({
+          id: attemptId,
+          userId: canonicalUserId,
+          courseId: course.id,
+          cycleId: null,
+          groupId: null,
+          createdAt: nowIso,
+        })
+      );
+    }
 
     this.createNotification({
       userId,
@@ -961,9 +1992,782 @@ class InMemoryStore {
   }
 
   /**
-   * Retrieves overall progress for a user in a specific course.
+   * Determines whether legacy standalone fallback is permitted for a course enrollment.
+   * Permitted ONLY when no EnrollmentRecord exists (preview / unseeded legacy tests)
+   * OR when an active legacy EnrollmentRecord has no source grants (sources.length === 0).
+   * Explicitly denied whenever source grants exist or enrollment.status !== 'active'.
    */
-  public getCourseProgress(userId: string, courseId: string): CourseProgress {
+  private canUseLegacyStandaloneFallback(enrollment: EnrollmentRecord | undefined): boolean {
+    if (!enrollment) {
+      return true;
+    }
+    if (enrollment.status !== 'active') {
+      return false;
+    }
+    return !Array.isArray(enrollment.sources) || enrollment.sources.length === 0;
+  }
+
+  /**
+   * Validates that a learner holds an active entitlement to access the specified CourseAttempt.
+   * Throws 403 COURSE_ACCESS_REVOKED when the attempt belongs to a revoked or hidden grant
+   * without an active continuation or alternate active grant.
+   */
+  private assertLearnerAttemptEntitlement(
+    userId: string,
+    courseId: string,
+    attempt: CourseAttempt
+  ): void {
+    const eligibleAttempts = this.getEligibleAttemptsForCourse(userId, courseId);
+    if (eligibleAttempts.some((opt) => opt.attemptId === attempt.id)) {
+      return;
+    }
+
+    // Check if the attempt's access mode is 'none' due to expired group deadline under 'hide' policy (MFR-23, MFR-42)
+    const accessMode = this.getAttemptAccessMode(userId, courseId, attempt.id);
+    if (accessMode === 'none') {
+      throw new MockStoreError(
+        'انتهت صلاحية الوصول إلى هذا المقرر التدريبي بعد انتهاء المهلة المحددة للمجموعة التدريبية',
+        403,
+        'COURSE_ACCESS_EXPIRED'
+      );
+    }
+
+    const canonicalUserId = resolveCanonicalUserId(userId).toLowerCase().trim();
+    const rawUserId = userId.toLowerCase().trim();
+    const normalizedCourseId = courseId.toLowerCase().trim();
+    const enrollment = this.enrollments.find(
+      (e) =>
+        e.courseId.toLowerCase().trim() === normalizedCourseId &&
+        (resolveCanonicalUserId(e.userId).toLowerCase().trim() === canonicalUserId ||
+          e.userId.toLowerCase().trim() === rawUserId)
+    );
+
+    if (this.canUseLegacyStandaloneFallback(enrollment)) {
+      if (attempt.groupId) {
+        const group = this.groups.find(
+          (g) => g.id.toLowerCase().trim() === attempt.groupId!.toLowerCase().trim()
+        );
+        const isGroupMember = Boolean(
+          group?.traineeIds?.some((tid) => {
+            const normTid = tid.toLowerCase().trim();
+            return (
+              normTid === canonicalUserId ||
+              normTid === rawUserId ||
+              resolveCanonicalUserId(tid).toLowerCase().trim() === canonicalUserId
+            );
+          })
+        );
+        if (!isGroupMember) {
+          throw new MockStoreError(
+            'لم يعد لديك صلاحية الوصول إلى هذا المقرر بعد إزالتك من المجموعة التدريبية',
+            403,
+            'COURSE_ACCESS_REVOKED'
+          );
+        }
+      }
+      return;
+    }
+
+    throw new MockStoreError(
+      'لم يعد لديك صلاحية الوصول إلى هذا المقرر بعد إزالتك من المجموعة التدريبية',
+      403,
+      'COURSE_ACCESS_REVOKED'
+    );
+  }
+
+  /**
+   * Retrieves all eligible learning attempt options for a user in a course (D-06, MFR-41, §9.1).
+   * Distinguishes full access from review-only access.
+   * Filters out revoked grants and hidden expired cycles.
+   */
+  public getEligibleAttemptsForCourse(userId: string, courseId: string): EligibleAttemptOption[] {
+    const canonicalUserId = resolveCanonicalUserId(userId).toLowerCase().trim();
+    const rawUserId = userId.toLowerCase().trim();
+    const normalizedCourseId = courseId.toLowerCase().trim();
+
+    const flatItems = this.getCourseItems(courseId);
+    const totalLessons = flatItems.length;
+
+    const enrollment = this.enrollments.find(
+      (e) =>
+        e.courseId.toLowerCase().trim() === normalizedCourseId &&
+        (e.userId.toLowerCase().trim() === canonicalUserId ||
+          e.userId.toLowerCase().trim() === rawUserId)
+    );
+
+    const optionsMap = new Map<string, EligibleAttemptOption>();
+
+    if (enrollment && Array.isArray(enrollment.sources) && enrollment.sources.length > 0) {
+      for (const grant of enrollment.sources) {
+        // Skip any non-active grant (e.g. 'revoked_by_group_removal');
+        // if an active continuation grant shares this attemptId, it will be evaluated on its own iteration.
+        if (grant.status !== 'active') {
+          continue;
+        }
+
+        // Fetch or create bound attempt
+        const attempt =
+          this.courseAttempts.find((a) => a.id === grant.attemptId) ||
+          this.getOrCreateCurrentAttempt({
+            userId,
+            courseId,
+            groupId: grant.groupId,
+            cycleId: grant.cycleId,
+          });
+
+        let accessMode: CourseAccessMode = 'full';
+        let groupName: string | undefined;
+        let cycleTitle: string | undefined;
+
+        if (grant.kind === 'group' && grant.groupId) {
+          const group = this.groups.find(
+            (g) => g.id.toLowerCase().trim() === grant.groupId!.toLowerCase().trim()
+          );
+          groupName = group?.name;
+          const cycle = (group?.cycles || (group ? this.getGroupCycles(group.id) : undefined))?.find(
+            (c) => c.id.toLowerCase().trim() === (grant.cycleId || '').toLowerCase().trim()
+          );
+          cycleTitle = cycle?.title || cycle?.name || cycle?.id;
+
+          if (group) {
+            const effSettings = getEffectiveCourseSettings(group, courseId, new Date(), cycle || null);
+            const isGroupOrCycleArchived =
+              group.adminStatus === 'archived' ||
+              cycle?.status === 'archived' ||
+              cycle?.status === 'completed';
+            const policy =
+              effSettings.effectivePostDeadlinePolicy ||
+              effSettings.postDeadlinePolicy ||
+              group.postDeadlinePolicy ||
+              'keep_no_cert';
+
+            if (effSettings.isExpired || isGroupOrCycleArchived) {
+              if (policy === 'hide') {
+                // Course is completely hidden from trainee after deadline / archive
+                continue;
+              }
+              accessMode = 'review_only';
+            }
+          }
+        }
+
+        // Check if this grant is a continuation from a previous group (D-07)
+        const isContinuation =
+          grant.sourceId.startsWith('self:continued:') ||
+          grant.sourceId.startsWith('continuation:') ||
+          Boolean(grant.convertedFromGroupId);
+
+        const originGId = isContinuation
+          ? (grant.convertedFromGroupId || (grant.sourceId.startsWith('self:continued:') ? grant.sourceId.split(':')[2] : grant.groupId) || null)
+          : null;
+        const originGroup = originGId ? this.groups.find((g) => g.id.toLowerCase() === originGId.toLowerCase()) : undefined;
+
+        let contextLabel = 'تسجيل ذاتي مستقل';
+        if (grant.kind === 'group') {
+          contextLabel = `مجموعة: ${groupName || grant.groupId}`;
+        } else if (isContinuation) {
+          contextLabel = `تسجيل مستمر من مجموعة: ${originGroup?.name || originGId}`;
+        }
+
+        const prog = this.getAttemptProgress(attempt.id);
+        const validCompletedIds = this.getValidCompletedItemIdsForAttempt(attempt, flatItems, prog);
+        const completedLessons = validCompletedIds.length;
+        const progressPercent = calculateTraineeProgress(totalLessons, completedLessons);
+        const lastActivityAt = attempt.lastActivityAt || attempt.updatedAt || grant.grantedAt;
+
+        const option: EligibleAttemptOption = {
+          attemptId: attempt.id,
+          sourceId: grant.sourceId,
+          kind: grant.kind,
+          groupId: grant.groupId || null,
+          groupName: groupName || null,
+          cycleId: grant.cycleId || attempt.cycleId || null,
+          cycleTitle: cycleTitle || null,
+          convertedFromGroupId: originGId,
+          convertedFromGroupName: originGroup?.name || null,
+          contextLabel,
+          accessMode,
+          progressPercent,
+          completedLessons,
+          totalLessons,
+          lastActivityAt,
+          status: attempt.status,
+        };
+
+        if (optionsMap.has(attempt.id)) {
+          const existing = optionsMap.get(attempt.id)!;
+          if (
+            (existing.accessMode === 'review_only' && accessMode === 'full') ||
+            (existing.kind === 'group' && option.kind === 'self' && accessMode === 'full')
+          ) {
+            optionsMap.set(attempt.id, option);
+          }
+        } else {
+          optionsMap.set(attempt.id, option);
+        }
+      }
+    }
+
+    // Fallback: Check if standalone attempts exist in courseAttempts for this user & course without explicit sources
+    if (optionsMap.size === 0 && this.canUseLegacyStandaloneFallback(enrollment)) {
+      const existingAttempts = this.courseAttempts.filter(
+        (a) =>
+          a.courseId.toLowerCase().trim() === normalizedCourseId &&
+          (a.userId.toLowerCase().trim() === canonicalUserId ||
+            a.userId.toLowerCase().trim() === rawUserId)
+      );
+
+      for (const attempt of existingAttempts) {
+        let accessMode: CourseAccessMode = 'full';
+        let groupName: string | undefined;
+        let cycleTitle: string | undefined;
+
+        if (attempt.groupId) {
+          const group = this.groups.find(
+            (g) => g.id.toLowerCase().trim() === attempt.groupId!.toLowerCase().trim()
+          );
+          const isGroupMember = Boolean(
+            group?.traineeIds?.some((tid) => {
+              const normTid = tid.toLowerCase().trim();
+              return (
+                normTid === canonicalUserId ||
+                normTid === rawUserId ||
+                resolveCanonicalUserId(tid).toLowerCase().trim() === canonicalUserId
+              );
+            })
+          );
+          if (!isGroupMember) {
+            continue;
+          }
+          groupName = group?.name;
+          const cycle = (group?.cycles || (group ? this.getGroupCycles(group.id) : undefined))?.find(
+            (c) => c.id.toLowerCase().trim() === (attempt.cycleId || '').toLowerCase().trim()
+          );
+          cycleTitle = cycle?.title || cycle?.name || cycle?.id;
+
+          if (group) {
+            const effSettings = getEffectiveCourseSettings(group, courseId, new Date(), cycle || null);
+            const isGroupOrCycleArchived =
+              group.adminStatus === 'archived' ||
+              cycle?.status === 'archived' ||
+              cycle?.status === 'completed';
+            const policy =
+              effSettings.effectivePostDeadlinePolicy ||
+              effSettings.postDeadlinePolicy ||
+              group.postDeadlinePolicy ||
+              'keep_no_cert';
+
+            if (effSettings.isExpired || isGroupOrCycleArchived) {
+              if (policy === 'hide') {
+                continue;
+              }
+              accessMode = 'review_only';
+            }
+          }
+        }
+
+        const prog = this.getAttemptProgress(attempt.id);
+        const validCompletedIds = this.getValidCompletedItemIdsForAttempt(attempt, flatItems, prog);
+        const completedLessons = validCompletedIds.length;
+        const progressPercent = calculateTraineeProgress(totalLessons, completedLessons);
+        const contextLabel = attempt.groupId
+          ? `مجموعة: ${groupName || attempt.groupId}`
+          : 'تسجيل ذاتي مستقل';
+
+        optionsMap.set(attempt.id, {
+          attemptId: attempt.id,
+          sourceId: attempt.groupId ? `group:${attempt.groupId}:${attempt.cycleId || 'initial'}` : `self:${courseId}`,
+          kind: attempt.groupId ? 'group' : 'self',
+          groupId: attempt.groupId || null,
+          groupName: groupName || null,
+          cycleId: attempt.cycleId || null,
+          cycleTitle: cycleTitle || null,
+          contextLabel,
+          accessMode,
+          progressPercent,
+          completedLessons,
+          totalLessons,
+          lastActivityAt: attempt.lastActivityAt || attempt.updatedAt,
+          status: attempt.status,
+        });
+      }
+    }
+
+    return Array.from(optionsMap.values());
+  }
+
+  /**
+   * Authoritative Course Access Resolver (MFR-23, MFR-42, §12).
+   * Evaluates all enrollment sources for a user in a given course and determines
+   * the highest-precedence effective access mode ('full' > 'review_only' > 'none').
+   *
+   * Rules:
+   * 1. Active standalone source (kind: 'self', status: 'active') -> 'full'
+   *    (includes independent catalog enrollments and D-07 continuation grants).
+   * 2. Active group source (kind: 'group', status: 'active', group not archived, now <= deadline) -> 'full'.
+   * 3. Expired or archived group with postDeadlinePolicy 'keep_no_cert' -> 'review_only'.
+   * 4. Expired or archived group with postDeadlinePolicy 'hide' -> 'none'.
+   * 5. Revoked source (status: 'revoked_by_group_removal') -> does not grant access ('none').
+   * 6. Precedence: 'full' > 'review_only' > 'none'.
+   * 7. Zero completed-trainee exemption: 100% completed group trainees under 'hide' receive 'none'
+   *    unless another active grant exists.
+   */
+  public resolveCourseAccess(
+    userId: string,
+    courseId: string,
+    now?: Date | string
+  ): CourseAccessMode {
+    const canonicalUserId = resolveCanonicalUserId(userId).toLowerCase().trim();
+    const rawUserId = userId.toLowerCase().trim();
+    const normalizedCourseId = courseId.toLowerCase().trim();
+
+    const nowDate =
+      now instanceof Date
+        ? now
+        : typeof now === 'string'
+          ? new Date(now)
+          : new Date();
+    const safeNow = isNaN(nowDate.getTime()) ? new Date() : nowDate;
+
+    // Retrieve enrollment record
+    const enrollment = this.enrollments.find(
+      (e) =>
+        e.courseId.toLowerCase().trim() === normalizedCourseId &&
+        (resolveCanonicalUserId(e.userId).toLowerCase().trim() === canonicalUserId ||
+          e.userId.toLowerCase().trim() === rawUserId)
+    );
+
+    let hasFull = false;
+    let hasReviewOnly = false;
+
+    // Helper to evaluate a single group's access for this course
+    const evaluateGroupAccess = (groupId: string, cycleId?: string | null): CourseAccessMode => {
+      const group = this.groups.find(
+        (g) => g.id.toLowerCase().trim() === groupId.toLowerCase().trim()
+      );
+      if (!group) return 'none';
+
+      // Verify group membership
+      const isMember = Boolean(
+        group.traineeIds?.some((tid) => {
+          const normTid = tid.toLowerCase().trim();
+          return (
+            normTid === canonicalUserId ||
+            normTid === rawUserId ||
+            resolveCanonicalUserId(tid).toLowerCase().trim() === canonicalUserId
+          );
+        })
+      );
+      if (!isMember) return 'none';
+
+      const cycle = (group.cycles || this.getGroupCycles(group.id))?.find(
+        (c) => c.id.toLowerCase().trim() === (cycleId || '').toLowerCase().trim()
+      );
+
+      const effSettings = getEffectiveCourseSettings(group, normalizedCourseId, safeNow, cycle || null);
+      const isGroupOrCycleArchived =
+        group.adminStatus === 'archived' ||
+        cycle?.status === 'archived' ||
+        cycle?.status === 'completed';
+      const policy =
+        effSettings.effectivePostDeadlinePolicy ||
+        effSettings.postDeadlinePolicy ||
+        group.postDeadlinePolicy ||
+        'keep_no_cert';
+
+      if (effSettings.isExpired || isGroupOrCycleArchived) {
+        if (policy === 'hide') {
+          return 'none';
+        }
+        return 'review_only';
+      }
+
+      return 'full';
+    };
+
+    if (enrollment && Array.isArray(enrollment.sources) && enrollment.sources.length > 0) {
+      for (const grant of enrollment.sources) {
+        // Skip revoked sources - they grant 'none' and must not invalidate independent sources
+        if (grant.status === 'revoked_by_group_removal' || grant.status !== 'active') {
+          continue;
+        }
+
+        // Active standalone source (including D-07 continuation grants) -> 'full'
+        if (grant.kind === 'self') {
+          hasFull = true;
+          break; // 'full' is maximum precedence
+        }
+
+        // Active group source
+        if (grant.kind === 'group' && grant.groupId) {
+          const groupMode = evaluateGroupAccess(grant.groupId, grant.cycleId);
+          if (groupMode === 'full') {
+            hasFull = true;
+            break;
+          }
+          if (groupMode === 'review_only') {
+            hasReviewOnly = true;
+          }
+        }
+      }
+    } else if (enrollment && enrollment.status === 'active') {
+      // Legacy enrollment fallback when sources array is not populated
+      const traineeGroups = this.groups.filter((g) =>
+        (g.traineeIds || []).some((tid) => {
+          const normTid = tid.toLowerCase().trim();
+          return (
+            normTid === canonicalUserId ||
+            normTid === rawUserId ||
+            resolveCanonicalUserId(tid).toLowerCase().trim() === canonicalUserId
+          );
+        })
+      );
+
+      const assignedGroups = traineeGroups.filter((g) =>
+        (g.courses || []).some((c) => c.courseId.toLowerCase().trim() === normalizedCourseId)
+      );
+
+      if (assignedGroups.length === 0) {
+        // Standalone legacy enrollment without group binding
+        hasFull = true;
+      } else {
+        for (const grp of assignedGroups) {
+          const groupMode = evaluateGroupAccess(grp.id, grp.currentCycleId);
+          if (groupMode === 'full') {
+            hasFull = true;
+            break;
+          }
+          if (groupMode === 'review_only') {
+            hasReviewOnly = true;
+          }
+        }
+      }
+    } else {
+      // Check if user is a member of any group containing this course even if enrollment record is absent
+      const traineeGroups = this.groups.filter((g) =>
+        (g.traineeIds || []).some((tid) => {
+          const normTid = tid.toLowerCase().trim();
+          return (
+            normTid === canonicalUserId ||
+            normTid === rawUserId ||
+            resolveCanonicalUserId(tid).toLowerCase().trim() === canonicalUserId
+          );
+        })
+      );
+      for (const grp of traineeGroups) {
+        const hasCourse = (grp.courses || []).some(
+          (c) => c.courseId.toLowerCase().trim() === normalizedCourseId
+        );
+        if (hasCourse) {
+          const groupMode = evaluateGroupAccess(grp.id, grp.currentCycleId);
+          if (groupMode === 'full') {
+            hasFull = true;
+            break;
+          }
+          if (groupMode === 'review_only') {
+            hasReviewOnly = true;
+          }
+        }
+      }
+    }
+
+    if (hasFull) return 'full';
+    if (hasReviewOnly) return 'review_only';
+    return 'none';
+  }
+
+  /**
+   * Authoritatively determines the access mode ('full' | 'review_only' | 'none') for a given attempt.
+   */
+  public getAttemptAccessMode(userId: string, courseId: string, attemptId: string): CourseAccessMode {
+    const eligible = this.getEligibleAttemptsForCourse(userId, courseId);
+    const matched = eligible.find((opt) => opt.attemptId === attemptId);
+    if (matched) {
+      return matched.accessMode;
+    }
+
+    // Direct attempt inspection fallback
+    const attempt = this.courseAttempts.find((a) => a.id === attemptId);
+    if (attempt && attempt.groupId) {
+      // Check if there is an active continuation grant for this attempt lifting group restrictions (D-07)
+      const canonicalUserId = resolveCanonicalUserId(userId).toLowerCase();
+      const rawUserId = userId.trim().toLowerCase();
+      const enrollment = this.enrollments.find(
+        (e) =>
+          e.courseId.toLowerCase() === courseId.toLowerCase() &&
+          (resolveCanonicalUserId(e.userId).toLowerCase() === canonicalUserId ||
+           e.userId.toLowerCase() === rawUserId)
+      );
+      const isContinuationActive = enrollment?.sources?.some(
+        (s) => s.attemptId === attemptId && s.kind === 'self' && s.status === 'active'
+      );
+
+      if (!isContinuationActive) {
+        const group = this.groups.find(
+          (g) => g.id.toLowerCase().trim() === attempt.groupId!.toLowerCase().trim()
+        );
+        if (group) {
+          const cycle = (group.cycles || this.getGroupCycles(group.id))?.find(
+            (c) => c.id.toLowerCase().trim() === (attempt.cycleId || '').toLowerCase().trim()
+          );
+          const effSettings = getEffectiveCourseSettings(group, courseId, new Date(), cycle || null);
+          const isGroupOrCycleArchived =
+            group.adminStatus === 'archived' ||
+            cycle?.status === 'archived' ||
+            cycle?.status === 'completed';
+          const policy =
+            effSettings.effectivePostDeadlinePolicy ||
+            effSettings.postDeadlinePolicy ||
+            group.postDeadlinePolicy ||
+            'keep_no_cert';
+
+          if (effSettings.isExpired || isGroupOrCycleArchived) {
+            if (policy === 'hide') {
+              return 'none';
+            }
+            return 'review_only';
+          }
+        }
+      }
+    }
+
+    return 'full';
+  }
+
+  /**
+   * Authoritatively resolves the active CourseAttempt for learning operations (D-06, MFR-02, MFR-41).
+   *
+   * Resolution Priority:
+   * 1. Explicit attemptId: Validates existence, strict ownership by userId and courseId, and active learner entitlement.
+   * 2. Explicit groupId (& optional cycleId): Routes to eligible group/continuation attempt or legacy standalone attempt.
+   * 3. Enrollment Record Provenance / Eligible Attempts:
+   *    - Single eligible attempt: Resolves directly to the bound attempt.
+   *    - Multiple eligible attempts: Throws AttemptAmbiguityError (or uses legacy heuristic if allowHeuristicFallback is true).
+   * 4. Fallback: Resolves or provisions default standalone attempt ONLY when legacy/preview fallback is permitted.
+   */
+  public resolveActiveAttemptForLearning(params: {
+    userId: string;
+    courseId: string;
+    attemptId?: string;
+    groupId?: string;
+    cycleId?: string;
+    allowHeuristicFallback?: boolean;
+  }): CourseAttempt {
+    const canonicalUserId = resolveCanonicalUserId(params.userId).toLowerCase().trim();
+    const rawUserId = params.userId.toLowerCase().trim();
+    const normalizedCourseId = params.courseId.toLowerCase().trim();
+
+    // 1. Explicit attemptId
+    if (params.attemptId) {
+      const explicitAttempt = this.courseAttempts.find((a) => a.id === params.attemptId);
+      if (!explicitAttempt) {
+        throw new MockStoreError('سجل محاولة التدريب المحددة غير موجود', 404);
+      }
+      const attemptUser = explicitAttempt.userId.toLowerCase().trim();
+      if (attemptUser !== canonicalUserId && attemptUser !== rawUserId) {
+        throw new MockStoreError('محاولة التدريب المحددة لا تنتمي إلى هذا المستخدم', 403);
+      }
+      if (explicitAttempt.courseId.toLowerCase().trim() !== normalizedCourseId) {
+        throw new MockStoreError('محاولة التدريب المحددة لا تنتمي إلى هذا المقرر', 400);
+      }
+      this.assertLearnerAttemptEntitlement(params.userId, params.courseId, explicitAttempt);
+      return explicitAttempt;
+    }
+
+    // 2. Explicit groupId context
+    if (params.groupId) {
+      const reqGroupLower = params.groupId.toLowerCase().trim();
+      const reqCycleLower = params.cycleId?.toLowerCase().trim();
+      const enrollment = this.enrollments.find(
+        (e) =>
+          e.courseId.toLowerCase().trim() === normalizedCourseId &&
+          (resolveCanonicalUserId(e.userId).toLowerCase().trim() === canonicalUserId ||
+            e.userId.toLowerCase().trim() === rawUserId)
+      );
+
+      if (!this.canUseLegacyStandaloneFallback(enrollment)) {
+        const eligibleForGroup = this.getEligibleAttemptsForCourse(
+          params.userId,
+          params.courseId
+        ).find(
+          (opt) =>
+            (opt.groupId?.toLowerCase().trim() === reqGroupLower ||
+              opt.convertedFromGroupId?.toLowerCase().trim() === reqGroupLower) &&
+            (!reqCycleLower || opt.cycleId?.toLowerCase().trim() === reqCycleLower)
+        );
+        if (!eligibleForGroup) {
+          // Check if this group course has expired under 'hide' policy (MFR-23, MFR-42)
+          const group = this.groups.find((g) => g.id.toLowerCase().trim() === reqGroupLower);
+          if (group) {
+            const cycle = (group.cycles || this.getGroupCycles(group.id))?.find(
+              (c) => c.id.toLowerCase().trim() === reqCycleLower
+            );
+            const effSettings = getEffectiveCourseSettings(group, params.courseId, new Date(), cycle || null);
+            const policy =
+              effSettings.effectivePostDeadlinePolicy ||
+              effSettings.postDeadlinePolicy ||
+              group.postDeadlinePolicy ||
+              'keep_no_cert';
+            if ((effSettings.isExpired || group.adminStatus === 'archived') && policy === 'hide') {
+              throw new MockStoreError(
+                'انتهت صلاحية الوصول إلى هذا المقرر التدريبي بعد انتهاء المهلة المحددة للمجموعة التدريبية',
+                403,
+                'COURSE_ACCESS_EXPIRED'
+              );
+            }
+          }
+          throw new MockStoreError(
+            'لم يعد لديك صلاحية الوصول إلى هذا المقرر بعد إزالتك من المجموعة التدريبية',
+            403,
+            'COURSE_ACCESS_REVOKED'
+          );
+        }
+        const boundGroupAttempt = this.courseAttempts.find(
+          (a) => a.id === eligibleForGroup.attemptId
+        );
+        if (boundGroupAttempt) {
+          return boundGroupAttempt;
+        }
+      }
+
+      const groupAttempt = this.getOrCreateCurrentAttempt({
+        userId: params.userId,
+        courseId: params.courseId,
+        groupId: params.groupId,
+        cycleId: params.cycleId,
+      });
+      this.assertLearnerAttemptEntitlement(params.userId, params.courseId, groupAttempt);
+      return groupAttempt;
+    }
+
+    // 3. Inspect Eligible Attempts via EnrollmentRecord sources & active attempts
+    const eligibleAttempts = this.getEligibleAttemptsForCourse(params.userId, params.courseId);
+
+    if (eligibleAttempts.length === 1) {
+      const boundAttempt = this.courseAttempts.find((a) => a.id === eligibleAttempts[0].attemptId);
+      if (boundAttempt) {
+        return boundAttempt;
+      }
+      return this.getOrCreateCurrentAttempt({
+        userId: params.userId,
+        courseId: params.courseId,
+        groupId: eligibleAttempts[0].groupId || undefined,
+        cycleId: eligibleAttempts[0].cycleId || undefined,
+      });
+    }
+
+    if (eligibleAttempts.length > 1) {
+      if (params.allowHeuristicFallback) {
+        // Compatibility heuristic fallback for legacy callers
+        const matchingAttempts = this.courseAttempts.filter((a) =>
+          eligibleAttempts.some((opt) => opt.attemptId === a.id)
+        );
+
+        const inProgressAttempts = matchingAttempts
+          .filter(
+            (a) =>
+              a.status === 'in_progress' || (a.progressPercent > 0 && a.status !== 'completed')
+          )
+          .sort((a, b) => {
+            const timeA = new Date(a.lastActivityAt || a.updatedAt || 0).getTime();
+            const timeB = new Date(b.lastActivityAt || b.updatedAt || 0).getTime();
+            return timeB - timeA;
+          });
+
+        if (inProgressAttempts.length > 0) {
+          return inProgressAttempts[0];
+        }
+
+        const sortedOptions = [...eligibleAttempts].sort((a, b) => {
+          const timeA = new Date(a.lastActivityAt || 0).getTime();
+          const timeB = new Date(b.lastActivityAt || 0).getTime();
+          return timeB - timeA;
+        });
+
+        const latestAttempt = this.courseAttempts.find(
+          (a) => a.id === sortedOptions[0].attemptId
+        );
+        if (latestAttempt) {
+          return latestAttempt;
+        }
+        return this.getOrCreateCurrentAttempt({
+          userId: params.userId,
+          courseId: params.courseId,
+          groupId: sortedOptions[0].groupId || undefined,
+          cycleId: sortedOptions[0].cycleId || undefined,
+        });
+      }
+
+      // Unambiguous failure: caller must supply explicit attempt context
+      throw new AttemptAmbiguityError(
+        'يوجد أكثر من سياق تدريب متاح لهذا المقرر، يرجى تحديد سياق التدريب المطلوب',
+        eligibleAttempts
+      );
+    }
+
+    // 4. Fallback: resolve or create standalone attempt ONLY when legacy/preview fallback is permitted
+    const enrollment = this.enrollments.find(
+      (e) =>
+        e.courseId.toLowerCase().trim() === normalizedCourseId &&
+        (resolveCanonicalUserId(e.userId).toLowerCase().trim() === canonicalUserId ||
+          e.userId.toLowerCase().trim() === rawUserId)
+    );
+    if (!this.canUseLegacyStandaloneFallback(enrollment)) {
+      if (this.resolveCourseAccess(params.userId, params.courseId) === 'none') {
+        throw new MockStoreError(
+          'انتهت صلاحية الوصول إلى هذا المقرر التدريبي بعد انتهاء المهلة المحددة للمجموعة التدريبية',
+          403,
+          'COURSE_ACCESS_EXPIRED'
+        );
+      }
+      throw new MockStoreError(
+        'لم يعد لديك صلاحية الوصول إلى هذا المقرر بعد إزالتك من المجموعة التدريبية',
+        403,
+        'COURSE_ACCESS_REVOKED'
+      );
+    }
+
+    return this.getOrCreateCurrentAttempt({
+      userId: params.userId,
+      courseId: params.courseId,
+    });
+  }
+
+  /**
+   * Retrieves or initializes the AttemptProgress record for a specific attempt ID (D-06, MFR-02, MFR-41).
+   */
+  public getAttemptProgress(attemptId: string): AttemptProgress | null {
+    if (this.attemptProgress[attemptId]) {
+      return this.attemptProgress[attemptId];
+    }
+
+    const attempt = this.courseAttempts.find((a) => a.id === attemptId);
+    if (!attempt) return null;
+
+    const prog: AttemptProgress = {
+      attemptId: attempt.id,
+      courseId: attempt.courseId,
+      userId: attempt.userId,
+      progressPercent: attempt.progressPercent || 0,
+      completedItemIds: [...(attempt.completedItemIds || [])],
+      lastWatchedItemId: attempt.lastWatchedItemId || null,
+      isCompleted: attempt.status === 'completed' || Boolean(attempt.completedAt),
+      updatedAt: attempt.updatedAt || new Date().toISOString(),
+      itemsProgress: { ...(attempt.lessonProgress || {}) },
+    };
+    this.attemptProgress[attemptId] = prog;
+    return prog;
+  }
+
+  /**
+   * Retrieves overall progress for a user in a specific course.
+   * Scoped strictly per CourseAttempt (D-06, MFR-02, MFR-41).
+   */
+  public getCourseProgress(
+    userId: string,
+    courseId: string,
+    options?: { attemptId?: string; groupId?: string; cycleId?: string }
+  ): CourseProgress {
     const course = this.getCourseById(courseId);
     if (!course) {
       throw new MockStoreError('الدورة التدريبية غير موجودة', 404);
@@ -974,30 +2778,132 @@ class InMemoryStore {
     const rawUserId = userId.toLowerCase().trim();
     const normalizedCourseId = course.id.toLowerCase().trim();
 
-    const userCourseProgress =
+    // Check for ambiguity when no explicit attempt or group is provided
+    if (!options?.attemptId && !options?.groupId) {
+      const eligible = this.getEligibleAttemptsForCourse(userId, course.id);
+      if (eligible.length > 1) {
+        return {
+          attemptId: '',
+          courseId: course.id,
+          userId,
+          progressPercent: 0,
+          completedItemIds: [],
+          lastWatchedItemId: null,
+          isCompleted: false,
+          updatedAt: new Date().toISOString(),
+          itemsProgress: {},
+          requiresAttemptSelection: true,
+          eligibleAttempts: eligible,
+          overallProgressPercentage: 0,
+        };
+      }
+    }
+
+    const attempt = this.resolveActiveAttemptForLearning({
+      userId,
+      courseId: course.id,
+      attemptId: options?.attemptId,
+      groupId: options?.groupId,
+      cycleId: options?.cycleId,
+    });
+
+    let attemptProg = this.getAttemptProgress(attempt.id);
+    if (!attemptProg) {
+      attemptProg = {
+        attemptId: attempt.id,
+        courseId: course.id,
+        userId: attempt.userId,
+        progressPercent: attempt.progressPercent || 0,
+        completedItemIds: [...(attempt.completedItemIds || [])],
+        lastWatchedItemId: attempt.lastWatchedItemId || null,
+        isCompleted: attempt.status === 'completed' || Boolean(attempt.completedAt),
+        updatedAt: attempt.updatedAt || new Date().toISOString(),
+        itemsProgress: { ...(attempt.lessonProgress || {}) },
+      };
+      this.attemptProgress[attempt.id] = attemptProg;
+    }
+
+    // Backward-compatibility: Check if unmigrated test seeded userProgress directly
+    const legacyProg =
       this.userProgress[canonicalUserId]?.[normalizedCourseId] ||
-      this.userProgress[rawUserId]?.[normalizedCourseId] ||
-      {};
-    const completedItemIds = flatItems
-      .filter((it) => userCourseProgress[it.id]?.completed)
-      .map((it) => it.id);
+      this.userProgress[rawUserId]?.[normalizedCourseId];
+    if (
+      legacyProg &&
+      Object.keys(legacyProg).length > 0 &&
+      attemptProg.completedItemIds.length === 0 &&
+      Object.keys(attemptProg.itemsProgress).length === 0
+    ) {
+      // Deterministic ownership guard (T-2.1.4 / Section 5.B):
+      // Only import legacy progress if there is at most one eligible attempt, preventing ambiguous progress attachment
+      const eligible = this.getEligibleAttemptsForCourse(userId, course.id);
+      if (eligible.length <= 1) {
+        attemptProg.itemsProgress = { ...legacyProg };
+        const legacyCompleted = this.getValidCompletedItemIdsForAttempt(
+          attempt,
+          flatItems,
+          attemptProg
+        );
+        attemptProg.completedItemIds = legacyCompleted;
+        attemptProg.progressPercent = calculateTraineeProgress(flatItems.length, legacyCompleted.length);
+        attemptProg.isCompleted = flatItems.length > 0 && legacyCompleted.length === flatItems.length;
+        attempt.completedItemIds = [...legacyCompleted];
+        attempt.progressPercent = attemptProg.progressPercent;
+        attempt.lessonProgress = { ...legacyProg };
+        if (attemptProg.isCompleted) attempt.status = 'completed';
+      }
+    }
+
+    const completedItemIds = this.getValidCompletedItemIdsForAttempt(
+      attempt,
+      flatItems,
+      attemptProg
+    );
+    const completedSet = new Set(completedItemIds);
+    const isSealed = this.isAttemptSealed(attempt);
+    const projectedItemsProgress: Record<string, LessonProgress> = {};
+    for (const [id, lp] of Object.entries(attemptProg.itemsProgress)) {
+      if (!isSealed && lp.completed && !completedSet.has(id)) {
+        projectedItemsProgress[id] = {
+          ...lp,
+          completed: false,
+          completedAt: undefined,
+        };
+      } else {
+        projectedItemsProgress[id] = { ...lp };
+      }
+    }
 
     const progressPercent = calculateTraineeProgress(flatItems.length, completedItemIds.length);
     const isCompleted = flatItems.length > 0 && completedItemIds.length === flatItems.length;
     const lastWatchedItemId =
+      attemptProg.lastWatchedItemId ||
       this.lastWatched[canonicalUserId]?.[normalizedCourseId] ||
       this.lastWatched[rawUserId]?.[normalizedCourseId] ||
       null;
 
+    const accessMode = this.getAttemptAccessMode(userId, course.id, attempt.id);
+    if (accessMode === 'none') {
+      throw new MockStoreError(
+        'انتهت صلاحية الوصول إلى هذا المقرر التدريبي بعد انتهاء المهلة المحددة للمجموعة التدريبية',
+        403,
+        'COURSE_ACCESS_EXPIRED'
+      );
+    }
+    const certificates = this.getUserCertificates(userId, course.id);
+
     return {
+      attemptId: attempt.id,
       courseId: course.id,
       userId,
       progressPercent,
       completedItemIds,
       lastWatchedItemId,
       isCompleted,
-      updatedAt: new Date().toISOString(),
-      itemsProgress: userCourseProgress,
+      updatedAt: attemptProg.updatedAt || new Date().toISOString(),
+      itemsProgress: projectedItemsProgress,
+      accessMode,
+      overallProgressPercentage: progressPercent,
+      certificates,
     };
   }
 
@@ -1145,6 +3051,7 @@ class InMemoryStore {
   /**
    * Records playback time, furthest watched range, or document open activity.
    * If the user is an admin or lecturer (preview mode), this is a no-op that preserves trainee state.
+   * Isolates progress per CourseAttempt (D-06, MFR-02, MFR-41).
    */
   public recordLessonActivity({
     userId,
@@ -1152,12 +3059,18 @@ class InMemoryStore {
     itemId,
     activity,
     userRole,
+    attemptId,
+    groupId,
+    cycleId,
   }: {
     userId: string;
     courseId: string;
     itemId: string;
     activity: Partial<LessonProgress>;
     userRole?: UserRole;
+    attemptId?: string;
+    groupId?: string;
+    cycleId?: string;
   }): LessonProgress {
     const course = this.getCourseById(courseId);
     if (!course) {
@@ -1196,20 +3109,59 @@ class InMemoryStore {
       };
     }
 
-    if (!this.userProgress[canonicalUserId]) {
-      this.userProgress[canonicalUserId] = {};
+    // Resolve active attempt and start it if not started
+    let attempt = this.resolveActiveAttemptForLearning({
+      userId: authResolution.canonicalUserId,
+      courseId: course.id,
+      attemptId,
+      groupId,
+      cycleId,
+    });
+
+    const accessMode = this.getAttemptAccessMode(authResolution.canonicalUserId, course.id, attempt.id);
+    if (accessMode === 'none') {
+      throw new MockStoreError(
+        'انتهت صلاحية الوصول إلى هذا المقرر التدريبي بعد انتهاء المهلة المحددة للمجموعة التدريبية',
+        403,
+        'COURSE_ACCESS_EXPIRED'
+      );
     }
-    if (!this.userProgress[canonicalUserId][normalizedCourseId]) {
-      this.userProgress[canonicalUserId][normalizedCourseId] = {};
+    if (accessMode === 'review_only') {
+      throw new MockStoreError(
+        'لا يمكن تسجيل النشاط التدريبي في وضع المراجعة فقط بعد انتهاء موعد المجموعة التدريبية',
+        403,
+        'COURSE_ACCESS_REVIEW_ONLY'
+      );
+    }
+ 
+    if (!isAttemptStarted(attempt) || attempt.attemptNumber === null) {
+      attempt = this.startAttempt(attempt.id);
     }
 
-    const existing = this.userProgress[canonicalUserId][normalizedCourseId][itemId] || {
+    let prog = this.getAttemptProgress(attempt.id);
+    if (!prog) {
+      prog = {
+        attemptId: attempt.id,
+        courseId: course.id,
+        userId: attempt.userId,
+        progressPercent: attempt.progressPercent || 0,
+        completedItemIds: [...(attempt.completedItemIds || [])],
+        lastWatchedItemId: attempt.lastWatchedItemId || null,
+        isCompleted: attempt.status === 'completed' || Boolean(attempt.completedAt),
+        updatedAt: attempt.updatedAt || new Date().toISOString(),
+        itemsProgress: { ...(attempt.lessonProgress || {}) },
+      };
+      this.attemptProgress[attempt.id] = prog;
+    }
+
+    const now = new Date().toISOString();
+    const existing = prog.itemsProgress[itemId] || {
       itemId,
       completed: false,
       lastPositionSeconds: 0,
       furthestWatchedSeconds: 0,
       eligibleViewingSeconds: 0,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     };
 
     const updated: LessonProgress = {
@@ -1230,9 +3182,31 @@ class InMemoryStore {
         activity.durationSeconds !== undefined
           ? activity.durationSeconds
           : existing.durationSeconds,
-      updatedAt: new Date().toISOString(),
+      watchCount:
+        activity.watchCount !== undefined
+          ? activity.watchCount
+          : existing.watchCount,
+      updatedAt: now,
     };
 
+    prog.itemsProgress[itemId] = updated;
+    prog.lastWatchedItemId = itemId;
+    prog.updatedAt = now;
+
+    // Synchronize CourseAttempt fields directly
+    attempt.lastWatchedItemId = itemId;
+    attempt.lastActivityAt = now;
+    attempt.updatedAt = now;
+    if (!attempt.lessonProgress) attempt.lessonProgress = {};
+    attempt.lessonProgress[itemId] = updated;
+
+    // Legacy mirror
+    if (!this.userProgress[canonicalUserId]) {
+      this.userProgress[canonicalUserId] = {};
+    }
+    if (!this.userProgress[canonicalUserId][normalizedCourseId]) {
+      this.userProgress[canonicalUserId][normalizedCourseId] = {};
+    }
     this.userProgress[canonicalUserId][normalizedCourseId][itemId] = updated;
 
     if (!this.lastWatched[canonicalUserId]) {
@@ -1247,17 +3221,24 @@ class InMemoryStore {
    * Marks a lesson item as completed and recalculates overall course progress.
    * Strictly enforces sequential lesson locking for trainees.
    * Preview activity by lecturers and admins does not mutate progress.
+   * Scoped strictly per CourseAttempt (D-06, MFR-02, MFR-41).
    */
   public markLessonComplete({
     userId,
     courseId,
     itemId,
     userRole,
+    attemptId,
+    groupId,
+    cycleId,
   }: {
     userId: string;
     courseId: string;
     itemId: string;
     userRole?: UserRole;
+    attemptId?: string;
+    groupId?: string;
+    cycleId?: string;
   }): {
     progress: CourseProgress;
     completedItem: LessonProgress;
@@ -1288,7 +3269,7 @@ class InMemoryStore {
     // Preview mode (MFR-21): return simulated completion without persisting to trainee progress.
     // Pre-existing progress records and lastWatched entries (if any) are strictly preserved unmodified.
     if (authResolution.isPreview) {
-      const previewProgress = this.getCourseProgress(userId, courseId);
+      const previewProgress = this.getCourseProgress(userId, courseId, { attemptId, groupId, cycleId });
       const existing = this.userProgress[canonicalUserId]?.[normalizedCourseId]?.[itemId];
 
       return {
@@ -1307,11 +3288,56 @@ class InMemoryStore {
       };
     }
 
-    const currentProgress = this.getCourseProgress(userId, courseId);
+    // Resolve active attempt and start it if not started
+    let attempt = this.resolveActiveAttemptForLearning({
+      userId: authResolution.canonicalUserId,
+      courseId: course.id,
+      attemptId,
+      groupId,
+      cycleId,
+    });
+
+    const accessMode = this.getAttemptAccessMode(authResolution.canonicalUserId, course.id, attempt.id);
+    if (accessMode === 'none') {
+      throw new MockStoreError(
+        'انتهت صلاحية الوصول إلى هذا المقرر التدريبي بعد انتهاء المهلة المحددة للمجموعة التدريبية',
+        403,
+        'COURSE_ACCESS_EXPIRED'
+      );
+    }
+    if (accessMode === 'review_only') {
+      throw new MockStoreError(
+        'لا يمكن تسجيل النشاط التدريبي في وضع المراجعة فقط بعد انتهاء موعد المجموعة التدريبية',
+        403,
+        'COURSE_ACCESS_REVIEW_ONLY'
+      );
+    }
+ 
+    if (!isAttemptStarted(attempt) || attempt.attemptNumber === null) {
+      attempt = this.startAttempt(attempt.id);
+    }
+
+    let prog = this.getAttemptProgress(attempt.id);
+    if (!prog) {
+      prog = {
+        attemptId: attempt.id,
+        courseId: course.id,
+        userId: attempt.userId,
+        progressPercent: attempt.progressPercent || 0,
+        completedItemIds: [...(attempt.completedItemIds || [])],
+        lastWatchedItemId: attempt.lastWatchedItemId || null,
+        isCompleted: attempt.status === 'completed' || Boolean(attempt.completedAt),
+        updatedAt: attempt.updatedAt || new Date().toISOString(),
+        itemsProgress: { ...(attempt.lessonProgress || {}) },
+      };
+      this.attemptProgress[attempt.id] = prog;
+    }
+
+    const currentAttemptProgress = this.getCourseProgress(userId, courseId, { attemptId: attempt.id });
     const isLocked = isLessonLocked(
       itemIndex,
       flatItems,
-      currentProgress.completedItemIds,
+      currentAttemptProgress.completedItemIds,
       authResolution.role
     );
     if (isLocked) {
@@ -1321,35 +3347,73 @@ class InMemoryStore {
       );
     }
 
+    const now = new Date().toISOString();
+    const existing = prog.itemsProgress[itemId] || {
+      itemId,
+      completed: false,
+      lastPositionSeconds: 0,
+      furthestWatchedSeconds: 0,
+      eligibleViewingSeconds: 0,
+      updatedAt: now,
+    };
+
+    const targetItem = flatItems[itemIndex];
+    const currentItemContentVersion =
+      typeof targetItem?.contentVersion === 'number' && targetItem.contentVersion >= 1
+        ? targetItem.contentVersion
+        : 1;
+
+    const wasAlreadyCompleted =
+      existing.completed &&
+      (existing.contentVersion ?? 1) === currentItemContentVersion;
+    const wasCourseCompleted = currentAttemptProgress.isCompleted;
+
+    const completedItem: LessonProgress = {
+      ...existing,
+      completed: true,
+      completedAt: wasAlreadyCompleted ? existing.completedAt || now : now,
+      contentVersion: currentItemContentVersion,
+      furthestWatchedSeconds: existing.durationSeconds
+        ? Math.max(existing.furthestWatchedSeconds, existing.durationSeconds)
+        : existing.furthestWatchedSeconds,
+      updatedAt: now,
+    };
+
+    prog.itemsProgress[itemId] = completedItem;
+    if (!prog.completedItemIds.includes(itemId)) {
+      prog.completedItemIds.push(itemId);
+    }
+    const validCompletedIds = this.getValidCompletedItemIdsForAttempt(attempt, flatItems, prog);
+    prog.completedItemIds = [...validCompletedIds];
+    prog.lastWatchedItemId = itemId;
+    prog.progressPercent = calculateTraineeProgress(flatItems.length, prog.completedItemIds.length);
+    prog.isCompleted = flatItems.length > 0 && prog.completedItemIds.length === flatItems.length;
+    prog.updatedAt = now;
+
+    // Direct synchronization to CourseAttempt (single authoritative state)
+    attempt.completedItemIds = [...prog.completedItemIds];
+    if (!attempt.lessonProgress) attempt.lessonProgress = {};
+    attempt.lessonProgress[itemId] = completedItem;
+    attempt.lastWatchedItemId = itemId;
+    attempt.lastActivityAt = now;
+    attempt.updatedAt = now;
+    attempt.progressPercent = prog.progressPercent;
+    if (prog.isCompleted) {
+      attempt.status = 'completed';
+      if (!attempt.completedAt) attempt.completedAt = now;
+    } else if (attempt.status === 'not_started' || attempt.status === 'completed') {
+      attempt.status = 'in_progress';
+      if (!attempt.startedAt) attempt.startedAt = now;
+      attempt.completedAt = null;
+    }
+
+    // Legacy mirror
     if (!this.userProgress[canonicalUserId]) {
       this.userProgress[canonicalUserId] = {};
     }
     if (!this.userProgress[canonicalUserId][normalizedCourseId]) {
       this.userProgress[canonicalUserId][normalizedCourseId] = {};
     }
-
-    const existing = this.userProgress[canonicalUserId][normalizedCourseId][itemId] || {
-      itemId,
-      completed: false,
-      lastPositionSeconds: 0,
-      furthestWatchedSeconds: 0,
-      eligibleViewingSeconds: 0,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const wasAlreadyCompleted = existing.completed;
-    const wasCourseCompleted = currentProgress.isCompleted;
-
-    const completedItem: LessonProgress = {
-      ...existing,
-      completed: true,
-      completedAt: existing.completedAt || new Date().toISOString(),
-      furthestWatchedSeconds: existing.durationSeconds
-        ? Math.max(existing.furthestWatchedSeconds, existing.durationSeconds)
-        : existing.furthestWatchedSeconds,
-      updatedAt: new Date().toISOString(),
-    };
-
     this.userProgress[canonicalUserId][normalizedCourseId][itemId] = completedItem;
 
     if (!this.lastWatched[canonicalUserId]) {
@@ -1357,7 +3421,32 @@ class InMemoryStore {
     }
     this.lastWatched[canonicalUserId][normalizedCourseId] = itemId;
 
-    const updatedCourseProgress = this.getCourseProgress(userId, courseId);
+    // Issue version-scoped CertificateRecord when 100% of required items are completed (D-13, MFR-46)
+    if (prog.isCompleted) {
+      this.issueCourseVersionCertificate({
+        userId: canonicalUserId,
+        courseId: course.id,
+        attemptId: attempt.id,
+        issuedAt: attempt.completedAt || now,
+      });
+    }
+
+    const certificates = this.getUserCertificates(canonicalUserId, course.id);
+
+    const updatedCourseProgress: CourseProgress = {
+      attemptId: attempt.id,
+      courseId: course.id,
+      userId,
+      progressPercent: prog.progressPercent,
+      completedItemIds: [...prog.completedItemIds],
+      lastWatchedItemId: prog.lastWatchedItemId,
+      isCompleted: prog.isCompleted,
+      updatedAt: prog.updatedAt,
+      itemsProgress: { ...prog.itemsProgress },
+      overallProgressPercentage: prog.progressPercent,
+      certificates,
+    };
+
     const justCompletedCourse = !wasCourseCompleted && updatedCourseProgress.isCompleted;
 
     if (justCompletedCourse) {
@@ -1367,8 +3456,10 @@ class InMemoryStore {
         title: 'تهانينا! أتممت الدورة التدريبية',
         message: `لقد أكملت جميع دروس الدورة التدريبية "${course.title}" بنجاح بنسبة 100%.`,
         courseId: course.id,
+        groupId: attempt.groupId ?? null,
         targetUrl: `/courses/${course.id}`,
-        dedupeKey: `course_completed:${course.id}:${resolveCanonicalUserId(userId)}`,
+        dedupeKey: `course_completed:${course.id}:${attempt.cycleId || 'standalone'}:${resolveCanonicalUserId(userId)}`,
+        createdAt: now,
       });
     }
 
@@ -1407,14 +3498,17 @@ class InMemoryStore {
       return this.groups.filter((g) => this.isUserAssignedGroupSupervisor(g, normalizedUserId));
     }
 
-    // Trainee view: only return groups where trainee is explicitly enrolled
-    return this.groups.filter((g) =>
-      (g.traineeIds || []).some(
+    // Trainee view: only return non-archived groups where trainee is explicitly enrolled (Decision D-GRP-07)
+    return this.groups.filter((g) => {
+      if (g.adminStatus === 'archived') {
+        return false;
+      }
+      return (g.traineeIds || []).some(
         (tid) =>
           tid.toLowerCase() === normalizedUserId.toLowerCase() ||
           resolveCanonicalUserId(tid).toLowerCase() === canonicalUserId
-      )
-    );
+      );
+    });
   }
 
   /**
@@ -1457,7 +3551,11 @@ class InMemoryStore {
       return group;
     }
 
-    // Trainee check
+    // Trainee check: archived groups fail closed without disclosing metadata (Decision D-GRP-07)
+    if (group.adminStatus === 'archived') {
+      throw new MockStoreError('المجموعة التدريبية المطلوبة غير موجودة', 404);
+    }
+
     const isMember = (group.traineeIds || []).some(
       (tid) =>
         tid.toLowerCase() === normalizedUserId ||
@@ -1558,15 +3656,26 @@ class InMemoryStore {
       let mostRecentActivity: string | null = null;
 
       rawAssignedCourses.forEach((ac) => {
-        // Look up cycle attempt for progress isolation
-        const cycleAttempt = targetCycle
-          ? this.courseAttempts.find(
-            (a) =>
-              a.userId.toLowerCase() === traineeId.toLowerCase() &&
-              a.courseId.toLowerCase() === ac.courseId.toLowerCase() &&
-              a.cycleId?.toLowerCase() === targetCycle.id.toLowerCase()
-          )
-          : null;
+        const canonicalTraineeId = resolveCanonicalUserId(traineeId).toLowerCase().trim();
+        const rawTraineeId = traineeId.toLowerCase().trim();
+        const normCourseId = ac.courseId.toLowerCase().trim();
+        const normGroupId = group.id.toLowerCase().trim();
+        const flatItems = this.getCourseItems(ac.courseId);
+
+        // Direct administrative lookup in courseAttempts (supports both cycle-scoped and legacy cycleless groups)
+        const groupAttempt = this.courseAttempts.find((a) => {
+          const userMatches =
+            a.userId.toLowerCase().trim() === rawTraineeId ||
+            resolveCanonicalUserId(a.userId).toLowerCase().trim() === canonicalTraineeId;
+          const courseMatches = a.courseId.toLowerCase().trim() === normCourseId;
+          const groupMatches = a.groupId
+            ? a.groupId.toLowerCase().trim() === normGroupId
+            : isCycleOwnedByGroup(a.cycleId, group.id);
+          const cycleMatches = targetCycle
+            ? a.cycleId?.toLowerCase().trim() === targetCycle.id.toLowerCase().trim()
+            : true;
+          return userMatches && courseMatches && groupMatches && cycleMatches;
+        });
 
         let progressPercent = 0;
         let completedItemIds: string[] = [];
@@ -1574,19 +3683,45 @@ class InMemoryStore {
         let isStarted = false;
         let lastActivityAt: string | null = null;
 
-        if (cycleAttempt) {
-          isStarted = isAttemptStarted(cycleAttempt);
-          progressPercent = cycleAttempt.progressPercent;
-          completedItemIds = cycleAttempt.completedItemIds;
-          isCompleted = cycleAttempt.status === 'completed' || isAttemptCompleted(cycleAttempt);
-          lastActivityAt = cycleAttempt.lastActivityAt || cycleAttempt.updatedAt || null;
+        if (groupAttempt) {
+          const attProg = this.getAttemptProgress(groupAttempt.id);
+          const validCompleted = this.getValidCompletedItemIdsForAttempt(
+            groupAttempt,
+            flatItems,
+            attProg
+          );
+          isStarted = isAttemptStarted(groupAttempt) || validCompleted.length > 0 || (attProg ? attProg.progressPercent > 0 : false);
+          progressPercent = calculateTraineeProgress(flatItems.length, validCompleted.length);
+          completedItemIds = validCompleted;
+          isCompleted = flatItems.length > 0 && validCompleted.length === flatItems.length;
+          lastActivityAt = groupAttempt.lastActivityAt || attProg?.updatedAt || groupAttempt.updatedAt || null;
         } else {
-          const prog = this.getCourseProgress(traineeId, ac.courseId);
-          progressPercent = prog.progressPercent;
-          completedItemIds = prog.completedItemIds;
-          isCompleted = prog.isCompleted;
-          isStarted = prog.progressPercent > 0 || completedItemIds.length > 0;
-          lastActivityAt = (prog as { lastActivityAt?: string | null }).lastActivityAt || null;
+          // Read-only legacy progress fallback without invoking learner-facing getCourseProgress()
+          const legacyProg =
+            this.userProgress[canonicalTraineeId]?.[normCourseId] ||
+            this.userProgress[rawTraineeId]?.[normCourseId] ||
+            this.userProgress[traineeId]?.[ac.courseId];
+          if (legacyProg && Object.keys(legacyProg).length > 0) {
+            const validCompleted = flatItems
+              .filter(
+                (it) =>
+                  legacyProg[it.id]?.completed &&
+                  (legacyProg[it.id]?.contentVersion ?? 1) ===
+                    (typeof it.contentVersion === 'number' && it.contentVersion >= 1
+                      ? it.contentVersion
+                      : 1)
+              )
+              .map((it) => it.id);
+            completedItemIds = validCompleted;
+            progressPercent = calculateTraineeProgress(flatItems.length, validCompleted.length);
+            isCompleted = flatItems.length > 0 && validCompleted.length === flatItems.length;
+            isStarted = progressPercent > 0 || completedItemIds.length > 0;
+            const itemTimestamps = Object.values(legacyProg)
+              .map((lp) => lp.updatedAt || lp.completedAt)
+              .filter((ts): ts is string => Boolean(ts))
+              .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+            lastActivityAt = itemTimestamps[0] || null;
+          }
         }
 
         if (lastActivityAt && (!mostRecentActivity || new Date(lastActivityAt) > new Date(mostRecentActivity))) {
@@ -1825,16 +3960,9 @@ class InMemoryStore {
     const normalizedUserId = userId.trim().toLowerCase();
     const userEnrollments = this.enrollments.filter(
       (e) =>
-        resolveCanonicalUserId(e.userId).toLowerCase() === canonicalUserId ||
-        e.userId.toLowerCase() === normalizedUserId
-    );
-
-    const traineeGroups = this.groups.filter((g) =>
-      (g.traineeIds || []).some(
-        (tid) =>
-          resolveCanonicalUserId(tid).toLowerCase() === canonicalUserId ||
-          tid.toLowerCase() === normalizedUserId
-      )
+        (resolveCanonicalUserId(e.userId).toLowerCase() === canonicalUserId ||
+        e.userId.toLowerCase() === normalizedUserId) &&
+        (e.status === 'active' || (Array.isArray(e.sources) && e.sources.some((s) => s.status === 'active')))
     );
 
     const now = new Date();
@@ -1853,44 +3981,27 @@ class InMemoryStore {
       const course = this.getCourseById(enrollment.courseId);
       if (!course) continue;
 
-      const progress = this.getCourseProgress(userId, course.id);
+      const accessMode = this.resolveCourseAccess(userId, course.id, now);
 
-      // Check group-level and course-level deadline policy
-      let hasActiveAssignment = false;
-      let hasExpiredAssignment = false;
-      let effectivePolicy: 'keep_no_cert' | 'hide' = 'keep_no_cert';
-
-      for (const grp of traineeGroups) {
-        const assignment = (grp.courses || []).find(
-          (c) => c.courseId.toLowerCase() === course.id.toLowerCase()
-        );
-        if (assignment) {
-          const eff = getEffectiveCourseSettings(grp, assignment, now);
-          if (eff.isExpired) {
-            hasExpiredAssignment = true;
-            effectivePolicy = eff.postDeadlinePolicy;
-          } else if (grp.adminStatus !== 'archived') {
-            hasActiveAssignment = true;
-          } else {
-            hasExpiredAssignment = true;
-            effectivePolicy = grp.postDeadlinePolicy || eff.postDeadlinePolicy;
-          }
-        }
-      }
-
-      const isExpired = !hasActiveAssignment && hasExpiredAssignment;
-
-      // Approved Rule 1: hide policy omits expired course completely
-      if (isExpired && effectivePolicy === 'hide' && !progress.isCompleted) {
+      // Authoritative Post-Deadline Policy (MFR-23, MFR-42):
+      // When accessMode is 'none', the course is completely omitted from the trainee view
+      // (zero completed-trainee exemption — even if progress.isCompleted is true).
+      if (accessMode === 'none') {
         continue;
       }
+
+      const progress = this.getCourseProgress(userId, course.id);
+      const isExpired = accessMode === 'review_only';
+      const canCertify = accessMode === 'full';
 
       // Check user learning activity in this course
       let latestActivityTime = 0;
       let lastActivityDate: string | undefined;
 
       const courseUserProgress =
-        this.userProgress[normalizedUserId]?.[course.id.toLowerCase()] || {};
+        progress.itemsProgress ||
+        this.userProgress[normalizedUserId]?.[course.id.toLowerCase()] ||
+        {};
       for (const itemProgress of Object.values(courseUserProgress)) {
         if (itemProgress.updatedAt) {
           const t = new Date(itemProgress.updatedAt).getTime();
@@ -1902,13 +4013,22 @@ class InMemoryStore {
       }
 
       const lastWatchedItemId =
+        progress.lastWatchedItemId ||
         this.lastWatched[normalizedUserId]?.[course.id.toLowerCase()];
+
+      const totalLessons = this.getCourseItems(course.id).length;
+      const enrichedProgress = {
+        ...progress,
+        overallProgressPercentage: progress.progressPercent,
+        completedLessons: progress.completedItemIds.length,
+        totalLessons,
+      };
 
       result.push({
         ...course,
-        progress,
+        progress: enrichedProgress,
         isExpired,
-        canCertify: !isExpired || progress.isCompleted,
+        canCertify,
         policyLabel: isExpired ? 'منتهية الصلاحية — للمطالعة بدون شهادة' : undefined,
         lastActivityDate,
         lastWatchedItemId,
@@ -1950,6 +4070,13 @@ class InMemoryStore {
     });
 
     return result;
+  }
+
+  /**
+   * Alias for getMyEnrolledCourses(userId).
+   */
+  public getEnrolledCoursesForUser(userId: string) {
+    return this.getMyEnrolledCourses(userId);
   }
 
   // ── Notification Center Methods ───────────────────────────────────────
@@ -3015,6 +5142,34 @@ class InMemoryStore {
       delete safeDraftData.whatsappContacts;
     }
 
+    // Publication metadata & version integrity boundary (MFR-10, Rule B):
+    // Client-supplied draft payloads must never spoof publishedAt, publishedBy, versionNumber,
+    // currentVersionNumber, or item contentVersion / contentFingerprint.
+    delete safeDraftData.publishedAt;
+    delete safeDraftData.publishedBy;
+    delete safeDraftData.versionNumber;
+    delete safeDraftData.currentVersionNumber;
+
+    if (Array.isArray(safeDraftData.chapters)) {
+      const publishedItemMap = new Map<string, ChapterItem>();
+      for (const ch of targetCourse.chapters || []) {
+        for (const it of ch.items || []) {
+          publishedItemMap.set(it.id, it);
+        }
+      }
+      safeDraftData.chapters = safeDraftData.chapters.map((ch) => ({
+        ...ch,
+        items: (ch.items || []).map((it) => {
+          const pubItem = publishedItemMap.get(it.id);
+          return {
+            ...it,
+            contentVersion: pubItem?.contentVersion,
+            contentFingerprint: pubItem?.contentFingerprint,
+          };
+        }),
+      }));
+    }
+
     const mergedCourse: Course = {
       ...currentDraft,
       ...safeDraftData,
@@ -3108,16 +5263,27 @@ class InMemoryStore {
     // Clear draft in memory
     delete this.courseDrafts[courseId];
     delete this.courseDrafts[CONTENT_TEST_LAB_COURSE_ID];
+    delete this.publishedCourseVersions[courseId];
+    delete this.publishedCourseVersions[CONTENT_TEST_LAB_COURSE_ID];
+    this.certificates = this.certificates.filter(
+      (c) =>
+        c.courseId.toLowerCase() !== courseId.toLowerCase() &&
+        c.courseId.toLowerCase() !== CONTENT_TEST_LAB_COURSE_ID.toLowerCase()
+    );
 
     // Replace in courses array
+    const clonedFreshLab: Course = JSON.parse(JSON.stringify(freshLab));
+    if (clonedFreshLab.status === 'published' || clonedFreshLab.status === 'live') {
+      this.seedInitialPublishedCourseVersion(clonedFreshLab);
+    }
     const idx = this.courses.findIndex((c) => c.id === courseId);
     if (idx !== -1) {
-      this.courses[idx] = JSON.parse(JSON.stringify(freshLab));
+      this.courses[idx] = clonedFreshLab;
     } else {
-      this.courses.push(JSON.parse(JSON.stringify(freshLab)));
+      this.courses.push(clonedFreshLab);
     }
 
-    return JSON.parse(JSON.stringify(freshLab));
+    return JSON.parse(JSON.stringify(clonedFreshLab));
   }
 
   /**
@@ -3983,6 +6149,18 @@ class InMemoryStore {
 
       this.validateCourseContentEligibility(finalApprovedContent);
 
+      const hadPendingReviewOrDraft = Boolean(
+        isPendingReview ||
+        targetCourse.hasDraftChanges ||
+        this.courseDrafts[targetCourse.id] ||
+        (shouldUseStaged && staged) ||
+        !isPublished
+      );
+
+      if (isPublished && !this.publishedCourseVersions[targetCourse.id]?.length) {
+        this.seedInitialPublishedCourseVersion(targetCourse);
+      }
+
       if (isPublished) {
         Object.assign(targetCourse, finalApprovedContent, {
           status: 'published' as CourseStatus,
@@ -4009,6 +6187,14 @@ class InMemoryStore {
       delete this.stagedAdminEdits[targetCourse.id];
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(`metro_admin_staged_edits_${targetCourse.id}`);
+      }
+
+      if (hadPendingReviewOrDraft || !this.publishedCourseVersions[targetCourse.id]?.length) {
+        this.recordPublishedCourseVersionAndReconcileAttempts(
+          targetCourse,
+          user.id,
+          decisionTimestamp
+        );
       }
 
       const auditEntry: CourseAuditLogEntry = {
@@ -4320,6 +6506,7 @@ class InMemoryStore {
       postDeadlinePolicy: dto.postDeadlinePolicy,
       courses: (dto.courseAssignments || []).map((ca, idx) => ({
         courseId: ca.courseId,
+        courseRole: ca.courseRole || 'core',
         order: ca.order || idx + 1,
         customStartDateTime: ca.customStartDateTime,
         customDeadlineDateTime: ca.customDeadlineDateTime,
@@ -4336,6 +6523,9 @@ class InMemoryStore {
       renewalSchedule: migrateLegacyRecurrenceType(dto.renewalSchedule),
       foldersCount: 0,
       filesCount: 0,
+      hasHistoricalReminderCourses: Boolean(
+        (dto.courseAssignments || []).some((ca) => ca.courseRole === 'reminder')
+      ),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -4913,50 +7103,58 @@ class InMemoryStore {
     if (!this.groupMembers[group.id]) this.groupMembers[group.id] = [];
     this.groupMembers[group.id].push(member);
 
-    // Idempotent Course Enrollment Synchronization
+    // Idempotent Course Enrollment Synchronization (D-06, MFR-41)
     let newlyEnrolled = 0;
     const targetCourses = currentCycle ? currentCycle.courses : (group.courses || []);
+    const cycleId = currentCycle?.id || group.currentCycleId || null;
+    const nowIso = new Date().toISOString();
 
     for (const assignment of targetCourses) {
-      const existingEnrollment = this.enrollments.find(
-        (e) =>
-          e.userId.toLowerCase() === normalizedTraineeId.toLowerCase() &&
-          e.courseId.toLowerCase() === assignment.courseId.toLowerCase()
-      );
-
-      if (!existingEnrollment) {
-        const newEnrollment: CourseEnrollment = {
-          id: `ENR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-          courseId: assignment.courseId,
-          userId: normalizedTraineeId,
-          enrolledAt: new Date().toISOString(),
-          status: 'active',
-        };
-        this.enrollments.push(newEnrollment);
-        const course = this.getCourseById(assignment.courseId);
-        if (course) course.enrollmentCount = (course.enrollmentCount || 0) + 1;
-        newlyEnrolled++;
-      }
-
-      // Provision unstarted CourseAttempt if not already present
-      const cycleId = currentCycle?.id || null;
-      const existingAttempt = this.courseAttempts.find(
+      // 1. Provision unstarted CourseAttempt if not already present
+      let attempt = this.courseAttempts.find(
         (a) =>
           a.userId.toLowerCase() === normalizedTraineeId.toLowerCase() &&
           a.courseId.toLowerCase() === assignment.courseId.toLowerCase() &&
-          a.cycleId === cycleId
+          a.groupId?.toLowerCase() === group.id.toLowerCase() &&
+          (a.cycleId?.toLowerCase() || null) === (cycleId?.toLowerCase() || null)
       );
 
-      if (!existingAttempt) {
-        const attempt = createCourseAttempt({
-          id: `ATT-${normalizedTraineeId}-${assignment.courseId}-${cycleId || 'standalone'}`,
+      const attemptId = attempt?.id || resolveGroupAttemptId(normalizedTraineeId, assignment.courseId, group.id, cycleId);
+
+      if (!attempt) {
+        attempt = createCourseAttempt({
+          id: attemptId,
           userId: normalizedTraineeId,
           courseId: assignment.courseId,
           cycleId,
           groupId: group.id,
           courseRole: 'courseRole' in assignment ? (assignment as { courseRole?: CourseRole }).courseRole : 'core',
+          createdAt: nowIso,
         });
         this.courseAttempts.push(attempt);
+      }
+
+      // 2. Add or update EnrollmentSourceGrant
+      const sourceId = `group:${group.id}:${cycleId || 'default'}`;
+      const groupGrant: EnrollmentSourceGrant = {
+        sourceId,
+        kind: 'group',
+        groupId: group.id,
+        cycleId: cycleId ?? undefined,
+        attemptId: attempt.id,
+        grantedAt: nowIso,
+        status: 'active',
+      };
+
+      const { isNewEnrollment } = this.addOrUpdateEnrollmentGrant({
+        userId: normalizedTraineeId,
+        courseId: assignment.courseId,
+        grant: groupGrant,
+        enrolledAt: nowIso,
+      });
+
+      if (isNewEnrollment) {
+        newlyEnrolled++;
       }
     }
 
@@ -4995,34 +7193,299 @@ class InMemoryStore {
 
   /**
    * Remove a trainee from a training group.
-   * Strictly preserves existing individual CourseEnrollment records, certificates, and attempts.
+   * Multi-Source Enrollment Provenance & Group Member Removal Choice (D-07, MFR-24).
+   *
+   * For each course assigned to the group context:
+   * - Checked courses (in removeCourseIds): revoke group grant (status: 'revoked_by_group_removal'),
+   *   preserve historical CourseAttempt and attemptProgress[attemptId]. Retain course access if another active source exists.
+   * - Unchecked courses (not in removeCourseIds): convert group grant to standalone continuation grant
+   *   (sourceId: 'self:continued:${groupId}:${attemptId}', kind: 'self', convertedFromGroupId: groupId)
+   *   bound to the same attemptId, lifting former group deadlines and preserving progress and history.
+   * - Independent catalog self-enrollment grants (sourceId: 'self:catalog:...', S1) remain intact.
    */
-  public removeGroupMember(groupId: string, traineeId: string): { success: boolean; message: string } {
+  public removeGroupMember(
+    groupId: string,
+    traineeId: string,
+    removeCourseIds?: string[]
+  ): { success: boolean; message: string } {
     const group = this.groups.find((g) => g.id.toLowerCase() === groupId.toLowerCase());
     if (!group) {
       throw new MockStoreError('المجموعة التدريبية غير موجودة', 404);
     }
 
     const normalizedTraineeId = traineeId.trim().toLowerCase();
+    const canonicalUserId = resolveCanonicalUserId(traineeId);
 
-    group.traineeIds = (group.traineeIds || []).filter(
-      (tid) => tid.toLowerCase() !== normalizedTraineeId
+    // 1. Validate trainee membership & handle idempotent retry
+    const isInGroupTraineeIds = (group.traineeIds || []).some(
+      (tid) =>
+        tid.toLowerCase() === normalizedTraineeId ||
+        resolveCanonicalUserId(tid).toLowerCase() === canonicalUserId.toLowerCase()
+    );
+    const isInGroupMembers = (this.groupMembers[group.id] || []).some(
+      (m) =>
+        m.userId.toLowerCase() === normalizedTraineeId ||
+        resolveCanonicalUserId(m.userId).toLowerCase() === canonicalUserId.toLowerCase()
+    );
+    const isMember = isInGroupTraineeIds || isInGroupMembers;
+
+    const hasExistingGroupGrants = this.enrollments.some((e) =>
+      (resolveCanonicalUserId(e.userId).toLowerCase() === canonicalUserId.toLowerCase() ||
+        e.userId.trim().toLowerCase() === normalizedTraineeId) &&
+      Array.isArray(e.sources) &&
+      e.sources.some(
+        (s) =>
+          s.groupId?.toLowerCase() === group.id.toLowerCase() ||
+          s.convertedFromGroupId?.toLowerCase() === group.id.toLowerCase()
+      )
     );
 
+    if (!isMember && !hasExistingGroupGrants) {
+      throw new MockStoreError('المتدرب ليس عضواً في هذه المجموعة التدريبية', 404);
+    }
+
+    if (!isMember && hasExistingGroupGrants) {
+      // Idempotent retry after already successful removal: do not duplicate grants or mutate attempts
+      return {
+        success: true,
+        message: 'تم إخراج المتدرب من المجموعة التدريبية مسبقاً مع الحفاظ الكامل على سجلاته التدريبية ومقرراته.',
+      };
+    }
+
+    // 2. Resolve all eligible courses belonging to this group context
+    const groupCourseIdMap = new Map<string, string>(); // lowercase -> canonical courseId
+    if (Array.isArray(group.courses)) {
+      for (const c of group.courses) {
+        if (c.courseId?.trim()) {
+          groupCourseIdMap.set(c.courseId.trim().toLowerCase(), c.courseId.trim());
+        }
+      }
+    }
+    if (group.courseId?.trim()) {
+      groupCourseIdMap.set(group.courseId.trim().toLowerCase(), group.courseId.trim());
+    }
+    const groupCycles = this.renewalCycles.filter(
+      (c) => c.groupId.toLowerCase() === group.id.toLowerCase()
+    );
+    for (const cycle of groupCycles) {
+      if (Array.isArray(cycle.courses)) {
+        for (const c of cycle.courses) {
+          if (c.courseId?.trim()) {
+            groupCourseIdMap.set(c.courseId.trim().toLowerCase(), c.courseId.trim());
+          }
+        }
+      }
+    }
+    for (const enr of this.enrollments) {
+      if (
+        (resolveCanonicalUserId(enr.userId).toLowerCase() === canonicalUserId.toLowerCase() ||
+          enr.userId.trim().toLowerCase() === normalizedTraineeId) &&
+        Array.isArray(enr.sources)
+      ) {
+        for (const s of enr.sources) {
+          if (
+            s.groupId?.toLowerCase() === group.id.toLowerCase() ||
+            s.convertedFromGroupId?.toLowerCase() === group.id.toLowerCase()
+          ) {
+            groupCourseIdMap.set(enr.courseId.trim().toLowerCase(), enr.courseId.trim());
+          }
+        }
+      }
+    }
+
+    // 3. Validate removeCourseIds: ensure existence and group membership before applying mutations
+    const removalIdSet = new Set<string>();
+    if (Array.isArray(removeCourseIds)) {
+      for (const rawId of removeCourseIds) {
+        if (typeof rawId === 'string' && rawId.trim()) {
+          const trimmed = rawId.trim();
+          const norm = trimmed.toLowerCase();
+          const courseObj = this.getCourseById(trimmed);
+          if (!courseObj && !groupCourseIdMap.has(norm)) {
+            throw new MockStoreError(`المقرر التدريبي المحدد غير موجود: ${trimmed}`, 404);
+          }
+          if (!groupCourseIdMap.has(norm)) {
+            throw new MockStoreError(`المقرر التدريبي ${trimmed} لا ينتمي إلى هذه المجموعة التدريبية`, 400);
+          }
+          removalIdSet.add(norm);
+        }
+      }
+    }
+
+    // 4. Execute atomic grant transitions per course
+    const nowIso = new Date().toISOString();
     const currentCycle = this.getCurrentGroupCycle(group.id);
+    const cycleId = currentCycle?.id || group.currentCycleId || null;
+
+    for (const [normCId, canonicalCId] of groupCourseIdMap.entries()) {
+      const isSelectedForRemoval = removalIdSet.has(normCId);
+
+      let enrollment = this.enrollments.find(
+        (e) =>
+          e.courseId.toLowerCase() === normCId &&
+          (resolveCanonicalUserId(e.userId).toLowerCase() === canonicalUserId.toLowerCase() ||
+            e.userId.trim().toLowerCase() === normalizedTraineeId)
+      );
+
+      if (!enrollment && !isSelectedForRemoval) {
+        enrollment = {
+          id: `ENR-${canonicalUserId}-${canonicalCId}`,
+          userId: canonicalUserId,
+          courseId: canonicalCId,
+          enrolledAt: nowIso,
+          status: 'active',
+          sources: [],
+        };
+        this.enrollments.push(enrollment);
+        const courseObj = this.getCourseById(canonicalCId);
+        if (courseObj && typeof courseObj.enrollmentCount === 'number') {
+          courseObj.enrollmentCount = (courseObj.enrollmentCount || 0) + 1;
+        }
+      }
+
+      if (!enrollment) {
+        continue;
+      }
+
+      if (!Array.isArray(enrollment.sources)) {
+        enrollment.sources = [];
+      }
+
+      const matchingGroupGrants = enrollment.sources.filter(
+        (s) => s.kind === 'group' && s.groupId?.toLowerCase() === group.id.toLowerCase()
+      );
+
+      if (isSelectedForRemoval) {
+        // --- CASE A: COURSE IS SELECTED FOR REMOVAL (CHECKED) ---
+        for (const grant of matchingGroupGrants) {
+          if (grant.status === 'active') {
+            grant.status = 'revoked_by_group_removal';
+            grant.revokedAt = nowIso;
+          }
+          // Historical grant, sourceId, attemptId, CourseAttempt, and attemptProgress remain preserved!
+        }
+
+        // Check if trainee has another active grant for this course (e.g. S1 self-enrollment or other group)
+        const hasRemainingActiveGrant = enrollment.sources.some((s) => s.status === 'active');
+        if (hasRemainingActiveGrant) {
+          enrollment.status = 'active';
+        } else {
+          enrollment.status = 'revoked_by_group_removal';
+          const courseObj = this.getCourseById(canonicalCId);
+          if (courseObj && typeof courseObj.enrollmentCount === 'number') {
+            courseObj.enrollmentCount = Math.max(0, courseObj.enrollmentCount - 1);
+          }
+          if (courseObj && Array.isArray(courseObj.enrolledUserIds)) {
+            courseObj.enrolledUserIds = courseObj.enrolledUserIds.filter(
+              (uid) =>
+                uid.toLowerCase() !== normalizedTraineeId &&
+                resolveCanonicalUserId(uid).toLowerCase() !== canonicalUserId.toLowerCase()
+            );
+          }
+        }
+      } else {
+        // --- CASE B: COURSE IS KEPT (UNCHECKED - DEFAULT D-07) ---
+        let boundAttemptId: string | undefined;
+
+        for (const grant of matchingGroupGrants) {
+          if (grant.attemptId) {
+            boundAttemptId = grant.attemptId;
+          }
+          if (grant.status === 'active') {
+            grant.status = 'revoked_by_group_removal';
+            grant.revokedAt = nowIso;
+          }
+        }
+
+        if (!boundAttemptId) {
+          let attempt = this.courseAttempts.find(
+            (a) =>
+              (a.userId.toLowerCase() === normalizedTraineeId ||
+                resolveCanonicalUserId(a.userId).toLowerCase() === canonicalUserId.toLowerCase()) &&
+              a.courseId.toLowerCase() === normCId &&
+              a.groupId?.toLowerCase() === group.id.toLowerCase()
+          );
+          boundAttemptId =
+            attempt?.id || resolveGroupAttemptId(canonicalUserId, canonicalCId, group.id, cycleId);
+          if (!attempt) {
+            attempt = createCourseAttempt({
+              id: boundAttemptId,
+              userId: canonicalUserId,
+              courseId: canonicalCId,
+              cycleId,
+              groupId: group.id,
+              createdAt: nowIso,
+            });
+            this.courseAttempts.push(attempt);
+          }
+        } else {
+          let attempt = this.courseAttempts.find((a) => a.id === boundAttemptId);
+          if (!attempt) {
+            attempt = createCourseAttempt({
+              id: boundAttemptId,
+              userId: canonicalUserId,
+              courseId: canonicalCId,
+              cycleId,
+              groupId: group.id,
+              createdAt: nowIso,
+            });
+            this.courseAttempts.push(attempt);
+          }
+        }
+
+        // Ensure attemptProgress exists for bound attempt
+        this.getAttemptProgress(boundAttemptId);
+
+        // Idempotently create or reactivate standalone continuation grant
+        const continuationSourceId = `self:continued:${group.id}:${boundAttemptId}`;
+        let continuationGrant = enrollment.sources.find((s) => s.sourceId === continuationSourceId);
+
+        if (continuationGrant) {
+          continuationGrant.status = 'active';
+          continuationGrant.attemptId = boundAttemptId;
+          continuationGrant.convertedFromGroupId = group.id;
+          continuationGrant.groupId = undefined;
+          continuationGrant.cycleId = undefined;
+        } else {
+          continuationGrant = {
+            sourceId: continuationSourceId,
+            kind: 'self',
+            attemptId: boundAttemptId,
+            convertedFromGroupId: group.id,
+            grantedAt: nowIso,
+            status: 'active',
+          };
+          enrollment.sources.push(continuationGrant);
+        }
+
+        enrollment.status = 'active';
+      }
+    }
+
+    // 5. Remove trainee from group memberships
+    group.traineeIds = (group.traineeIds || []).filter(
+      (tid) =>
+        tid.toLowerCase() !== normalizedTraineeId &&
+        resolveCanonicalUserId(tid).toLowerCase() !== canonicalUserId.toLowerCase()
+    );
+
     if (currentCycle) {
       currentCycle.traineeIds = (currentCycle.traineeIds || []).filter(
-        (tid) => tid.toLowerCase() !== normalizedTraineeId
+        (tid) =>
+          tid.toLowerCase() !== normalizedTraineeId &&
+          resolveCanonicalUserId(tid).toLowerCase() !== canonicalUserId.toLowerCase()
       );
     }
 
     if (this.groupMembers[group.id]) {
       this.groupMembers[group.id] = this.groupMembers[group.id].filter(
-        (m) => m.userId.toLowerCase() !== normalizedTraineeId
+        (m) =>
+          m.userId.toLowerCase() !== normalizedTraineeId &&
+          resolveCanonicalUserId(m.userId).toLowerCase() !== canonicalUserId.toLowerCase()
       );
     }
 
-    // Notify removed trainee
+    // 6. Notify removed trainee
     this.createNotification({
       userId: normalizedTraineeId,
       type: 'group_updated',
@@ -5030,10 +7493,10 @@ class InMemoryStore {
       message: `تم إلغاء قيدك من المجموعة التدريبية "${group.name}". تظل سجلاتك التدريبية ومقرراتك المكتملة محفوظة.`,
       groupId: group.id,
       targetUrl: '/my-groups',
-      dedupeKey: `group_member_removed:${group.id}:${resolveCanonicalUserId(normalizedTraineeId)}`,
+      dedupeKey: `group_member_removed:${group.id}:${canonicalUserId}`,
     });
 
-    // Notify group staff
+    // 7. Notify group staff
     const traineeMeta = this.resolveMockUserMeta(normalizedTraineeId);
     for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: false })) {
       this.createNotification({
@@ -5043,7 +7506,7 @@ class InMemoryStore {
         message: `تم إخراج المتدرب ${traineeMeta.name} من المجموعة التدريبية "${group.name}".`,
         groupId: group.id,
         targetUrl: `/admin/groups/${group.id}/monitoring`,
-        dedupeKey: `group_member_removed_staff:${group.id}:${resolveCanonicalUserId(normalizedTraineeId)}:${staffId}`,
+        dedupeKey: `group_member_removed_staff:${group.id}:${canonicalUserId}:${staffId}`,
       });
     }
 
@@ -5104,16 +7567,25 @@ class InMemoryStore {
     );
 
     if (activeCycle) {
+      const cycleClosedIso = new Date().toISOString();
       activeCycle.status = 'completed';
-      activeCycle.completedAt = new Date().toISOString();
-      activeCycle.updatedAt = new Date().toISOString();
+      activeCycle.completedAt = cycleClosedIso;
+      activeCycle.updatedAt = cycleClosedIso;
       previousCycle = activeCycle;
 
-      // Finalize uncompleted attempts in closing cycle
+      // Finalize and seal all attempts in closing cycle
       for (const att of this.courseAttempts) {
-        if (att.cycleId === activeCycle.id && att.status !== 'completed') {
-          att.status = 'expired_incomplete';
-          att.updatedAt = new Date().toISOString();
+        if (att.cycleId === activeCycle.id) {
+          att.isSealed = true;
+          att.sealedAt = att.sealedAt || cycleClosedIso;
+          att.sealedCourseVersion =
+            att.sealedCourseVersion ??
+            this.getCourseById(att.courseId)?.versionNumber ??
+            1;
+          if (att.status !== 'completed') {
+            att.status = 'expired_incomplete';
+            att.updatedAt = cycleClosedIso;
+          }
         }
       }
     }
@@ -5144,9 +7616,10 @@ class InMemoryStore {
     this.renewalCycles.push(newCycle);
     group.currentCycleId = newCycle.id;
 
-    // Update group courses to match current cycle courses
+    // Update group courses to match current cycle courses (D-GRP-03, D-GRP-06)
     group.courses = newCycle.courses.map((c) => ({
       courseId: c.courseId,
+      courseRole: c.courseRole,
       order: c.order,
       customStartDateTime: c.customStartDateTime,
       customDeadlineDateTime: c.customDeadlineDateTime,
@@ -5154,37 +7627,63 @@ class InMemoryStore {
     }));
     group.updatedAt = new Date().toISOString();
 
-    // Provision fresh unstarted CourseAttempts for active members
+    if (newCycle.courses.some((c) => c.courseRole === 'reminder')) {
+      group.hasHistoricalReminderCourses = true;
+    }
+
+    // Advance nextScheduledRenewalDate if auto renewal is configured (D-GRP-02)
+    if (
+      group.renewalSchedule?.autoRenewalEnabled &&
+      (group.renewalSchedule.intervalDays || group.renewalSchedule.renewalIntervalDays)
+    ) {
+      const intervalDays =
+        group.renewalSchedule.renewalIntervalDays ?? group.renewalSchedule.intervalDays!;
+      try {
+        group.renewalSchedule.nextScheduledRenewalDate = calculateNextRenewalDate(
+          newCycle.deadlineDateTime,
+          intervalDays
+        );
+      } catch {
+        // ignore
+      }
+    }
+
+    // Provision fresh unstarted CourseAttempts and multi-source enrollment grants for active members (D-06, MFR-41)
+    const nowIso = new Date().toISOString();
     for (const tid of group.traineeIds || []) {
       for (const c of newCycle.courses) {
-        // Synchronize course enrollment if not enrolled
-        const existingEnr = this.enrollments.find(
-          (e) =>
-            e.userId.toLowerCase() === tid.toLowerCase() &&
-            e.courseId.toLowerCase() === c.courseId.toLowerCase()
-        );
-        if (!existingEnr) {
-          this.enrollments.push({
-            id: `ENR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-            courseId: c.courseId,
+        const attemptId = resolveGroupAttemptId(tid, c.courseId, group.id, newCycle.id);
+        let attempt = this.courseAttempts.find((a) => a.id === attemptId);
+        if (!attempt) {
+          attempt = createCourseAttempt({
+            id: attemptId,
             userId: tid,
-            enrolledAt: new Date().toISOString(),
-            status: 'active',
+            courseId: c.courseId,
+            cycleId: newCycle.id,
+            groupId: group.id,
+            courseRole: c.courseRole,
+            createdAt: nowIso,
           });
-          const targetCourse = this.getCourseById(c.courseId);
-          if (targetCourse) targetCourse.enrollmentCount = (targetCourse.enrollmentCount || 0) + 1;
+          this.courseAttempts.push(attempt);
         }
 
-        // Fresh unstarted attempt
-        const attempt = createCourseAttempt({
-          id: `ATT-${tid}-${c.courseId}-${newCycle.id}`,
+        const sourceId = `group:${group.id}:${newCycle.id}`;
+        const groupGrant: EnrollmentSourceGrant = {
+          sourceId,
+          kind: 'group',
+          groupId: group.id,
+          cycleId: newCycle.id,
+          attemptId: attempt.id,
+          grantedAt: nowIso,
+          status: 'active',
+        };
+
+        this.addOrUpdateEnrollmentGrant({
           userId: tid,
           courseId: c.courseId,
-          cycleId: newCycle.id,
-          groupId: group.id,
-          courseRole: c.courseRole,
+          grant: groupGrant,
+          enrolledAt: nowIso,
         });
-        this.courseAttempts.push(attempt);
       }
     }
 
@@ -5368,26 +7867,19 @@ class InMemoryStore {
       group.renewalSchedule.nextScheduledRenewalDate = scheduledStartIso;
     }
 
-    // Check if scheduled date is reached
+    // Check whether the scheduled date is reached
     const scheduledStartTime = new Date(scheduledStartIso).getTime();
     if (scheduledStartTime > now.getTime()) {
       return { renewed: false };
     }
 
-    // Idempotency safeguards: Has this group/cycle already been auto-renewed into a successor group?
+    // Idempotency safeguard (Level 1 Authority D-GRP-01, D-GRP-04):
+    // Has this active cycle already been renewed?
     if (activeCycle && group.renewalSchedule.lastAutoRenewedCycleId === activeCycle.id) {
       return { renewed: false };
     }
-    const existingSuccessor = this.groups.find(
-      (g) => g.predecessorGroupId && g.predecessorGroupId.toLowerCase() === group.id.toLowerCase()
-    );
-    if (existingSuccessor) {
-      return { renewed: false };
-    }
 
-    // Due date reached! Prepare successor group before mutating any state:
-    // Authoritative training duration calculation:
-    // Follows the approved policy of preserving the training duration of the active cycle (or group baseline)
+    // Due date reached! Execute in-place renewal on the existing group identity (D-GRP-01, D-GRP-04)
     let durationMs = 0;
     if (activeCycle?.startDateTime && activeCycle?.deadlineDateTime) {
       durationMs =
@@ -5404,8 +7896,8 @@ class InMemoryStore {
     }
 
     // Determine start date and deadline:
-    // If overdue to the point where nominal scheduled start + duration has already passed,
-    // start effective immediately from 'now' to prevent the successor group's deadline from being in the past.
+    // If overdue to the point where nominal scheduled start + duration has passed,
+    // start effective immediately from 'now' to prevent the new cycle's deadline from being in the past.
     let effectiveStartIso = scheduledStartIso;
     if (new Date(scheduledStartIso).getTime() + durationMs <= now.getTime()) {
       effectiveStartIso = now.toISOString();
@@ -5419,29 +7911,25 @@ class InMemoryStore {
       return { renewed: false };
     }
 
-    // Course assignments carried forward:
-    // Preserves course IDs, courseRole (core vs reminder), and order sequence.
-    // Resets customStartDateTime, customDeadlineDateTime, and customPostDeadlinePolicy to null
-    // so the successor group inherits the new group's schedule and group-wide postDeadlinePolicy cleanly.
+    // Course assignments carried forward with explicit courseRole (D-GRP-03, D-GRP-06)
     const coursesToCarryForward: GroupCycleCourseAssignment[] = (
       activeCycle?.courses ||
       group.courses ||
       []
     ).map((c, idx) => ({
       courseId: c.courseId,
-      courseRole: (c as GroupCycleCourseAssignment).courseRole || (idx === 0 ? 'core' : 'reminder'),
+      courseRole: (c as GroupCycleCourseAssignment).courseRole || 'core',
       order: c.order || idx + 1,
       customStartDateTime: null,
       customDeadlineDateTime: null,
       customPostDeadlinePolicy: null,
     }));
 
-    // If courses list is empty, fallback to baseline courses
     if (coursesToCarryForward.length === 0 && group.courses?.length) {
       group.courses.forEach((c, idx) => {
         coursesToCarryForward.push({
           courseId: c.courseId,
-          courseRole: idx === 0 ? 'core' : 'reminder',
+          courseRole: c.courseRole || 'core',
           order: c.order || idx + 1,
           customStartDateTime: null,
           customDeadlineDateTime: null,
@@ -5450,215 +7938,152 @@ class InMemoryStore {
       });
     }
 
-    // Schedule subsequent renewal interval from the new successor group's deadline date:
-    let nextScheduled = calculateNextRenewalDate(scheduledDeadlineIso, intervalDays);
-    while (new Date(nextScheduled).getTime() <= now.getTime()) {
-      nextScheduled = calculateNextRenewalDate(nextScheduled, intervalDays);
-    }
-
-    // Check whether the expiring group has attached files in "المواد المرفقة" (GroupAttachmentsTab):
-    // Excludes interactive meetings (Teams/Zoom/Google Meet/meeting-*).
-    const hasAttachedFiles = (group.resources || []).some((r) => isAttachmentResource(r));
-    const originalBaseName = group.name.trim();
-    const archivedGroupName = hasAttachedFiles
-      ? this.resolveNextArchivedGroupNameWithAttachments(originalBaseName, group.id)
-      : originalBaseName;
-
-    const newGroupId = this.generateNextGroupId();
-    const newEnrollmentCode = this.generateNextEnrollmentCode(originalBaseName);
     const nowIso = now.toISOString();
-    const carriedTraineeIds = [...(group.traineeIds || [])];
-    const normalizedPredecessorStaff = this.normalizeAndValidateGroupStaff({
-      primaryInstructorId: group.primaryInstructorId,
-      assistantLecturerIds: group.assistantLecturerIds,
-      supervisorIds: group.supervisorIds,
-      existingGroup: group,
-    });
-    const carriedPrimaryInstructorId = normalizedPredecessorStaff.primaryInstructorId;
-    const carriedAssistantLecturerIds = [...normalizedPredecessorStaff.assistantLecturerIds];
-    const carriedSupervisorIds = [...normalizedPredecessorStaff.supervisorIds];
-    const groupPolicy = group.postDeadlinePolicy || 'keep_no_cert';
 
-    const successorGroup: TrainingGroup = {
-      id: newGroupId,
-      name: originalBaseName,
-      description: group.description,
-      adminStatus: 'active',
-      enrollmentPolicy: group.enrollmentPolicy || 'open',
-      isEnrollmentOpen: false,
-      enrollmentCode: newEnrollmentCode,
-      enrollmentExpiresAt: group.enrollmentExpiresAt ?? null,
-      maxTrainees: group.maxTrainees ?? null,
-      startDateTime: effectiveStartIso,
-      deadlineDateTime: scheduledDeadlineIso,
-      postDeadlinePolicy: groupPolicy,
-      courses: coursesToCarryForward.map((c) => ({
-        courseId: c.courseId,
-        order: c.order,
-        customStartDateTime: null,
-        customDeadlineDateTime: null,
-        customPostDeadlinePolicy: null,
-      })),
-      courseId: coursesToCarryForward[0]?.courseId || group.courseId || 'CRS001',
-      traineeIds: carriedTraineeIds,
-      primaryInstructorId: carriedPrimaryInstructorId,
-      assistantLecturerIds: carriedAssistantLecturerIds,
-      supervisorIds: carriedSupervisorIds,
-      // Attached files stay with the archived predecessor group and are NOT copied to the successor group
-      resources: [],
-      predecessorGroupId: group.id,
-      replacedByGroupId: null,
-      renewalSchedule: {
-        autoRenewalEnabled: true,
-        intervalDays,
-        renewalIntervalDays: intervalDays,
-        nextScheduledRenewalDate: nextScheduled,
-        lastAutoRenewedCycleId: null,
-        replacedByGroupId: null,
-        recurrenceType: group.renewalSchedule.recurrenceType || 'custom',
-      },
-      currentCycleId: `CYC-${newGroupId}-01`,
-      foldersCount: 0,
-      filesCount: 0,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-
-    const newCycle: GroupRenewalCycle = {
-      id: `CYC-${newGroupId}-01`,
-      groupId: newGroupId,
-      cycleNumber: 1,
-      title: `${originalBaseName} — دورة التدريب الافتتاحية`,
-      status: 'active',
-      startDateTime: effectiveStartIso,
-      deadlineDateTime: scheduledDeadlineIso,
-      postDeadlinePolicy: groupPolicy,
-      courses: coursesToCarryForward,
-      traineeIds: [...carriedTraineeIds],
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-
-    // 1. Seal previous group's active cycle and mark incomplete started attempts as expired_incomplete
+    // 1. Seal previous active cycle and mark incomplete attempts as expired_incomplete
     if (activeCycle) {
       activeCycle.status = 'completed';
       activeCycle.completedAt = nowIso;
       activeCycle.updatedAt = nowIso;
 
       for (const att of this.courseAttempts) {
-        if (
-          att.cycleId === activeCycle.id &&
-          att.status === 'in_progress' &&
-          att.progressPercent < 100
-        ) {
-          att.status = 'expired_incomplete';
-          att.updatedAt = nowIso;
+        if (att.cycleId === activeCycle.id) {
+          att.isSealed = true;
+          att.sealedAt = att.sealedAt || nowIso;
+          att.sealedCourseVersion =
+            att.sealedCourseVersion ??
+            this.getCourseById(att.courseId)?.versionNumber ??
+            1;
+          if (att.status === 'in_progress' && att.progressPercent < 100) {
+            att.status = 'expired_incomplete';
+            att.updatedAt = nowIso;
+          }
         }
       }
     }
 
-    // 2. Archive previous group (preserving its resources, members, and historical attempts)
-    group.name = archivedGroupName;
-    group.adminStatus = 'archived';
-    group.isEnrollmentOpen = false;
-    group.replacedByGroupId = successorGroup.id;
-    group.renewalSchedule = {
-      ...group.renewalSchedule,
-      autoRenewalEnabled: false,
-      nextScheduledRenewalDate: null,
-      lastAutoRenewedCycleId: activeCycle ? activeCycle.id : 'initial',
-      replacedByGroupId: successorGroup.id,
-    };
-    group.updatedAt = nowIso;
+    // 2. Determine next cycle number within the same group (D-GRP-01, D-GRP-04)
+    const groupCycles = this.renewalCycles.filter(
+      (c) => c.groupId.toLowerCase() === group.id.toLowerCase()
+    );
+    const nextCycleNumber =
+      groupCycles.length > 0 ? Math.max(...groupCycles.map((c) => c.cycleNumber)) + 1 : 1;
+    const newCycleId = `CYC-${group.id}-${String(nextCycleNumber).padStart(2, '0')}`;
+    const groupPolicy = group.postDeadlinePolicy || 'keep_no_cert';
 
-    // 3. Register new successor group and its initial cycle
-    this.groups.push(successorGroup);
+    const newCycle: GroupRenewalCycle = {
+      id: newCycleId,
+      groupId: group.id, // SAME GROUP IDENTITY (D-GRP-01)
+      cycleNumber: nextCycleNumber,
+      title: `${group.name} — دورة التجديد ${nextCycleNumber}`,
+      status: 'active',
+      startDateTime: effectiveStartIso,
+      deadlineDateTime: scheduledDeadlineIso,
+      postDeadlinePolicy: groupPolicy,
+      courses: coursesToCarryForward,
+      traineeIds: [...(group.traineeIds || [])],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    // 3. Register new cycle in-place
     this.renewalCycles.push(newCycle);
 
-    // 4. Carry forward group membership records to the new successor group
-    const existingMemberRecords = this.groupMembers[group.id] || [];
-    const newMemberList: GroupMember[] = existingMemberRecords.map((m) => ({
-      ...m,
-      joinedAt: nowIso,
+    // 4. Update the existing group in-place (Identity preserved, NO successor group created)
+    group.currentCycleId = newCycle.id;
+    group.courses = coursesToCarryForward.map((c) => ({
+      courseId: c.courseId,
+      courseRole: c.courseRole,
+      order: c.order,
+      customStartDateTime: null,
+      customDeadlineDateTime: null,
+      customPostDeadlinePolicy: null,
     }));
-    const existingMemberIds = new Set(newMemberList.map((m) => m.userId.toLowerCase()));
-    for (const tid of carriedTraineeIds) {
-      if (!existingMemberIds.has(tid.toLowerCase())) {
-        const managedUser = this.getManagedUserById(tid);
-        newMemberList.push({
-          userId: tid,
-          name: managedUser?.name || `متدرب (${tid})`,
-          email: managedUser?.email || `${tid.toLowerCase()}@cairo-metro.com`,
-          department: managedUser?.department || 'التشغيل والصيانة',
-          jobTitle: managedUser?.jobTitle || 'فني تشغيل',
-          joinedAt: nowIso,
-          joinSource: 'admin_assigned',
-        });
-        existingMemberIds.add(tid.toLowerCase());
-      }
-    }
-    this.groupMembers[successorGroup.id] = newMemberList;
+    group.updatedAt = nowIso;
 
-    // 5. Ensure course enrollments and provision fresh unstarted CourseAttempts at 0% for the new group
-    for (const tid of carriedTraineeIds) {
+    // Decision D-GRP-06: Monotonic historical reminder marker latch
+    if (coursesToCarryForward.some((c) => c.courseRole === 'reminder')) {
+      group.hasHistoricalReminderCourses = true;
+    }
+
+    // Schedule subsequent renewal interval from the new cycle's deadline date (D-GRP-02)
+    let nextScheduled = calculateNextRenewalDate(scheduledDeadlineIso, intervalDays);
+    while (new Date(nextScheduled).getTime() <= now.getTime()) {
+      nextScheduled = calculateNextRenewalDate(nextScheduled, intervalDays);
+    }
+
+    group.renewalSchedule = {
+      ...group.renewalSchedule,
+      autoRenewalEnabled: true,
+      intervalDays,
+      renewalIntervalDays: intervalDays,
+      nextScheduledRenewalDate: nextScheduled,
+      lastAutoRenewedCycleId: activeCycle ? activeCycle.id : 'initial',
+      replacedByGroupId: null,
+    };
+
+    // 5. Provision fresh unstarted CourseAttempts at 0% and group enrollment grants for active members (D-06, MFR-41)
+    for (const tid of group.traineeIds || []) {
       for (const c of newCycle.courses) {
-        const existingEnr = this.enrollments.find(
-          (e) =>
-            e.userId.toLowerCase() === tid.toLowerCase() &&
-            e.courseId.toLowerCase() === c.courseId.toLowerCase()
-        );
-        if (!existingEnr) {
-          this.enrollments.push({
-            id: `ENR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-            courseId: c.courseId,
+        const attemptId = resolveGroupAttemptId(tid, c.courseId, group.id, newCycle.id);
+        let attempt = this.courseAttempts.find((a) => a.id === attemptId);
+        if (!attempt) {
+          attempt = createCourseAttempt({
+            id: attemptId,
             userId: tid,
-            enrolledAt: nowIso,
-            status: 'active',
+            courseId: c.courseId,
+            cycleId: newCycle.id,
+            groupId: group.id,
+            courseRole: c.courseRole,
+            createdAt: nowIso,
           });
-          const targetCourse = this.getCourseById(c.courseId);
-          if (targetCourse) targetCourse.enrollmentCount = (targetCourse.enrollmentCount || 0) + 1;
+          this.courseAttempts.push(attempt);
         }
 
-        const attempt = createCourseAttempt({
-          id: `ATT-${tid}-${c.courseId}-${newCycle.id}`,
+        const sourceId = `group:${group.id}:${newCycle.id}`;
+        const groupGrant: EnrollmentSourceGrant = {
+          sourceId,
+          kind: 'group',
+          groupId: group.id,
+          cycleId: newCycle.id,
+          attemptId: attempt.id,
+          grantedAt: nowIso,
+          status: 'active',
+        };
+
+        this.addOrUpdateEnrollmentGrant({
           userId: tid,
           courseId: c.courseId,
-          cycleId: newCycle.id,
-          groupId: successorGroup.id,
-          courseRole: c.courseRole,
-          createdAt: nowIso,
+          grant: groupGrant,
+          enrolledAt: nowIso,
         });
-        this.courseAttempts.push(attempt);
       }
     }
 
-    this.syncGroupAssistantLedger(successorGroup, carriedPrimaryInstructorId || 'usr_admin_001');
-    this.enrichGroupWithStaff(successorGroup);
-    this.enrichGroupWithStaff(group);
-
-    // Notify carried trainees and group staff/admin about the newly created successor group
-    for (const tid of carriedTraineeIds) {
+    // 6. Notify enrolled trainees and group staff about the newly started cycle on the same group
+    for (const tid of group.traineeIds || []) {
       this.createNotification({
         userId: tid,
         type: 'group_renewed',
-        title: 'بدء دورة تدريبية جديدة للمجموعة',
-        message: `تم تجديد المجموعة التدريبية "${successorGroup.name}" آلياً وبدء دورة تدريبية جديدة مع الاحتفاظ بسجلاتك السابقة.`,
-        courseId: successorGroup.courseId || null,
-        groupId: successorGroup.id,
-        targetUrl: `/my-groups/${successorGroup.id}`,
-        dedupeKey: `group_renewed:${successorGroup.id}:${resolveCanonicalUserId(tid)}`,
+        title: 'بدء دورة تجديد جديدة للمجموعة',
+        message: `تم تجديد دورة التدريب للمجموعة "${group.name}" آلياً وبدء دورة تجديد جديدة (${newCycle.title}) مع الحفاظ الكامل على سجلاتك السابقة.`,
+        courseId: group.courseId || null,
+        groupId: group.id,
+        targetUrl: `/my-groups/${group.id}`,
+        dedupeKey: `group_renewed:${group.id}:${newCycle.id}:${resolveCanonicalUserId(tid)}`,
         createdAt: nowIso,
       });
     }
-    for (const staffId of this.getGroupStaffRecipientIds(successorGroup, { includeAdmins: true })) {
+
+    for (const staffId of this.getGroupStaffRecipientIds(group, { includeAdmins: true })) {
       this.createNotification({
         userId: staffId,
         type: 'group_renewed',
-        title: 'تم التجديد الآلي وإنشاء مجموعة خلف',
-        message: `تمت أرشفة المجموعة "${group.name}" وإنشاء المجموعة الخلف "${successorGroup.name}" (${successorGroup.id}) آلياً.`,
-        groupId: successorGroup.id,
-        targetUrl: `/admin/groups/${successorGroup.id}/monitoring`,
-        dedupeKey: `group_renewed_staff:${successorGroup.id}:${staffId}`,
+        title: 'تم التجديد الآلي لدورة المجموعة',
+        message: `تم التجديد الآلي لدورة التدريب للمجموعة "${group.name}" (${group.id}) وبدء دورة التجديد "${newCycle.title}".`,
+        groupId: group.id,
+        targetUrl: `/admin/groups/${group.id}/monitoring`,
+        dedupeKey: `group_renewed_staff:${group.id}:${newCycle.id}:${staffId}`,
         createdAt: nowIso,
       });
     }
@@ -5666,27 +8091,27 @@ class InMemoryStore {
     this.recordAuditLog({
       actorId: 'SYSTEM',
       actorRole: 'system' as unknown as UserRole,
-      action: 'groups.create',
-      actionLabelAr: 'تجديد آلي وإنشاء مجموعة خلف',
+      action: 'groups.renew',
+      actionLabelAr: 'تجديد آلي لدورة التدريب (في نفس المجموعة)',
       severity: 'info',
       outcome: 'success',
       resourceType: 'group',
-      targetResourceId: successorGroup.id,
-      targetResourceName: successorGroup.name,
-      details: `تمت أرشفة المجموعة السابقة (${group.id}: ${group.name}) وإنشاء المجموعة الجديدة (${successorGroup.id}: ${successorGroup.name}) آلياً`,
+      targetResourceId: group.id,
+      targetResourceName: group.name,
+      details: `تم تجديد دورة التدريب للمجموعة (${group.id}: ${group.name}) وبدء دورة جديدة (${newCycle.id}: ${newCycle.title}) في نفس المجموعة بنجاح`,
       metadata: {
-        archivedGroupId: group.id,
-        archivedGroupName: group.name,
-        successorGroupId: successorGroup.id,
-        hasAttachedFiles,
+        groupId: group.id,
+        groupName: group.name,
+        previousCycleId: activeCycle ? activeCycle.id : null,
+        newCycleId: newCycle.id,
+        newCycleTitle: newCycle.title,
       },
     });
 
     return {
       renewed: true,
       cycle: newCycle,
-      successorGroup,
-      archivedGroup: group,
+      group,
     };
   }
 
@@ -5809,6 +8234,7 @@ class InMemoryStore {
     if (group.currentCycleId?.toLowerCase() === cycle.id.toLowerCase()) {
       group.courses = cycle.courses.map((c) => ({
         courseId: c.courseId,
+        courseRole: c.courseRole,
         order: c.order,
         customStartDateTime: c.customStartDateTime,
         customDeadlineDateTime: c.customDeadlineDateTime,
@@ -5817,43 +8243,54 @@ class InMemoryStore {
       group.updatedAt = new Date().toISOString();
     }
 
-    // Synchronize enrollments and provision unstarted attempts
+    // Decision D-GRP-06: Monotonic historical reminder marker latch
+    if (cycle.courses.some((c) => c.courseRole === 'reminder')) {
+      group.hasHistoricalReminderCourses = true;
+    }
+
+    // Synchronize enrollments and provision unstarted attempts (D-06, MFR-41)
+    const nowIso = new Date().toISOString();
     for (const tid of cycle.traineeIds) {
       for (const c of cycle.courses) {
-        const existingEnr = this.enrollments.find(
-          (e) =>
-            e.userId.toLowerCase() === tid.toLowerCase() &&
-            e.courseId.toLowerCase() === c.courseId.toLowerCase()
-        );
-        if (!existingEnr) {
-          this.enrollments.push({
-            id: `ENR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
-            courseId: c.courseId,
-            userId: tid,
-            enrolledAt: new Date().toISOString(),
-            status: 'active',
-          });
-          const targetCourse = this.getCourseById(c.courseId);
-          if (targetCourse) targetCourse.enrollmentCount = (targetCourse.enrollmentCount || 0) + 1;
-        }
 
-        const existingAttempt = this.courseAttempts.find(
+        const attemptId = resolveGroupAttemptId(tid, c.courseId, group.id, cycle.id);
+        let attempt = this.courseAttempts.find(
           (a) =>
             a.userId.toLowerCase() === tid.toLowerCase() &&
             a.courseId.toLowerCase() === c.courseId.toLowerCase() &&
+            a.groupId?.toLowerCase() === group.id.toLowerCase() &&
             a.cycleId === cycle.id
         );
-        if (!existingAttempt) {
-          const attempt = createCourseAttempt({
-            id: `ATT-${tid}-${c.courseId}-${cycle.id}`,
+        if (!attempt) {
+          attempt = createCourseAttempt({
+            id: attemptId,
             userId: tid,
             courseId: c.courseId,
             cycleId: cycle.id,
             groupId: group.id,
             courseRole: c.courseRole,
+            createdAt: nowIso,
           });
           this.courseAttempts.push(attempt);
         }
+
+        const sourceId = `group:${group.id}:${cycle.id}`;
+        const groupGrant: EnrollmentSourceGrant = {
+          sourceId,
+          kind: 'group',
+          groupId: group.id,
+          cycleId: cycle.id,
+          attemptId: attempt.id,
+          grantedAt: nowIso,
+          status: 'active',
+        };
+
+        this.addOrUpdateEnrollmentGrant({
+          userId: tid,
+          courseId: c.courseId,
+          grant: groupGrant,
+          enrolledAt: nowIso,
+        });
       }
 
       if (newlyAddedCourses.length > 0 && group.adminStatus === 'active') {
@@ -5918,25 +8355,39 @@ class InMemoryStore {
     groupId?: string | null;
     courseRole?: CourseRole;
   }): CourseAttempt {
+    const canonicalUserId = resolveCanonicalUserId(params.userId);
     const normalizedUserId = params.userId.trim().toLowerCase();
     const normalizedCourseId = params.courseId.trim().toLowerCase();
-    const cycleKey = params.cycleId || null;
+    const reqGroup = params.groupId?.trim().toLowerCase() || null;
+    const reqCycle = params.cycleId?.trim().toLowerCase() || null;
 
     const existing = this.courseAttempts.find(
       (a) =>
-        a.userId.toLowerCase() === normalizedUserId &&
+        (a.userId.toLowerCase() === normalizedUserId ||
+          resolveCanonicalUserId(a.userId).toLowerCase() === canonicalUserId.toLowerCase()) &&
         a.courseId.toLowerCase() === normalizedCourseId &&
-        a.cycleId === cycleKey
+        (a.cycleId?.trim().toLowerCase() || null) === reqCycle &&
+        (a.groupId?.trim().toLowerCase() || null) === reqGroup
     );
 
     if (existing) return existing;
 
+    const canonicalCourse = this.getCourseById(params.courseId)?.id || params.courseId.trim();
+    const canonicalGroup = reqGroup ? (this.getGroupById(reqGroup)?.id || params.groupId!.trim()) : null;
+    const canonicalCycle = reqCycle ? (this.getGroupCycleById(reqCycle)?.id || params.cycleId!.trim()) : null;
+
+    const attemptId = canonicalGroup
+      ? resolveGroupAttemptId(canonicalUserId, canonicalCourse, canonicalGroup, canonicalCycle)
+      : `ATT-${canonicalUserId}-${canonicalCourse}-${canonicalCycle || 'standalone'}`;
+    const existingById = this.courseAttempts.find((a) => a.id === attemptId);
+    if (existingById) return existingById;
+
     const attempt = createCourseAttempt({
-      id: `ATT-${params.userId}-${params.courseId}-${cycleKey || 'standalone'}-${Date.now().toString(36)}`,
-      userId: params.userId,
-      courseId: params.courseId,
-      cycleId: cycleKey,
-      groupId: params.groupId || null,
+      id: attemptId,
+      userId: canonicalUserId,
+      courseId: canonicalCourse,
+      cycleId: canonicalCycle,
+      groupId: canonicalGroup,
       courseRole: params.courseRole,
     });
     this.courseAttempts.push(attempt);
@@ -6015,6 +8466,14 @@ class InMemoryStore {
     attempt.lastActivityAt = now;
     attempt.updatedAt = now;
 
+    // Sync AttemptProgress (D-06, MFR-02, MFR-41)
+    const prog = this.getAttemptProgress(attempt.id);
+    if (prog) {
+      prog.itemsProgress[params.itemId] = attempt.lessonProgress[params.itemId];
+      prog.lastWatchedItemId = params.itemId;
+      prog.updatedAt = now;
+    }
+
     return attempt;
   }
 
@@ -6048,28 +8507,71 @@ class InMemoryStore {
       updatedAt: now,
     };
 
+    const courseItems = this.getCourseItems(attempt.courseId);
+    const targetItem = courseItems.find((it) => it.id === params.itemId);
+    const currentItemContentVersion =
+      typeof targetItem?.contentVersion === 'number' && targetItem.contentVersion >= 1
+        ? targetItem.contentVersion
+        : 1;
+
     attempt.lessonProgress[params.itemId] = {
       ...existingProgress,
       completed: true,
       completedAt: existingProgress.completedAt || now,
+      contentVersion: currentItemContentVersion,
       updatedAt: now,
     };
 
-    const courseItems = this.getCourseItems(attempt.courseId);
-    const percent =
-      courseItems.length > 0
-        ? Math.round((attempt.completedItemIds.length / courseItems.length) * 100)
-        : 100;
-    attempt.progressPercent = Math.min(100, percent);
+    const validCompletedIds = this.getValidCompletedItemIdsForAttempt(
+      attempt,
+      courseItems,
+      null
+    );
+    attempt.completedItemIds = [...validCompletedIds];
+    attempt.progressPercent = calculateTraineeProgress(
+      courseItems.length,
+      attempt.completedItemIds.length
+    );
 
-    const wasCompleted = attempt.status === 'completed';
-    if (courseItems.length > 0 && attempt.completedItemIds.length >= courseItems.length) {
+    const wasCompleted =
+      attempt.status === 'completed' &&
+      courseItems.length > 0 &&
+      attempt.completedItemIds.length === courseItems.length;
+    const isNowCompleted =
+      courseItems.length > 0 && attempt.completedItemIds.length === courseItems.length;
+    if (isNowCompleted) {
       attempt.status = 'completed';
       attempt.completedAt = attempt.completedAt || now;
+    } else {
+      attempt.status =
+        attempt.completedItemIds.length > 0 || isAttemptStarted(attempt)
+          ? 'in_progress'
+          : 'not_started';
+      attempt.completedAt = null;
     }
-    const justCompletedAttempt = !wasCompleted && attempt.status === 'completed';
+    const justCompletedAttempt = !wasCompleted && isNowCompleted;
     attempt.lastActivityAt = now;
     attempt.updatedAt = now;
+
+    // Sync AttemptProgress (D-06, MFR-02, MFR-41)
+    const attemptProg = this.getAttemptProgress(attempt.id);
+    if (attemptProg) {
+      attemptProg.completedItemIds = [...attempt.completedItemIds];
+      attemptProg.itemsProgress[params.itemId] = attempt.lessonProgress[params.itemId];
+      attemptProg.progressPercent = attempt.progressPercent;
+      attemptProg.isCompleted = isNowCompleted;
+      attemptProg.lastWatchedItemId = attempt.lastWatchedItemId ?? null;
+      attemptProg.updatedAt = now;
+    }
+
+    if (isNowCompleted) {
+      this.issueCourseVersionCertificate({
+        userId: attempt.userId,
+        courseId: attempt.courseId,
+        attemptId: attempt.id,
+        issuedAt: attempt.completedAt || now,
+      });
+    }
 
     if (justCompletedAttempt) {
       const course = this.getCourseById(attempt.courseId);
@@ -6132,8 +8634,11 @@ class InMemoryStore {
    * Get all attempts associated with a specific training group.
    */
   public getGroupAttempts(groupId: string): CourseAttempt[] {
-    return this.courseAttempts.filter(
-      (a) => a.groupId?.toLowerCase() === groupId.toLowerCase()
+    const targetGroup = groupId.trim().toLowerCase();
+    return this.courseAttempts.filter((a) =>
+      a.groupId
+        ? a.groupId.toLowerCase() === targetGroup
+        : isCycleOwnedByGroup(a.cycleId, groupId)
     );
   }
 
@@ -8358,39 +10863,43 @@ class InMemoryStore {
       // Check current / latest attempt
       const currentAttempt = uniqueAttemptsForCourse[0] || null;
 
-      // Overall course progress
+      // Overall course progress (MFR-33): Authoritative calculation scoped to current attempt without sticky latch or Math.max guard
       let progressPercent = 0;
       let isCompleted = false;
+      const flatItems = course ? this.getCourseItems(course.id) : [];
 
       if (currentAttempt) {
-        progressPercent = currentAttempt.progressPercent;
-        if (currentAttempt.status === 'completed' || isAttemptCompleted(currentAttempt)) {
-          isCompleted = true;
-        }
-      }
-
-      // If user has previous completed attempt, preserve completion
-      if (uniqueAttemptsForCourse.some((a) => a.status === 'completed' || isAttemptCompleted(a))) {
-        isCompleted = true;
-      }
-
-      // If progress is still 0, check userProgress in store
-      for (const uid of userIdentifiers) {
-        const prog = this.userProgress[uid]?.[courseIdLower];
-        if (prog && Object.keys(prog).length > 0) {
-          const completedCount = Object.values(prog).filter((p) => p.completed).length;
-          const totalItems = course ? this.getCourseItems(course.id).length : 0;
-          if (totalItems > 0) {
-            const calculated = Math.round((completedCount / totalItems) * 100);
-            if (calculated > progressPercent) progressPercent = calculated;
-            if (completedCount >= totalItems) isCompleted = true;
+        const attProg = this.getAttemptProgress(currentAttempt.id);
+        const validCompleted = this.getValidCompletedItemIdsForAttempt(
+          currentAttempt,
+          flatItems,
+          attProg
+        );
+        progressPercent = calculateTraineeProgress(flatItems.length, validCompleted.length);
+        isCompleted = flatItems.length > 0 && validCompleted.length === flatItems.length;
+      } else {
+        // Fallback for legacy fixtures pre-seeding userProgress without an attempt
+        for (const uid of userIdentifiers) {
+          const prog = this.userProgress[uid]?.[courseIdLower];
+          if (prog && Object.keys(prog).length > 0) {
+            const validCompleted = flatItems.filter(
+              (it) =>
+                prog[it.id]?.completed &&
+                (prog[it.id]?.contentVersion ?? 1) ===
+                  (typeof it.contentVersion === 'number' && it.contentVersion >= 1
+                    ? it.contentVersion
+                    : 1)
+            );
+            progressPercent = calculateTraineeProgress(flatItems.length, validCompleted.length);
+            isCompleted = flatItems.length > 0 && validCompleted.length === flatItems.length;
+            if (progressPercent > 0) break;
           }
         }
       }
 
-      // Determine course status
+      // Determine course status (D-12: strictly gated on isCompleted, never progressPercent === 100 alone)
       let status: 'not_started' | 'in_progress' | 'completed' = 'not_started';
-      if (isCompleted || progressPercent === 100) {
+      if (isCompleted) {
         status = 'completed';
       } else if (
         progressPercent > 0 ||
@@ -8484,6 +10993,7 @@ class InMemoryStore {
         mostWatchedCount,
         attemptsCount: uniqueAttemptsForCourse.length > 0 ? uniqueAttemptsForCourse.length : 1,
         attempts: uniqueAttemptsForCourse,
+        certificates: this.getUserCertificates(user.id, courseId),
       });
     }
 
@@ -8526,6 +11036,7 @@ class InMemoryStore {
         completedAttemptsCount,
       },
       courses: coursesList,
+      certificates: this.getUserCertificates(user.id),
     };
   }
 
@@ -8537,7 +11048,8 @@ class InMemoryStore {
     userId: string,
     courseId: string,
     itemId: string,
-    telemetry: Partial<LessonProgress>
+    telemetry: Partial<LessonProgress>,
+    options?: { attemptId?: string; groupId?: string; cycleId?: string }
   ): void {
     const normalizedUserId = userId.toLowerCase().trim();
     const normalizedCourseId = courseId.toLowerCase().trim();
@@ -8558,16 +11070,20 @@ class InMemoryStore {
       updatedAt: new Date().toISOString(),
     };
 
-    this.userProgress[normalizedUserId][normalizedCourseId][itemId] = {
+    const updatedLp = {
       ...existing,
       ...telemetry,
       updatedAt: new Date().toISOString(),
     };
+    this.userProgress[normalizedUserId][normalizedCourseId][itemId] = updatedLp;
 
     for (const att of this.courseAttempts) {
       if (
         att.userId.toLowerCase().trim() === normalizedUserId &&
-        att.courseId.toLowerCase().trim() === normalizedCourseId
+        att.courseId.toLowerCase().trim() === normalizedCourseId &&
+        (!options?.attemptId || att.id === options.attemptId) &&
+        (!options?.groupId || att.groupId?.toLowerCase() === options.groupId.toLowerCase()) &&
+        (!options?.cycleId || att.cycleId?.toLowerCase() === options.cycleId.toLowerCase())
       ) {
         if (!att.lessonProgress) att.lessonProgress = {};
         const attExisting = att.lessonProgress[itemId] || {
@@ -8577,11 +11093,19 @@ class InMemoryStore {
           furthestWatchedSeconds: 0,
           updatedAt: new Date().toISOString(),
         };
-        att.lessonProgress[itemId] = {
+        const updatedAttLp = {
           ...attExisting,
           ...telemetry,
           updatedAt: new Date().toISOString(),
         };
+        att.lessonProgress[itemId] = updatedAttLp;
+        att.updatedAt = new Date().toISOString();
+
+        const prog = this.getAttemptProgress(att.id);
+        if (prog) {
+          prog.itemsProgress[itemId] = updatedAttLp;
+          prog.updatedAt = new Date().toISOString();
+        }
       }
     }
   }
@@ -8629,10 +11153,12 @@ class InMemoryStore {
   public getProgressStore(): {
     userProgress: Record<string, Record<string, Record<string, LessonProgress>>>;
     lastWatched: Record<string, Record<string, string>>;
+    attemptProgress: Record<string, AttemptProgress>;
   } {
     return {
       userProgress: JSON.parse(JSON.stringify(this.userProgress)),
       lastWatched: JSON.parse(JSON.stringify(this.lastWatched)),
+      attemptProgress: JSON.parse(JSON.stringify(this.attemptProgress)),
     };
   }
 
@@ -9746,6 +12272,13 @@ class InMemoryStore {
           duration: it.duration,
           isPreview: it.isPreview,
           contentUrl: it.contentUrl,
+          videoUrl: it.videoUrl,
+          pdfUrl: it.pdfUrl,
+          mediaId: it.mediaId,
+          content: it.content,
+          durationSeconds: it.durationSeconds,
+          description: it.description,
+          order: it.order,
         })),
       })),
       sections: ((courseOrDraft as any).sections || []).map((s: any) => ({
@@ -9783,11 +12316,15 @@ class InMemoryStore {
       users: JSON.stringify(this.users),
       courses: JSON.stringify(this.courses),
       courseDrafts: JSON.stringify(this.courseDrafts),
+      publishedCourseVersions: JSON.stringify(this.publishedCourseVersions),
+      certificates: JSON.stringify(this.certificates),
       groups: JSON.stringify(this.groups),
       renewalCycles: JSON.stringify(this.renewalCycles),
       groupMembers: JSON.stringify(this.groupMembers),
       enrollments: JSON.stringify(this.enrollments),
       courseAttempts: JSON.stringify(this.courseAttempts),
+      attemptProgress: JSON.stringify(this.attemptProgress),
+      userProgress: JSON.stringify(this.userProgress),
       groupJoinRequests: JSON.stringify(this.groupJoinRequests),
       materialFolders: JSON.stringify(this.materialFolders),
       materialFiles: JSON.stringify(this.materialFiles),
@@ -9801,11 +12338,19 @@ class InMemoryStore {
     if (snapshot.users) this.users = JSON.parse(snapshot.users);
     if (snapshot.courses) this.courses = JSON.parse(snapshot.courses);
     if (snapshot.courseDrafts) this.courseDrafts = JSON.parse(snapshot.courseDrafts);
+    if (snapshot.publishedCourseVersions) {
+      this.publishedCourseVersions = JSON.parse(snapshot.publishedCourseVersions);
+    }
+    if (snapshot.certificates) {
+      this.certificates = JSON.parse(snapshot.certificates);
+    }
     if (snapshot.groups) this.groups = JSON.parse(snapshot.groups);
     if (snapshot.renewalCycles) this.renewalCycles = JSON.parse(snapshot.renewalCycles);
     if (snapshot.groupMembers) this.groupMembers = JSON.parse(snapshot.groupMembers);
     if (snapshot.enrollments) this.enrollments = JSON.parse(snapshot.enrollments);
     if (snapshot.courseAttempts) this.courseAttempts = JSON.parse(snapshot.courseAttempts);
+    if (snapshot.attemptProgress) this.attemptProgress = JSON.parse(snapshot.attemptProgress);
+    if (snapshot.userProgress) this.userProgress = JSON.parse(snapshot.userProgress);
     if (snapshot.groupJoinRequests) this.groupJoinRequests = JSON.parse(snapshot.groupJoinRequests);
     if (snapshot.materialFolders) this.materialFolders = JSON.parse(snapshot.materialFolders);
     if (snapshot.materialFiles) this.materialFiles = JSON.parse(snapshot.materialFiles);
@@ -10214,6 +12759,26 @@ class InMemoryStore {
           throw new MockStoreError('تعذر العثور على مسودة المقرر المعتمدة أو تم حذفها', 404, 'DRAFT_NOT_FOUND');
         }
 
+        const wasAlreadyPublished = course.status === 'published' || course.status === 'live';
+        const staged = this.stagedAdminEdits[course.id] || this.stagedAdminEdits[courseId];
+        const shouldUseStaged =
+          payload.publishOption === 'with_staged_edits' &&
+          staged &&
+          staged.patchedContent &&
+          Object.keys(staged.patchedContent).length > 0;
+        const hadPendingOrDraft = Boolean(
+          draft ||
+          shouldUseStaged ||
+          course.isUpdatePendingApproval ||
+          course.hasDraftChanges ||
+          !wasAlreadyPublished
+        );
+        const publishTimestamp = new Date().toISOString();
+
+        if (wasAlreadyPublished && !this.publishedCourseVersions[course.id]?.length) {
+          this.seedInitialPublishedCourseVersion(course);
+        }
+
         if (draft) {
           // Version integrity: verify draft was not modified after request creation
           const currentDraftTime = draft.draftUpdatedAt || draft.submittedAt;
@@ -10249,28 +12814,62 @@ class InMemoryStore {
             }
           }
 
-          // Content eligibility revalidation at approval execution time
-          this.validateCourseContentEligibility(draft);
+          const finalApprovedDraft: Course =
+            shouldUseStaged && staged
+              ? {
+                ...draft,
+                ...staged.patchedContent,
+                id: course.id,
+              }
+              : { ...draft, id: course.id };
 
-          Object.assign(course, draft, {
+          // Content eligibility revalidation at approval execution time
+          this.validateCourseContentEligibility(finalApprovedDraft);
+
+          Object.assign(course, finalApprovedDraft, {
             status: 'published' as CourseStatus,
             isUpdatePendingApproval: false,
             hasDraftChanges: false,
-            publishedAt: course.publishedAt || new Date().toISOString(),
+            publishedAt: publishTimestamp,
           });
           delete this.courseDrafts[course.id];
           delete this.courseDrafts[courseId];
           const canonical = resolveCanonicalCourseId(courseId);
           if (canonical) delete this.courseDrafts[canonical];
         } else {
+          const finalApprovedBase: Course =
+            shouldUseStaged && staged
+              ? {
+                ...course,
+                ...staged.patchedContent,
+                id: course.id,
+              }
+              : course;
           // Unmodified base course content eligibility revalidation
-          this.validateCourseContentEligibility(course);
+          this.validateCourseContentEligibility(finalApprovedBase);
+          if (shouldUseStaged && staged) {
+            Object.assign(course, finalApprovedBase);
+          }
           course.status = 'published';
           course.isUpdatePendingApproval = false;
           course.hasDraftChanges = false;
           if (!course.publishedAt) {
-            course.publishedAt = new Date().toISOString();
+            course.publishedAt = publishTimestamp;
           }
+        }
+
+        delete this.stagedAdminEdits[course.id];
+        delete this.stagedAdminEdits[courseId];
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(`metro_admin_staged_edits_${course.id}`);
+        }
+
+        if (hadPendingOrDraft || !this.publishedCourseVersions[course.id]?.length) {
+          this.recordPublishedCourseVersionAndReconcileAttempts(
+            course,
+            approverActor.id,
+            publishTimestamp
+          );
         }
 
         for (const recipientId of this.getCourseInstructorRecipientIds(course)) {
@@ -12021,7 +14620,11 @@ class InMemoryStore {
 
     // 1. Direct enrollments table
     this.enrollments
-      .filter((e) => e.courseId.toLowerCase() === course.id.toLowerCase())
+      .filter(
+        (e) =>
+          e.courseId.toLowerCase() === course.id.toLowerCase() &&
+          (e.status === 'active' || (Array.isArray(e.sources) && e.sources.some((s) => s.status === 'active')))
+      )
       .forEach((e) => candidateTraineeIds.add(e.userId.toLowerCase().trim()));
 
     // 2. Course-level direct list if present
@@ -12052,40 +14655,64 @@ class InMemoryStore {
       const rawPhone = managedUser.phone || null;
       const cleanPhone = cleanPhoneNumber(rawPhone);
 
-      // Find course attempt(s) for this user and course
+      // Find course attempt(s) for this user and course (MFR-32: canonical matching across both group and standalone attempts)
+      const canonicalTrainee = resolveCanonicalUserId(traineeId).toLowerCase().trim();
       const userAttempts = this.courseAttempts.filter(
         (a) =>
-          a.userId.toLowerCase().trim() === traineeId &&
+          (a.userId.toLowerCase().trim() === traineeId ||
+            resolveCanonicalUserId(a.userId).toLowerCase().trim() === canonicalTrainee) &&
           a.courseId.toLowerCase().trim() === course.id.toLowerCase()
       );
 
-      // Pick latest attempt by updatedAt / startedAt
-      const latestAttempt = userAttempts.sort(
+      // Pick latest attempt by updatedAt / createdAt
+      let latestAttempt = userAttempts.sort(
         (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
       )[0];
 
+      // MFR-32: If candidate trainee is enrolled but has no attempt record, resolve or provision standalone attempt
+      if (!latestAttempt) {
+        latestAttempt = this.getOrCreateCurrentAttempt({
+          userId: traineeId,
+          courseId: course.id,
+        });
+      }
+
       let progressPercent = 0;
+      let isCompleted = false;
       let lastActivityAt: string | null = null;
       let daysSinceLastActivity: number | null = null;
 
       if (latestAttempt) {
-        progressPercent = Math.min(100, Math.max(0, latestAttempt.progressPercent || 0));
-        lastActivityAt = latestAttempt.lastActivityAt || latestAttempt.startedAt || null;
+        const attProg = this.getAttemptProgress(latestAttempt.id);
+        const flatItems = this.getCourseItems(course.id);
+        const validCompleted = this.getValidCompletedItemIdsForAttempt(
+          latestAttempt,
+          flatItems,
+          attProg
+        );
+        progressPercent = calculateTraineeProgress(flatItems.length, validCompleted.length);
+        isCompleted = flatItems.length > 0 && validCompleted.length === flatItems.length;
+        lastActivityAt =
+          latestAttempt.lastActivityAt ||
+          attProg?.updatedAt ||
+          latestAttempt.updatedAt ||
+          latestAttempt.startedAt ||
+          null;
         if (lastActivityAt) {
           const diffMs = Date.now() - new Date(lastActivityAt).getTime();
           daysSinceLastActivity = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
         }
       }
 
-      // Status evaluation:
-      // Completed: progress >= 100%
-      // Late: progress > 0% && progress < 100% && daysSinceLastActivity > 5
-      // Active: progress > 0% && progress < 100% && daysSinceLastActivity <= 5
+      // Status evaluation (D-12):
+      // Completed: isCompleted === true (strictly all required items completed at current contentVersion)
+      // Late: progress > 0% && !isCompleted && daysSinceLastActivity > 5
+      // Active: progress > 0% && !isCompleted && daysSinceLastActivity <= 5
       // Not Started: progress == 0% or unstarted
       let status: 'completed' | 'active' | 'late' | 'not_started' = 'not_started';
       let statusLabelAr = 'لم يبدأ بعد';
 
-      if (progressPercent >= 100) {
+      if (isCompleted) {
         status = 'completed';
         statusLabelAr = 'مكتمل ✅';
       } else if (progressPercent > 0) {
@@ -12544,3 +15171,5 @@ class InMemoryStore {
 
 
 export const inMemoryStore = new InMemoryStore();
+export const resolveCourseAccess = (userId: string, courseId: string, now?: Date | string) =>
+  inMemoryStore.resolveCourseAccess(userId, courseId, now);

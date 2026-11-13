@@ -1,7 +1,8 @@
 import type { UserRole } from '@/core/auth/types';
+import type { CertificateRecord } from '@/core/courses/types';
 import type { CourseAttempt } from '@/core/groups/types';
 
-export type { UserRole };
+export type { CertificateRecord, UserRole };
 
 export type UserStatus = 'active' | 'suspended';
 
@@ -189,6 +190,8 @@ export interface UserTranscriptCourseItem {
   attemptsCount: number;
   /** Associated attempts (chronologically sorted from newest to oldest) */
   attempts: CourseAttempt[];
+  /** Version-scoped certificates earned on this course (D-13, MFR-46) */
+  certificates?: CertificateRecord[];
 }
 
 /**
@@ -198,5 +201,6 @@ export interface UserTranscriptDTO {
   user: ManagedUserDTO;
   metrics: UserTranscriptMetrics;
   courses: UserTranscriptCourseItem[];
+  certificates?: CertificateRecord[];
 }
 

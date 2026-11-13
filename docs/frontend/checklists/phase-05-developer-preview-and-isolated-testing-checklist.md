@@ -1,12 +1,12 @@
 # Phase 5 Planning Checklist: Developer Role Preview & Isolated Role Testing
 
-**Document Version:** 1.1 (Final Architecture Reconciliation)  
-**Status:** Planning Complete — Reconciled & Ready for Owner Acceptance (`[Not Started]` across all implementation items)  
-**Authoritative Reference:** `docs/backend/pre-backend-migration-remediation-roadmap.md`, Revision 5  
+**Document Version:** 2.0 (Phase 5 & WP-5.4.5 Final Closure & WP-1.1 Acceptance Alignment)  
+**Status:** Phase 5 Implementation Complete (`IMPLEMENTED — VERIFICATION PENDING` at Gate B; Closed under T-1.1.3)  
+**Authoritative Reference:** `docs/backend/pre-backend-migration-remediation-roadmap.md`, Revision 5; `docs/project-state/active-roadmap.md`  
 **Governing Phase:** Phase 5 — Developer Role Preview (`معاينة الدور`) & Isolated Role Testing (`اختبار الصلاحيات`, `D-10`)  
 **Assigned Findings:** `MFR-25` (`F-25`), `MFR-40`  
-**Owner Decisions:** `D-10`  
-**Date:** November 2, 2026  
+**Owner Decisions:** `D-10`, Phase 5 Decisions `A, B, C, D`  
+**Date:** November 7, 2026  
 
 ---
 
@@ -166,10 +166,10 @@ In accordance with final architectural review:
   - **Token Tampering Policy:** Rejection of untrusted persona session with non-destructive preservation of Developer origin snapshot in an inert state.
 - **Proposed Work Packages:**
   - [x] `[Completed]` **WP-5.4.1:** Session Rehydration & Mount Hardening (reconciles active session, origin snapshot, and server revalidation on cold refresh; implements non-authorizing `inspectSessionContinuity()` strictly excluding `rawToken`; authors deferred specs `P5-T16-1`, `P5-T16-2`, `P5-T16-3`).
-  - [ ] `[Not Started]` **WP-5.4.2:** Asynchronous Race & Epoch Protection (implements `sessionEpoch`, `<Outlet key="..." />` subtree reset, and selective context cache flushes across session transitions; planned specs: `P5-T13-17`, `P5-T13-18`, `P5-T13-19`).
-  - [ ] `[Not Started]` **WP-5.4.3:** Multi-Tab Safety & Storage Isolation (enforces per-tab `sessionStorage` boundary and idempotent tab duplication handling; planned spec: `P5-T23-1`).
-  - [ ] `[Not Started]` **WP-5.4.4:** Corrupted, Stale & Expired Recovery Flows (implements sanitized diagnostic quarantine, dedicated emergency return with continuity, proof protection, inert snapshot preservation on real-user mismatch, and non-destructive token tampering handling; planned specs: `P5-T18-6`, `P5-T18-7`, `P5-T18-8`, `P5-T18-9`, `P5-T24-1`, `P5-T24-2`, `P5-T24-3`).
-  - [ ] `[Not Started]` **WP-5.4.5:** Phase 5 Comprehensive Security Regression Matrix (authors the remaining 11 planned specifications in `isolated-role-session.test.tsx`, finalizing the total deferred test suite at 60 specifications across all lifecycle scenarios; status: `PLANNED — NOT YET WRITTEN — NOT EXECUTED`).
+  - [x] `[Completed]` **WP-5.4.2:** Asynchronous Race & Epoch Protection (implements monotonic `sessionEpoch`, pre-commit stale response rejection in `apiClient`, `<Outlet key="..." />` route subtree reset, and selective context cache flushes across session transitions; authors deferred specs: `P5-T13-17`, `P5-T13-18`, `P5-T13-19`).
+  - [x] `[Completed]` **WP-5.4.3:** Multi-Tab Safety & Storage Isolation (enforces per-tab `sessionStorage` boundary and idempotent tab duplication handling; authored spec: `P5-T23-1`).
+  - [x] `[Completed]` **WP-5.4.4:** Corrupted, Stale & Expired Recovery Flows (implements sanitized diagnostic quarantine, dedicated emergency return with continuity, proof protection, inert snapshot preservation on real-user mismatch, and non-destructive token tampering handling; authored specs: `P5-T18-6`, `P5-T18-7`, `P5-T18-8`, `P5-T18-9`, `P5-T24-1`, `P5-T24-2`, `P5-T24-3`).
+  - [x] `[Completed]` **WP-5.4.5:** Phase 5 Comprehensive Security Regression Matrix & Final Closure (completes comprehensive static test inventory reconciliation, S0–S15 lifecycle state mapping, canonical 12-case lifecycle decision matrix, state transition traceability, cross-package invariant audit, and final Phase 5 acceptance closure across all 60 deferred specifications; closed and accepted under `Phase 1 / WP-1.1 / T-1.1.1`–`T-1.1.3` with runtime verification deferred to Phase 4 / Gate B `WP-4.4` / `T-4.4.1`).
 
 ---
 
@@ -180,7 +180,9 @@ In accordance with final architectural review:
 3. **Mutation Barrier:** Any write attempt while in Role Preview is prevented and prompts the Developer to launch an Isolated Role Test Session.
 4. **Complete Session Round-Trip (`D-10`):** Increment 5.3 delivers a fully operable launch-and-return cycle. The Developer launches a test session, conducts tests, and returns to the Developer session in a single click without page reloads or credential re-entry.
 5. **Strict Persona Allowlist:** Launching a test session succeeds only for accounts explicitly present in `SYNTHETIC_TEST_PERSONA_REGISTRY`. Real accounts and arbitrary prefix matches are rejected.
-6. **Explicit Logout Cleanup:** Logging out during an isolated test session purges both `metro_lms_auth_session` and `metro_lms_developer_origin_session`.
+6. **Explicit Logout Cleanup & Decision C (`S8 -> S7`):**
+   - Logging out during an active isolated test session purges both `metro_lms_auth_session` and `metro_lms_developer_origin_session` (`S3/S4 -> S12 -> S0`, `INV-P5-7`).
+   - Logging out from a real-user session in State `S8` clears active React and storage session (`user = null`, `metro_lms_auth_session` cleared), clears the volatile in-memory runtime Developer token, and preserves `metro_lms_developer_origin_session` inert and credential-free (`InertDeveloperOriginSnapshot`, `snapshotState: 'inert'`) until tab termination (`Decision C: S8 -> S7`). Fresh Developer authentication is required to restore Developer session.
 7. **Developer Chrome Protection (`MFR-25`):** Navigating to `/design-system` as any non-developer returns `404 Not Found`. Footer and MobileDrawer milestone badges are invisible to non-developers.
 8. **Test Deferral Rule:** All test cases are authored and cataloged as:  
    `WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13`.
@@ -221,34 +223,39 @@ In accordance with final architectural review:
 | `P5-T16-1` | Integration | Session Rehydration | Cold rehydration restores active persona & snapshot; transient network timeout preserves snapshot with retry action | Deferred (Phase 13) |
 | `P5-T16-2` | Integration | Session Rehydration | Normal one-click return (`returnToDeveloperSession`) cleanly restores Developer session following cold page reload | Deferred (Phase 13) |
 | `P5-T16-3` | Integration | Session Rehydration | Dual-session expiration on cold reload fails closed to `/login` and creates sanitized quarantine | Deferred (Phase 13) |
-| `P5-T13-17` | Unit / Security | Session Epoch | Monotonic `sessionEpoch` increments on launch, normal return, emergency return, and logout transitions | Planned |
-| `P5-T13-18` | Security | Race Condition Barrier | Stale asynchronous responses and post-logout network races are strictly discarded and cannot repopulate user state | Planned |
-| `P5-T13-19` | Integration | Subtree & Cache Reset | Application route outlet subtree remounts (`<Outlet key="..." />`) and context caches flush across session transitions | Planned |
-| `P5-T18-6` | Security | Recovery Flows | Real-user active identity mismatch preserves origin snapshot in an inert state, hides return banner, and blocks Developer elevation | Planned |
-| `P5-T18-7` | Security | Recovery Flows | Conclusively expired Developer snapshot creates sanitized quarantine in `metro_lms_quarantined_snapshot` with strictly zero secrets | Planned |
-| `P5-T18-8` | Security | Recovery Flows | Persona token tampering clears active session, hides return controls, and preserves valid Developer snapshot inert | Planned |
-| `P5-T18-9` | Security | Secret Non-Disclosure | Raw token is strictly excluded from public `SessionContinuityDescriptor` and sanitized diagnostic quarantine payload | Planned |
-| `P5-T23-1` | Security | Multi-Tab Safety | Duplicated tab operates independently with autonomous return and zero `localStorage` exposure | Planned |
-| `P5-T24-1` | Integration | Emergency Return | Dedicated `returnFromExpiredPersonaSession()` restores Developer with exact original expiration and purges origin snapshot | Planned |
-| `P5-T24-2` | Security | Emergency Return | Emergency return is strictly rejected when persona continuity cannot be verified (missing session, invalid token format, or expired snapshot) | Planned |
-| `P5-T24-3` | Security | Proof Invalidation & Replay | Forged, stale, or reused continuity proofs are strictly rejected; failed emergency return preserves Developer origin snapshot | Planned |
+| `P5-T13-17` | Unit / Security | Session Epoch | Monotonic `sessionEpoch` increments on launch, normal return, emergency return, and logout transitions | Deferred (Phase 13) |
+| `P5-T13-18` | Security | Race Condition Barrier | Stale asynchronous responses and post-logout network races are strictly discarded and cannot repopulate user state | Deferred (Phase 13) |
+| `P5-T13-19` | Integration | Subtree & Cache Reset | Application route outlet subtree remounts (`<Outlet key="..." />`) and context caches flush across session transitions | Deferred (Phase 13) |
+| `P5-T18-6` | Security | Recovery Flows | Real-user active identity mismatch preserves origin snapshot in an inert state, hides return banner, and blocks Developer elevation | Deferred (Phase 13) |
+| `P5-T18-7` | Security | Recovery Flows | Conclusively expired Developer snapshot creates sanitized quarantine in `metro_lms_quarantined_snapshot` with strictly zero secrets | Deferred (Phase 13) |
+| `P5-T18-8` | Security | Recovery Flows | Persona token tampering clears active session, hides return controls, and preserves valid Developer snapshot inert | Deferred (Phase 13) |
+| `P5-T18-9` | Security | Secret Non-Disclosure | Raw token is strictly excluded from public `SessionContinuityDescriptor` and sanitized diagnostic quarantine payload | Deferred (Phase 13) |
+| `P5-T23-1` | Security | Multi-Tab Safety | Duplicated tab operates independently with autonomous return and zero `localStorage` exposure | Deferred (Phase 13) |
+| `P5-T24-1` | Integration | Emergency Return | Dedicated `returnFromExpiredPersonaSession()` restores Developer with exact original expiration and purges origin snapshot | Deferred (Phase 13) |
+| `P5-T24-2` | Security | Emergency Return | Emergency return is strictly rejected when persona continuity cannot be verified (missing session, invalid token format, or expired snapshot) | Deferred (Phase 13) |
+| `P5-T24-3` | Security | Proof Invalidation & Replay | Forged, stale, or reused continuity proofs are strictly rejected; failed emergency return preserves Developer origin snapshot | Deferred (Phase 13) |
 
 ### Test Count Arithmetic Reconciliation
 - **Increment 5.3 Existing Specifications:** 46 tests in `isolated-role-session.test.tsx` (`WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13`)
-- **Increment 5.4 WP-5.4.1 Authored Specifications:** 3 newly authored tests (`P5-T16-1`, `P5-T16-2`, `P5-T16-3`) (`WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13`)
-- **Increment 5.4 Remaining Planned Specifications:** 11 tests across WP-5.4.2 to WP-5.4.5 (`PLANNED — NOT YET WRITTEN — NOT EXECUTED`)
-- **Phase 5 Combined Total Target:** **49 (Written/Deferred) + 11 (Planned/Unwritten) = 60 Total Specifications**
+- **Increment 5.4 WP-5.4.1 Authored Specifications:** 3 tests (`P5-T16-1`, `P5-T16-2`, `P5-T16-3`) (`WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13`)
+- **Increment 5.4 WP-5.4.2 Authored Specifications:** 3 tests (`P5-T13-17`, `P5-T13-18`, `P5-T13-19`) (`WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13`)
+- **Increment 5.4 WP-5.4.3 Authored Specifications:** 1 test (`P5-T23-1`) (`WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13`)
+- **Increment 5.4 WP-5.4.4 Authored Specifications:** 7 tests (`P5-T18-6`, `P5-T18-7`, `P5-T18-8`, `P5-T18-9`, `P5-T24-1`, `P5-T24-2`, `P5-T24-3`) (`WRITTEN — NOT YET EXECUTED — DEFERRED TO PHASE 13`)
+- **Increment 5.4 Remaining Planned Specifications:** 0 tests
+- **Phase 5 Combined Total Target:** **60 (Written/Deferred) + 0 (Planned/Unwritten) = 60 Total Specifications**
 
 ---
 
 ## 8. Sign-off & Verification Status
 
-- **Planning Document Status:** Reconciled (Version 3.0 Authoritative Final Planning Reconciliation Baseline)
+- **Planning Document Status:** Final Closure (Version 2.0 Authoritative Final Acceptance Baseline — Closed under Phase 1 / WP-1.1 / T-1.1.3)
 - **Increment 5.4 Implementation Status:**
   - **WP-5.4.1 (Session Rehydration & Mount Hardening):** `[Completed]`
-  - **WP-5.4.2 (Asynchronous Race & Epoch Protection):** `[Not Started]`
-  - **WP-5.4.3 (Multi-Tab Safety & Storage Isolation):** `[Not Started]`
-  - **WP-5.4.4 (Corrupted, Stale & Expired Recovery Flows):** `[Not Started]`
-  - **WP-5.4.5 (Security Regression Matrix):** `[Not Started]`
-- **Executable Tests:** None (Zero automated test execution per strict governance)
-- **Phase Implementation Status:** `[In Progress — Increment 5.4 / WP-5.4.1 Complete]`
+  - **WP-5.4.2 (Asynchronous Race & Epoch Protection):** `[Completed]`
+  - **WP-5.4.3 (Multi-Tab Safety & Storage Isolation):** `[Completed]`
+  - **WP-5.4.4 (Corrupted, Stale & Expired Recovery Flows):** `[Completed]`
+  - **WP-5.4.5 (Security Regression Matrix & Final Closure):** `[Completed & Accepted]` (Closed under `Phase 1 / WP-1.1 / T-1.1.3`)
+- **Executable Tests:** None (Zero automated test execution per strict governance; all 60 specifications in `isolated-role-session.test.tsx` remain `WRITTEN — NOT YET EXECUTED — DEFERRED TO GATE B`)
+- **Test Traceability Status:** `T-1.1.2` static test traceability analysis `COMPLETED AND ACCEPTED`; 9 specifications identified as conflicting or partially aligned queued for authoring/reconciliation under `Phase 1 / WP-1.3 / T-1.3.3`; consolidated execution deferred to `Phase 4 / WP-4.4 / T-4.4.1`.
+- **Phase Implementation Status:** `[COMPLETED — IMPLEMENTED — RUNTIME VERIFICATION DEFERRED TO PHASE 4 / GATE B (WP-4.4)]`
+- **Associated Checkpoints:** Checkpoint `CP-001` (Phase A Closure); Checkpoint `CP-002` (Phase 1 / WP-1.1 Acceptance & Phase 5 Closure).

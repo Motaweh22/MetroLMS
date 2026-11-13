@@ -6,6 +6,11 @@ import './styles/globals.css';
 async function prepareApp() {
   if (import.meta.env.DEV) {
     try {
+      // Seed development-only mock CSRF cookie on window/main thread before initial requests
+      if (typeof document !== 'undefined' && !/(?:^|;\s*)csrftoken=([^;]+)/.test(document.cookie)) {
+        document.cookie = 'csrftoken=mock-dev-csrftoken; path=/; SameSite=Lax';
+      }
+
       const { worker } = await import('@/mocks/browser');
       await worker.start({
         onUnhandledRequest: 'bypass',

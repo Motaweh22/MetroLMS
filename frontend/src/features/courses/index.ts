@@ -17,8 +17,15 @@ export type {
   CourseStatus,
   CourseFilterParams,
   CourseEnrollment,
+  EnrollmentRecord,
+  EnrollmentSourceGrant,
+  EnrollmentSourceKind,
+  EnrollmentGrantStatus,
   EnrollmentResponse,
   EnrollmentStatusResponse,
+  AttemptProgress,
+  CourseAccessMode,
+  EligibleAttemptOption,
 } from '@/core/courses/types';
 
 // Export components

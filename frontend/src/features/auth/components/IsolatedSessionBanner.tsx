@@ -23,6 +23,7 @@ export const IsolatedSessionBanner: React.FC = () => {
     isolatedPersona,
     personaRoleLabelAr,
     returnToDeveloperSession,
+    returnFromExpiredPersonaSession,
     isTransitioning,
     error,
     clearError,
@@ -32,6 +33,23 @@ export const IsolatedSessionBanner: React.FC = () => {
 
   const [isReturning, setIsReturning] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
+  const [isEmergencyReturning, setIsEmergencyReturning] = useState(false);
+
+  const handleEmergencyReturn = async () => {
+    if (isEmergencyReturning) return;
+    setIsEmergencyReturning(true);
+    setReturnError(null);
+    try {
+      if (returnFromExpiredPersonaSession) {
+        await returnFromExpiredPersonaSession();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'فشلت استعادة جلسة المطور.';
+      setReturnError(msg);
+    } finally {
+      setIsEmergencyReturning(false);
+    }
+  };
 
   // 1. Emergency State Banner (Acceptance Point 1 & 2):
   // Rendered ONLY when:
@@ -59,16 +77,28 @@ export const IsolatedSessionBanner: React.FC = () => {
               </span>
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <span>
-                  انتهت صلاحية جلسة الحساب الاختباري (<span className="underline decoration-amber-300 font-extrabold">{personaDisplay}</span>). الرجوع إلى جلسة المطور متاح لحالات الطوارئ.
+                  انتهت صلاحية جلسة الحساب الاختباري. الرجوع إلى جلسة المطور؟
                 </span>
                 {persona && (
                   <Badge variant="warning" className="text-[11px] font-bold bg-amber-950 text-amber-200 border border-amber-400/60">
                     {persona.id}
                   </Badge>
                 )}
+                {returnError && (
+                  <span className="text-red-300 font-normal text-xs">{returnError}</span>
+                )}
               </div>
             </div>
-            {/* Note: returnFromExpiredPersonaSession action button is intentionally omitted in WP-5.4.1 (reserved for WP-5.4.4) */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEmergencyReturn}
+              disabled={isEmergencyReturning || isTransitioning}
+              data-testid="emergency-return-btn"
+              className="bg-amber-950/70 border-amber-400 text-amber-100 hover:bg-amber-900 hover:text-white"
+            >
+              الرجوع إلى جلسة المطور
+            </Button>
           </div>
         </div>
       </aside>

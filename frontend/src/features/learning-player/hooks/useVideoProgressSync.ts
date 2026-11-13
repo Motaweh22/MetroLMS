@@ -10,6 +10,7 @@ interface UseVideoProgressSyncProps {
   furthestWatched: number;
   duration?: number;
   onLocalUpdate?: (itemId: string, activity: Partial<LessonProgress>) => void;
+  isReadOnly?: boolean;
 }
 
 export function useVideoProgressSync({
@@ -20,6 +21,7 @@ export function useVideoProgressSync({
   furthestWatched,
   duration,
   onLocalUpdate,
+  isReadOnly = false,
 }: UseVideoProgressSyncProps) {
   const latestStateRef = useRef({
     courseId,
@@ -47,7 +49,8 @@ export function useVideoProgressSync({
     const { courseId: cId, itemId: itId, currentTime: curr, furthestWatched: fur, duration: dur } =
       latestStateRef.current;
 
-    if (!cId || !itId) return;
+    // Suppress synchronization in read-only mode (MFR-23, MFR-42 / T-2.4.3)
+    if (!cId || !itId || isReadOnly) return;
 
     const now = Date.now();
     const posDiff = Math.abs(curr - lastSyncedRef.current.position);
@@ -83,28 +86,29 @@ export function useVideoProgressSync({
     } catch {
       // Background sync errors are safely suppressed to avoid interrupting trainee playback
     }
-  }, [onLocalUpdate]);
+  }, [onLocalUpdate, isReadOnly]);
 
-  // Periodic heartbeat every 5 seconds during active playback
+  // Periodic heartbeat every 5 seconds during active playback (disabled in read-only mode)
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || isReadOnly) return;
 
     const interval = setInterval(() => {
       syncActivity(false);
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [isPlaying, syncActivity]);
+  }, [isPlaying, isReadOnly, syncActivity]);
 
-  // Flush sync on pause
+  // Flush sync on pause (suppressed in read-only mode)
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying && !isReadOnly) {
       syncActivity(true);
     }
-  }, [isPlaying, syncActivity]);
+  }, [isPlaying, isReadOnly, syncActivity]);
 
   // Flush sync on document visibility change (e.g. backgrounding tab)
   useEffect(() => {
+    if (isReadOnly) return;
     const handleVisibilityChange = () => {
       if (document.hidden) {
         syncActivity(true);
@@ -113,14 +117,16 @@ export function useVideoProgressSync({
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [syncActivity]);
+  }, [isReadOnly, syncActivity]);
 
-  // Flush sync on item change or unmount
+  // Flush sync on item change or unmount (suppressed in read-only mode)
   useEffect(() => {
     return () => {
-      syncActivity(true);
+      if (!isReadOnly) {
+        syncActivity(true);
+      }
     };
-  }, [itemId, syncActivity]);
+  }, [itemId, isReadOnly, syncActivity]);
 
   return { syncActivity };
 }

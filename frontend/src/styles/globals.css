@@ -54,9 +54,50 @@ body {
   border: 0;
 }
 
-/* Accessible Reduced-Motion Support */
+/* Universal Spinner Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes metro-spinner-cw {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes metro-spinner-ccw {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-spin,
+.loading-spinner-ring,
+.metro-spinner-outer {
+  animation: metro-spinner-cw 0.9s linear infinite !important;
+  transform-origin: center center;
+}
+
+.animate-spin-reverse,
+.metro-spinner-inner {
+  animation: metro-spinner-ccw 1.4s linear infinite !important;
+  transform-origin: center center;
+}
+
+/* Accessible Reduced-Motion Support (Exempts active loading spinners so application status remains perceptible) */
 @media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after {
+  *:not(.animate-spin):not([class*="animate-spin"]):not(.loading-spinner-ring):not(.metro-spinner-outer):not(.metro-spinner-inner):not([class*="spinner"]) {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

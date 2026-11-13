@@ -1,151 +1,70 @@
-# Metro Courses LMS
+# MetroLMS — Cairo Metro Learning Management System
 
-Modern Learning Management System (LMS) designed for the Cairo Metro Training Institute, featuring role-based workspaces for Students, Lecturers, Supervisors, and Administrators.
-
----
-
-## 1. Project Overview & Architecture
-
-Metro Courses LMS has transitioned from its original Vanilla JavaScript proof-of-concept into a modern, enterprise-ready React application.
-
-### Active Application (`frontend/`)
-The primary active codebase is located in [`frontend/`](./frontend/). It is built with:
-- **Framework & Tooling:** [React 19](https://react.dev/), [Vite 6](https://vitejs.dev/), [TypeScript 5.7](https://www.typescriptlang.org/)
-- **UI & Design System:** Custom vanilla CSS design system with CSS custom properties, responsive navigation, glassmorphic surfaces, and accessible tokens
-- **Icons & Visuals:** [Lucide React](https://lucide.dev/)
-- **State Management & Routing:** Modular feature-driven architecture with in-memory mock stores, RBAC guards, and client-side routing
-- **Testing:** [Vitest](https://vitest.dev/), React Testing Library, and `@testing-library/user-event` (1,174 tests across 66 test suites)
-
-### Current Status
-- **Frontend:** Feature-complete through Increment 11 (including Student Portal, Lecturer Workspace, Course Builder, Admin & Supervisor Reviews, Analytics, Attendance, User Directory, RBAC guards, and Course Performance tracking).
-- **Backend & Database:** The production relational database schema and architecture have been designed and validated (3NF relational schema, comprehensive Chen & Crow's Foot ER diagrams, and security architecture). **Backend implementation and database migration have not yet commenced** (planned for future increments).
+> **Document Status:** `ACTIVE — AUTHORITATIVE (REPOSITORY ENTRY POINT)`
+> **Current Project State:** [`docs/project-state/CURRENT.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/CURRENT.md) (`CP-001` — Ready for Phase 1 `WP-1.1`)
+> **Living Master Plan:** [`docs/project-state/active-roadmap.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/active-roadmap.md)
+> **Master Documentation Hub:** [`docs/README.md`](file:///d:/LMS%20MEtro%20Project/docs/README.md)
+> **Agent & Developer Workflow Rules:** [`AGENTS.md`](file:///d:/LMS%20MEtro%20Project/AGENTS.md)
 
 ---
 
-## 2. Directory Structure
+## 1. Project Overview & Canonical Owners
+
+**MetroLMS** is an Arabic-first (RTL) enterprise Learning Management System for Cairo Metro training operations.
+
+- **Current Objective:** **Frontend Integration Readiness** — ensuring all React 19 features, role workflows, domain rules, state transitions, and API contracts are internally consistent, verified, and ready for future **Python + Django + Microsoft SQL Server** backend integration.
+- **No Duplication Rule:** Rather than repeating stack tables, decision matrices, or phase roadmaps in this root README, consult the single canonical owner for each domain:
+  1. **Current Position & Next Task:** [`docs/project-state/CURRENT.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/CURRENT.md)
+  2. **Complete Remaining Roadmap (`Phases 1–4`):** [`docs/project-state/active-roadmap.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/active-roadmap.md)
+  3. **Confirmed Tech Stack & Out-of-Scope Fence (`D-MEDIA-01`):** [`docs/architecture/system-architecture.md`](file:///d:/LMS%20MEtro%20Project/docs/architecture/system-architecture.md)
+  4. **Binding Owner Decisions (`D-AUTH-01`, `D-DB-01`, `D-SEC-01`, `D-01`–`D-14`, `Decision C`):** [`docs/architecture/decision-register.md`](file:///d:/LMS%20MEtro%20Project/docs/architecture/decision-register.md)
+  5. **Auth, Sessions, CSRF, Logout (`LOGOUT_UNCONFIRMED`) & Role Isolation:** [`docs/architecture/authentication-and-session-contract.md`](file:///d:/LMS%20MEtro%20Project/docs/architecture/authentication-and-session-contract.md)
+  6. **Domain & Business Rules (6 Roles, `Rule A`, `Rule B`, Approvals, Progress, Deletions):** [`docs/requirements/domain-business-rules.md`](file:///d:/LMS%20MEtro%20Project/docs/requirements/domain-business-rules.md)
+  7. **Django + Microsoft SQL Server Integration Contract (`D-DB-01`):** [`docs/backend/django-sqlserver-integration-contract.md`](file:///d:/LMS%20MEtro%20Project/docs/backend/django-sqlserver-integration-contract.md)
+
+---
+
+## 2. Repository Structure
 
 ```text
-D:\LMS MEtro Project\
-├── .git/                  # Git repository history, tracking, and refs
-├── .gitignore             # Root ignore rules (node_modules, dist, caches)
-├── README.md              # Project entry point and developer guide (this file)
-├── frontend/              # ACTIVE: Modern React application
-│   ├── public/            # Static assets and media fixtures
-│   ├── src/               # Application source code
-│   │   ├── app/           # App root, providers, and layout shells
-│   │   ├── core/          # Authentication, RBAC, routing, navigation guards
-│   │   ├── features/      # Feature slices (courses, builder, review, admin, etc.)
-│   │   ├── mocks/         # InMemoryStore and mock handlers
-│   │   ├── pages/         # Route page components
-│   │   ├── shared/        # Reusable UI components, hooks, config, utilities
-│   │   └── test/          # Vitest suites and testing utilities
-│   ├── eslint.config.js   # ESLint 9 flat configuration
-│   ├── index.html         # Application HTML template
-│   ├── package.json       # Dependencies, scripts, and project metadata
-│   ├── package-lock.json  # Deterministic dependency lockfile
-│   ├── tsconfig*.json     # TypeScript project configurations
-│   └── vite.config.ts     # Vite bundler and path alias configuration
-├── docs/                  # ARCHITECTURE & SPECIFICATIONS
-│   ├── frontend/          # Frontend architecture, design system, audits, roadmaps
-│   │   ├── checklists/    # Increment-by-increment test checklists
-│   │   └── ...            # Audit reports, parity logs, performance analysis
-│   └── backend/           # Database schema, ERDs, and architecture specifications
-│       ├── database-schema.md # Complete relational schema (3NF, 42 tables, data dictionary)
-│       ├── erd.md             # Crow's Foot ERDs and domain relationship diagrams
-│       ├── erd-chen.md        # Classic Chen-notation ERD deliverable
-│       └── diagrams/          # Diagram sources (.drawio, .mmd) and vector/raster exports (.svg, .png)
-└── legacy-reference/      # READ-ONLY: Original Vanilla JS prototype files
-    ├── app.html           # Prototype application entry point
-    ├── index.html         # Prototype landing page
-    ├── js/                # Legacy JavaScript modules
-    ├── css/               # Legacy stylesheet
-    ├── data/              # Legacy JSON fixtures
-    ├── assets/            # Legacy logos and graphics
-    ├── course-library/    # Static course demo media
-    └── README.md          # Reference notice and directory documentation
+.
+├── README.md                  # Repository overview & quick-start guide (this file)
+├── AGENTS.md                  # Mandatory workflow & checkpoint rules for developers and AI agents
+├── frontend/                  # Active React 19 + TypeScript + Vite + Tailwind v4 SPA
+│   ├── src/
+│   │   ├── app/               # Application shell, layouts & React Router v7 configuration
+│   │   ├── core/              # AuthContext, RolePreviewContext, permissions, apiClient, domain engines
+│   │   ├── features/          # Feature modules (courses, builder, review, player, groups, users, etc.)
+│   │   ├── mocks/             # MSW v2 handlers & in-memory relational simulation store
+│   │   ├── pages/             # Route-level page components
+│   │   ├── shared/            # Design-system UI primitives & layout components
+│   │   └── test/              # Cross-cutting security, role & isolated-session test suites
+│   └── package.json           # Frontend dependencies & scripts
+├── docs/                      # Consolidated Knowledge Base & Project State System
+│   ├── README.md              # Master Documentation Navigation Hub & Canonical Source-of-Truth Register
+│   ├── architecture/          # System, Auth/Session, Security/XSS & Decision Register specs
+│   ├── requirements/          # Consolidated Domain & Business Rules
+│   ├── project-state/         # CURRENT.md, active-roadmap.md, verification strategy & checkpoints/
+│   ├── frontend/              # Frontend architecture, design system, checklists & reports
+│   ├── backend/               # Django + SQL Server contract & frozen 42-table schema baseline
+│   └── archive/               # Archived chat transcripts & historical disposition index
+└── legacy-reference/          # Read-only legacy vanilla JS prototype (DO NOT MODIFY)
 ```
 
 ---
 
-## 3. Getting Started with the Frontend
+## 3. Frontend Quick Start (`frontend/`)
 
-All development activities are performed from the `frontend/` directory.
+```bash
+cd frontend
+npm install
 
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18.0.0 or higher recommended)
-- `npm` (bundled with Node.js)
-
-### Installation
-Restore dependencies deterministically using the repository's lockfile:
-
-```powershell
-cd "D:\LMS MEtro Project\frontend"
-npm ci
-```
-
-### Development Server
-Start the local Vite development server with hot-module replacement (HMR):
-
-```powershell
+# Start Vite development server with MSW v2 mock API
 npm run dev
-```
 
-### Running Tests
-Execute the full Vitest suite (1,174 tests across 66 test suites):
-
-```powershell
-# Run the complete test suite once
-npm test -- --run
-
-# Run in watch mode during development
-npm test
-```
-
-### Linting
-Validate TypeScript code quality and style using ESLint:
-
-```powershell
+# Type-check, lint, test, and build (executed at Gate B — see verification-and-test-strategy.md)
+npx tsc --noEmit
 npm run lint
-```
-
-### Production Build
-Type-check and bundle the application for production deployment:
-
-```powershell
+npx vitest run
 npm run build
 ```
-
-The compiled output will be generated into `frontend/dist/`.
-
----
-
-## 4. Documentation Guide
-
-Comprehensive specifications and architecture documentation are located in [`docs/`](./docs/):
-
-- **Frontend Specifications (`docs/frontend/`):**
-  - Architecture and UI component roadmaps.
-  - Increment-by-increment verification checklists and audit logs.
-  - RBAC permission matrices and route authorization rules.
-- **Backend Architecture & Database Design (`docs/backend/`):**
-  - [`database-schema.md`](./docs/backend/database-schema.md): Complete relational database specification with 42 tables in 3NF, data dictionary, indexing strategy, audit logging, and foreign key constraints.
-  - [`erd.md`](./docs/backend/erd.md): Crow's Foot ERDs for all 5 functional domains.
-  - [`erd-chen.md`](./docs/backend/erd-chen.md): Formal Chen-notation ER diagrams with entities, attributes, relationships, and cardinalities.
-  - [`diagrams/`](./docs/backend/diagrams/): Standalone, editable Draw.io files (`.drawio`), Mermaid definitions (`.mmd`), high-resolution vector SVGs, and full-system poster exports (`erd-chen-full-system.png`).
-
----
-
-## 5. Legacy Reference Directory
-
-The [`legacy-reference/`](./legacy-reference/) directory contains the original Vanilla JavaScript, HTML, and Python prototype of Metro Courses LMS.
-
-- **Purpose:** Retained strictly as a read-only historical reference for feature parity audits, business rule verification, and UI comparison.
-- **Strict Constraint:** Do not add new features, fix bugs, or build upon legacy files. All current and future development is centered in `frontend/` and future backend directories.
-
----
-
-## 6. Next Steps & Roadmap
-
-- **Completed:** Increments 1 through 11 (complete React frontend, full test coverage, database schema design, and standalone ERD deliverables).
-- **Relocation:** Successfully organized into `D:\LMS MEtro Project`.
-- **Pending (Increment 12+):** Production backend development, REST/GraphQL API implementation, PostgreSQL/MySQL database migrations, and real-time media/session management.

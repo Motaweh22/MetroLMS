@@ -17,9 +17,18 @@ export const learningApi = {
   /**
    * Fetch course progress for the current authenticated user
    */
-  async getCourseProgress(courseId: string): Promise<CourseProgressResponse> {
+  async getCourseProgress(
+    courseId: string,
+    options?: { attemptId?: string; groupId?: string; cycleId?: string }
+  ): Promise<CourseProgressResponse> {
+    const params = new URLSearchParams();
+    if (options?.attemptId) params.set('attemptId', options.attemptId);
+    if (options?.groupId) params.set('groupId', options.groupId);
+    if (options?.cycleId) params.set('cycleId', options.cycleId);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+
     return apiClient<CourseProgressResponse>(
-      `/api/courses/${encodeURIComponent(courseId)}/progress`,
+      `/api/courses/${encodeURIComponent(courseId)}/progress${queryString}`,
       {
         method: 'GET',
       }
@@ -53,6 +62,7 @@ export const learningApi = {
       `/api/courses/${encodeURIComponent(courseId)}/items/${encodeURIComponent(payload.itemId)}/complete`,
       {
         method: 'POST',
+        body: JSON.stringify(payload),
       }
     );
   },

@@ -1,16 +1,34 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/mocks/server';
 import {
   apiClient,
   ApiError,
+  StaleEpochError,
+  isStaleEpochError,
+  getCsrfToken,
+  isSameOriginUrl,
   getLocalizedStatusMessage,
   isJsonResponse,
   sanitizeErrorMessage,
 } from '@/core/api/apiClient';
+import { getCurrentSessionEpoch, advanceSessionEpoch } from '@/core/auth/sessionEpoch';
+import {
+  setRolePreviewMutationBarrier,
+  isRolePreviewMutationBlocked,
+  ROLE_PREVIEW_MUTATION_BLOCKED_MESSAGE,
+} from '@/core/auth/previewMutationBarrier';
+import { authStorage } from '@/core/auth/authStorage';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  setRolePreviewMutationBarrier(false);
+  authStorage.clearSession();
+  if (typeof document !== 'undefined') {
+    document.cookie = 'csrftoken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  }
+});
 afterAll(() => server.close());
 
 describe('Hardened API Client & Error Normalization', () => {
@@ -234,6 +252,215 @@ describe('Hardened API Client & Error Normalization', () => {
       expect(isJsonResponse('text/html')).toBe(false);
       expect(isJsonResponse('text/plain')).toBe(false);
       expect(isJsonResponse(null)).toBe(false);
+    });
+  });
+
+  describe('D-AUTH-01 API Transport, CSRF & Lifecycle Guards', () => {
+    it('enforces credentials: "same-origin" on all requests and prevents caller override', async () => {
+      let capturedRequest: Request | null = null;
+      server.use(
+        http.get('/api/test-credentials-barrier', ({ request }) => {
+          capturedRequest = request;
+          return HttpResponse.json({ status: 'ok' });
+        })
+      );
+
+      // Caller attempts to pass credentials: 'omit' or 'include'
+      await apiClient('/api/test-credentials-barrier', {
+        credentials: 'omit' as RequestCredentials,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      // MSW requests preserve the credentials policy from fetch
+      expect(capturedRequest!.credentials).toBe('same-origin');
+    });
+
+    it('merges caller-provided custom headers with default JSON headers', async () => {
+      let capturedHeaders: Headers | null = null;
+      server.use(
+        http.get('/api/test-custom-headers', ({ request }) => {
+          capturedHeaders = request.headers;
+          return HttpResponse.json({ status: 'ok' });
+        })
+      );
+
+      await apiClient('/api/test-custom-headers', {
+        headers: {
+          'X-Custom-Client-Id': 'MetroLMS-Client-42',
+          'X-Correlation-Id': 'corr-abc-123',
+        },
+      });
+
+      expect(capturedHeaders).not.toBeNull();
+      expect(capturedHeaders!.get('Content-Type')).toBe('application/json');
+      expect(capturedHeaders!.get('Accept')).toBe('application/json');
+      expect(capturedHeaders!.get('X-Custom-Client-Id')).toBe('MetroLMS-Client-42');
+      expect(capturedHeaders!.get('X-Correlation-Id')).toBe('corr-abc-123');
+    });
+
+    it('extracts CSRF token from document.cookie and handles encoded characters', () => {
+      expect(getCsrfToken()).toBeNull();
+
+      document.cookie = 'csrftoken=test-csrf-token-123; Path=/';
+      expect(getCsrfToken()).toBe('test-csrf-token-123');
+
+      // Handles URL-encoded tokens
+      document.cookie = 'csrftoken=token%20with%20spaces%2Bplus; Path=/';
+      expect(getCsrfToken()).toBe('token with spaces+plus');
+    });
+
+    it('attaches X-CSRFToken header to mutating requests (POST, PUT, PATCH, DELETE) on same-origin endpoints', async () => {
+      document.cookie = 'csrftoken=secure-metro-csrf-999; Path=/';
+
+      const capturedCsrfHeaders: Record<string, string | null> = {};
+
+      server.use(
+        http.post('/api/test-csrf-post', ({ request }) => {
+          capturedCsrfHeaders['POST'] = request.headers.get('X-CSRFToken');
+          return HttpResponse.json({ success: true });
+        }),
+        http.put('/api/test-csrf-put', ({ request }) => {
+          capturedCsrfHeaders['PUT'] = request.headers.get('X-CSRFToken');
+          return HttpResponse.json({ success: true });
+        }),
+        http.patch('/api/test-csrf-patch', ({ request }) => {
+          capturedCsrfHeaders['PATCH'] = request.headers.get('X-CSRFToken');
+          return HttpResponse.json({ success: true });
+        }),
+        http.delete('/api/test-csrf-delete', ({ request }) => {
+          capturedCsrfHeaders['DELETE'] = request.headers.get('X-CSRFToken');
+          return HttpResponse.json({ success: true });
+        })
+      );
+
+      await apiClient('/api/test-csrf-post', { method: 'POST', body: JSON.stringify({}) });
+      await apiClient('/api/test-csrf-put', { method: 'PUT', body: JSON.stringify({}) });
+      await apiClient('/api/test-csrf-patch', { method: 'PATCH', body: JSON.stringify({}) });
+      await apiClient('/api/test-csrf-delete', { method: 'DELETE' });
+
+      expect(capturedCsrfHeaders['POST']).toBe('secure-metro-csrf-999');
+      expect(capturedCsrfHeaders['PUT']).toBe('secure-metro-csrf-999');
+      expect(capturedCsrfHeaders['PATCH']).toBe('secure-metro-csrf-999');
+      expect(capturedCsrfHeaders['DELETE']).toBe('secure-metro-csrf-999');
+    });
+
+    it('does NOT attach X-CSRFToken to safe HTTP methods (GET)', async () => {
+      document.cookie = 'csrftoken=secure-metro-csrf-999; Path=/';
+      let capturedCsrf: string | null = null;
+
+      server.use(
+        http.get('/api/test-csrf-get', ({ request }) => {
+          capturedCsrf = request.headers.get('X-CSRFToken');
+          return HttpResponse.json({ safe: true });
+        })
+      );
+
+      await apiClient('/api/test-csrf-get', { method: 'GET' });
+      expect(capturedCsrf).toBeNull();
+    });
+
+    it('does NOT attach X-CSRFToken to cross-origin URLs', async () => {
+      document.cookie = 'csrftoken=secure-metro-csrf-999; Path=/';
+      expect(isSameOriginUrl('https://untrusted-external-domain.example/api/upload')).toBe(false);
+      expect(isSameOriginUrl('/api/local-endpoint')).toBe(true);
+    });
+
+    it('propagates AbortSignal to fetch and converts AbortError into typed cancellation ApiError', async () => {
+      server.use(
+        http.get('/api/test-abort-signal', async () => {
+          // Simulate slow server response
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          return HttpResponse.json({ status: 'done' });
+        })
+      );
+
+      const controller = new AbortController();
+      const promise = apiClient('/api/test-abort-signal', {
+        signal: controller.signal,
+      });
+
+      // Abort immediately
+      controller.abort();
+
+      try {
+        await promise;
+        expect.unreachable('Should have thrown cancellation error');
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.isNetworkError).toBe(true);
+        expect(apiErr.message).toBe('تم إلغاء الطلب.');
+      }
+    });
+
+    it('rejects stale in-flight protected requests with StaleEpochError when session epoch advances', async () => {
+      let resolveSlowRequest: () => void;
+      const slowPromise = new Promise<void>((resolve) => {
+        resolveSlowRequest = resolve;
+      });
+
+      server.use(
+        http.get('/api/protected-data-slow', async () => {
+          await slowPromise;
+          return HttpResponse.json({ data: 'confidential' });
+        })
+      );
+
+      const initialEpoch = getCurrentSessionEpoch();
+      const inFlightRequest = apiClient('/api/protected-data-slow');
+
+      // Session epoch advances while request is in-flight (e.g. logout or user switch)
+      advanceSessionEpoch();
+      expect(getCurrentSessionEpoch()).toBeGreaterThan(initialEpoch);
+
+      // Server finishes response
+      resolveSlowRequest!();
+
+      try {
+        await inFlightRequest;
+        expect.unreachable('Should have thrown StaleEpochError');
+      } catch (err: unknown) {
+        expect(isStaleEpochError(err)).toBe(true);
+        expect(err).toBeInstanceOf(StaleEpochError);
+        const staleErr = err as StaleEpochError;
+        expect(staleErr.requestEpoch).toBe(initialEpoch);
+        expect(staleErr.currentEpoch).toBe(getCurrentSessionEpoch());
+      }
+    });
+
+    it('blocks mutations during active Visual Role Preview and exempts POST /api/auth/logout', async () => {
+      server.use(
+        http.post('/api/courses/mutation-attempt', () => {
+          return HttpResponse.json({ mutated: true });
+        }),
+        http.post('/api/auth/logout', () => {
+          return HttpResponse.json({ success: true, message: 'Logged out' });
+        })
+      );
+
+      // Activate preview mutation barrier
+      setRolePreviewMutationBarrier(true);
+      expect(isRolePreviewMutationBlocked()).toBe(true);
+
+      // 1. Regular mutation must be blocked with HTTP 403 ApiError
+      try {
+        await apiClient('/api/courses/mutation-attempt', { method: 'POST', body: JSON.stringify({}) });
+        expect.unreachable('Should have thrown 403 preview mutation blocked');
+      } catch (err: unknown) {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(403);
+        expect(apiErr.message).toBe(ROLE_PREVIEW_MUTATION_BLOCKED_MESSAGE);
+      }
+
+      // Barrier remains active after blocked mutation
+      expect(isRolePreviewMutationBlocked()).toBe(true);
+
+      // 2. Session termination (POST /api/auth/logout) is exempted and deactivates barrier
+      const logoutRes = await apiClient<{ success: boolean }>('/api/auth/logout', { method: 'POST' });
+      expect(logoutRes.success).toBe(true);
+      // Exemption deactivates barrier to allow clean return
+      expect(isRolePreviewMutationBlocked()).toBe(false);
     });
   });
 });

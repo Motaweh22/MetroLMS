@@ -1,0 +1,47 @@
+# MetroLMS — Final Phase 0 Inventory & Scope Consistency Report
+
+**Document Identifier:** `METROLMS-DOC-PHASE-0-CONSISTENCY-FINAL-2026-11-12`  
+**Governing Authority:** [`comprehensive-documentation-program-plan-REV6.md`](file:///C:/Users/Administrator/.gemini/antigravity/brain/60a56b3d-7eee-41aa-b677-179a79273724/comprehensive-documentation-program-plan-REV6.md) (`DOC-PROG-2026-11-12-REV6` — *Owner Accepted*)  
+**Investigation Nature:** Final Read-Only Forensic Provenance, Snapshot & Scope Reconciliation  
+**Execution Authority Status:** **`UNAUTHORIZED`** (Awaiting Explicit Owner Decision on Master Decision 10)  
+
+---
+
+## 1. Executive Summary
+
+This report delivers the final forensic reconciliation of working-tree provenance, historical checklist arithmetic, and empty leaf directory handling:
+
+1. **CP-001 Baseline vs. Current Workstream Provenance:** Establishes two independent, non-interchangeable classifications for all 70 uncommitted files under `frontend/src/`:
+   - `CP-001 Baseline Membership` (historical snapshot origin at Phase A closure).
+   - `Current Workstream Provenance` (functional architecture domain).
+   All **18 original CP-001 baseline files** (15 modified, 3 untracked) are **`VERIFIED` present without modification, rename, or replacement**.
+2. **Reconciliation of Key Ambiguity Files:**
+   - `sessionEpoch.ts`: CP-001 Baseline = **YES**; Workstream = **Phase 5 (Auth & Session Lifecycle)**.
+   - `courseBuilderDraftStorage.ts`: CP-001 Baseline = **YES**; Workstream = **Phase 2 (Course Builder Domain)**.
+   - `stagedEditsStorage.ts`: CP-001 Baseline = **YES**; Workstream = **Phase 2 (Course Review & Version Diffing)**.
+   - `auth.test.tsx`: CP-001 Baseline = **NO**; Workstream = **Phase 5 (Auth & Session Lifecycle)**.
+3. **Checklists Arithmetic Reconciliation:** Proves that the directory contains **21 total physical files**: exactly **17 actual checklist documents** (`*checklist*.md`), **1 directory index** (`README.md`), **1 verification spec**, and **2 implementation plans**. At Git HEAD, 15 f
+<truncated 27754 bytes>
+─────────────┴──────────────────────┴───────────────────────┴───────────────────────┘
+```
+
+### Synthesis for Owner Determination
+- **Option A** is the smallest and cleanest implementation mechanism to satisfy Section 12.J Line 567 immediately without perturbing the 33-markdown-deliverable scope or manifest accounting. However, because `.gitkeep` is an unwritten implementation detail, it **requires explicit Owner authorization**.
+- **Option B** adheres strictly to the explicit text of REV6 by creating only parent directories with their 9 `README.md` files, creating subdirectories on-demand during subsequent phases.
+- **Option C** is not recommended because it inflates Phase 0 authoring scope by ~32 files and breaks manifest accounting.
+
+- **Classification:** **`PENDING OWNER DECISION`**.
+
+---
+
+## 6. Final Advisory Recommendation
+
+### **RECOMMENDATION:**
+### **`READY FOR OWNER AUTHORIZATION — WITH EXPLICIT IMPLEMENTATION CHOICE REQUIRED`**
+
+All inventory numbers, historical provenance baselines, and manifest accounting rules are fully reconciled with 100% forensic evidence:
+1. Checklist inventory is reconciled: exactly 17 actual checklists + 1 README + 1 verification spec + 2 plans = 21 files.
+2. Working-tree inventory is reconciled: exactly 50 modified tracked files + 20 untracked files = 70 files. All 18 CP-001 baseline files are individually verified present and mapped.
+3. The Project Owner is provided with an explicit implementation election between **Option A** (`.gitkeep` convention) and **Option B** (on-demand leaf creation in Phases 1–8).
+
+**Governing Governance Notice:** This recommendation is advisory only. **Phase 0 execution remains strictly `UNAUTHORIZED`. No filesystem modifications, directory creations, or scaffolding activities may begin until the Project Owner formally issues an authorization decision on Master Decision 10.**

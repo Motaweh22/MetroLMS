@@ -19,7 +19,13 @@ import type {
   ToggleGroupEnrollmentDTO,
   AddGroupMembersRequestDTO,
   UpdateGroupAssistantsRequestDTO,
+  TraineeGroupItemDTO,
 } from '@/core/groups/dtos';
+import {
+  resolveGroupType,
+  resolveGroupOperationalStatus,
+  calculateGroupTimeInfo,
+} from '@/core/groups/resolvers';
 
 /**
  * Authorization Helper Functions
@@ -94,7 +100,7 @@ function handleStoreError(err: unknown) {
 export const groupHandlers = [
   // ── 1. Trainee Increment 7 Endpoints (Preserved) ─────────────────────
 
-  // Query groups assigned to current authenticated user
+  // Query groups assigned to current authenticated user (D-GRP-01..D-GRP-08 Trainee Normalized Contract)
   http.get('/api/groups/my', ({ request }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
@@ -105,15 +111,62 @@ export const groupHandlers = [
     }
 
     const groups = inMemoryStore.getGroups(user.id, user.role);
-    const enriched = groups.map((g) => {
-      const metrics = inMemoryStore.getGroupMetrics(g.id);
+    const now = new Date();
+
+    const traineeGroups: TraineeGroupItemDTO[] = groups.map((g) => {
+      const currentCycle = inMemoryStore.getCurrentGroupCycle(g.id);
+      const groupType = resolveGroupType(g, currentCycle);
+      const operationalStatus = resolveGroupOperationalStatus(g, currentCycle, now);
+      const timeInfo = calculateGroupTimeInfo(g, currentCycle, now);
+
+      const activeCourses = currentCycle?.courses || g.courses || [];
+      const courseSummaries = activeCourses.map((c, idx) => {
+        const course = inMemoryStore.getCourseById(c.courseId);
+        return {
+          courseId: c.courseId,
+          courseTitle: course ? course.title : c.courseId,
+          courseCode: c.courseId,
+          courseRole: c.courseRole || 'core',
+          order: c.order || idx + 1,
+        };
+      });
+
       return {
-        ...g,
-        metrics,
+        id: g.id,
+        enrollmentCode: g.enrollmentCode,
+        name: g.name,
+        description: g.description,
+        groupType,
+        operationalStatus,
+        traineeCount: (g.traineeIds || []).length,
+        startDateTime: currentCycle?.startDateTime || g.startDateTime || null,
+        deadlineDateTime: currentCycle?.deadlineDateTime || g.deadlineDateTime || null,
+        postDeadlinePolicy: currentCycle?.postDeadlinePolicy || g.postDeadlinePolicy,
+        renewalSchedule: g.renewalSchedule
+          ? {
+              autoRenewalEnabled: Boolean(g.renewalSchedule.autoRenewalEnabled),
+              intervalDays: g.renewalSchedule.renewalIntervalDays ?? g.renewalSchedule.intervalDays ?? null,
+              nextScheduledRenewalDate: g.renewalSchedule.nextScheduledRenewalDate || null,
+            }
+          : undefined,
+        currentCycle: currentCycle
+          ? {
+              id: currentCycle.id,
+              cycleNumber: currentCycle.cycleNumber,
+              title: currentCycle.title,
+              status: currentCycle.status,
+              startDateTime: currentCycle.startDateTime || null,
+              deadlineDateTime: currentCycle.deadlineDateTime || null,
+              postDeadlinePolicy: currentCycle.postDeadlinePolicy || g.postDeadlinePolicy,
+            }
+          : null,
+        courses: courseSummaries,
+        timeInfo,
+        navigationUrl: `/my-groups/${g.id}`,
       };
     });
 
-    return HttpResponse.json(enriched, { status: 200 });
+    return HttpResponse.json(traineeGroups, { status: 200 });
   }),
 
   // Public QR preview info endpoint (no auth required)
@@ -665,7 +718,7 @@ export const groupHandlers = [
   }),
 
   // Remove member from group (Admin or Assigned Supervisor)
-  http.delete('/api/admin/groups/:groupId/members/:userId', ({ request, params }) => {
+  http.delete('/api/admin/groups/:groupId/members/:userId', async ({ request, params }) => {
     const user = resolveAuthenticatedUser(request);
     if (!user) {
       return HttpResponse.json(
@@ -692,7 +745,16 @@ export const groupHandlers = [
     }
 
     try {
-      const result = inMemoryStore.removeGroupMember(groupId, targetUserId);
+      let removeCourseIds: string[] | undefined = undefined;
+      try {
+        const body = (await request.json()) as any;
+        if (body && Array.isArray(body.removeCourseIds)) {
+          removeCourseIds = body.removeCourseIds;
+        }
+      } catch {
+        // No body or invalid json, ignore
+      }
+      const result = inMemoryStore.removeGroupMember(groupId, targetUserId, removeCourseIds);
       return HttpResponse.json(result, { status: 200 });
     } catch (err) {
       return handleStoreError(err);

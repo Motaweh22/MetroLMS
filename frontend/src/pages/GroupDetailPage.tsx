@@ -595,6 +595,17 @@ export const GroupDetailPage: React.FC = () => {
                         موعد مخصص
                       </Badge>
                     )}
+                    {ac.effective.isExpired && (
+                      <Badge
+                        variant={ac.effective.effectivePostDeadlinePolicy === 'hide' || ac.effective.postDeadlinePolicy === 'hide' ? 'danger' : 'neutral'}
+                        className="text-[11px] font-bold"
+                        data-testid={`course-access-badge-${ac.courseId}`}
+                      >
+                        {ac.effective.effectivePostDeadlinePolicy === 'hide' || ac.effective.postDeadlinePolicy === 'hide'
+                          ? 'منتهية الصلاحية — مغلق'
+                          : 'للمطالعة فقط (بدون شهادة)'}
+                      </Badge>
+                    )}
                   </div>
 
                   <h3 className="text-base sm:text-lg font-bold text-text-heading">
@@ -637,15 +648,33 @@ export const GroupDetailPage: React.FC = () => {
                         استعراض تفاصيل المقرر
                       </Button>
                     </Link>
+                  ) : ac.effective.isExpired && (ac.effective.effectivePostDeadlinePolicy === 'hide' || ac.effective.postDeadlinePolicy === 'hide') ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled
+                      className="w-full font-bold text-xs opacity-60 cursor-not-allowed"
+                      rightIcon="lock"
+                      data-testid={`course-expired-btn-${ac.courseId}`}
+                    >
+                      انتهت المهلة — المقرر غير متاح
+                    </Button>
                   ) : (
-                    <Link to={`/courses/${ac.courseId}/learn`} className="block w-full">
+                    <Link to={`/courses/${ac.courseId}/learn?groupId=${group.id}`} className="block w-full">
                       <Button
-                        variant={isCompleted ? 'outline' : 'primary'}
+                        variant={isCompleted ? 'outline' : ac.effective.isExpired ? 'outline' : 'primary'}
                         size="sm"
                         className="w-full font-bold text-xs"
-                        rightIcon={isCompleted ? 'courses' : 'arrowLeft'}
+                        rightIcon={isCompleted ? 'courses' : ac.effective.isExpired ? 'eye' : 'arrowLeft'}
+                        data-testid={ac.effective.isExpired ? `course-review-btn-${ac.courseId}` : undefined}
                       >
-                        {isCompleted ? 'مراجعة محتوى المقرر' : coursePercent > 0 ? 'متابعة الدورة التدريبية' : 'بدء المقرر الآن'}
+                        {isCompleted
+                          ? 'مراجعة محتوى المقرر'
+                          : ac.effective.isExpired
+                          ? 'مراجعة المحتوى (للمطالعة فقط)'
+                          : coursePercent > 0
+                          ? 'متابعة الدورة التدريبية'
+                          : 'بدء المقرر الآن'}
                       </Button>
                     </Link>
                   )}

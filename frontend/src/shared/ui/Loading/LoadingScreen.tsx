@@ -39,6 +39,26 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
       data-testid="loading-screen"
       className={`min-h-screen bg-bg text-text flex flex-col items-center justify-center p-6 select-none transition-opacity duration-200 ${className}`}
     >
+      {/* Guaranteed Smoothly Rotating Keyframes (Exempt from external CSS cascade delays or reduced-motion freezing) */}
+      <style>{`
+        @keyframes metro-spinner-cw {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes metro-spinner-ccw {
+          0% { transform: rotate(360deg); }
+          100% { transform: rotate(0deg); }
+        }
+        .metro-spinner-outer {
+          animation: metro-spinner-cw 0.9s linear infinite !important;
+          transform-origin: center center;
+        }
+        .metro-spinner-inner {
+          animation: metro-spinner-ccw 1.4s linear infinite !important;
+          transform-origin: center center;
+        }
+      `}</style>
+
       <div className="w-full max-w-sm flex flex-col items-center text-center space-y-6">
         {showLogo && (
           <div className="mb-2">
@@ -46,10 +66,20 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
           </div>
         )}
 
-        {/* Accessible Restrained Spinner */}
+        {/* Guaranteed Dual-Ring Continuous Animated Spinner */}
         <div className="relative flex items-center justify-center my-2" aria-hidden="true">
-          <div className="w-12 h-12 rounded-full border-3 border-primary/20 border-t-primary animate-spin" />
-          <div className="absolute w-6 h-6 rounded-full border-2 border-primary-dark/20 border-b-primary-dark animate-spin [animation-duration:1.5s]" />
+          <div
+            className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin metro-spinner-outer"
+            style={{
+              animation: 'metro-spinner-cw 0.9s linear infinite',
+            }}
+          />
+          <div
+            className="absolute w-6 h-6 rounded-full border-2 border-primary-dark/20 border-b-primary-dark animate-spin metro-spinner-inner"
+            style={{
+              animation: 'metro-spinner-ccw 1.4s linear infinite',
+            }}
+          />
         </div>
 
         <div className="space-y-1.5">
