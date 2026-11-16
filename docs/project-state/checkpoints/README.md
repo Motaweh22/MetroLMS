@@ -2,7 +2,7 @@
 
 > **Document Status:** `ACTIVE — AUTHORITATIVE`
 > **Canonical Role:** Permanent, append-only ledger of immutable project checkpoints. Each checkpoint records a self-contained historical snapshot of project state at the acceptance of every completed Work Package, separately accepted Increment, or Phase closure.
-> **Last Updated:** 2026-11-15 (`CP-012` — REV6 Phase 5, WP-5.5 Checkpoint 3 Closure: Stage 3 / Cluster 3 Groups & Training Operations)
+> **Last Updated:** 2026-11-16 (`CP-013` — REV6 Phase 5 Closure: Data Dictionary Freeze, WP-5.6 Physical Design & ORM Guidelines, and G-01 Gate Closure)
 
 ---
 
@@ -81,6 +81,7 @@ Every checkpoint file created in this directory (`CP-002` onward; `CP-001` remai
 | **`CP-010`** | `2026-11-14` | REV6 Phase 5 — WP-5.5 Checkpoint 1 Closure (Stage 0 & Stage 1: Cluster 1 Identity & Organization, `CP1 #1`–`#11` & `INV-R4` Consolidation) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-010-2026-11-14-wp-5-5-checkpoint-1-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-010-2026-11-14-wp-5-5-checkpoint-1-closure.md) |
 | **`CP-011`** | `2026-11-14` | REV6 Phase 5 — WP-5.5 Checkpoint 2 Closure (Stage 2: Cluster 2 Courses & Learning, `TR-C2-01`–`07` & 6 `NVARCHAR` Lengths) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-011-2026-11-14-wp-5-5-checkpoint-2-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-011-2026-11-14-wp-5-5-checkpoint-2-closure.md) |
 | **`CP-012`** | `2026-11-15` | REV6 Phase 5 — WP-5.5 Checkpoint 3 Closure (Stage 3: Cluster 3 Groups & Training Operations, 18 Active Entities / 98 Fields, `D-01` Role-Aware Policy, `TR-C3-01`–`05` & 5 `NVARCHAR` Lengths) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-012-2026-11-15-wp-5-5-checkpoint-3-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-012-2026-11-15-wp-5-5-checkpoint-3-closure.md) |
+| **`CP-013`** | `2026-11-16` | REV6 Phase 5 — Data Dictionary Freeze (`54` Active Entities / `305` Physical Columns, `DD-PROSE-01`/`02`), `WP-5.6` Physical Design & ORM Guidelines, `REV6 Phase 5` Closure & `G-01` Closure | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-013-2026-11-16-wp-5-6-and-phase-5-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-013-2026-11-16-wp-5-6-and-phase-5-closure.md) |
 
 ### 4.2 Planned Sequential Checkpoints Across Active Work Packages & Phases ([`active-roadmap.md` §5.2 & §7.1](file:///d:/LMS%20MEtro%20Project/docs/project-state/active-roadmap.md#52-active-execution-phases-work-package--task-status-phases-14))
 
