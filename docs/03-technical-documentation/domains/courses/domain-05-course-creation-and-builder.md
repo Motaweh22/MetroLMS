@@ -38,7 +38,7 @@
 
 ## 3. Validation, Authorization & Failure Scenarios
 
-- **Authorization:** `lecturer` requires `courses.create` / ownership; `reviews.decide_course` is sovereign to `admin`; `assistant_admin` `courses.publish` / `course_unpublish` defaults to `202 PendingApproval` (`INV-R9`).
+- **Authorization:** `lecturer` requires `courses.create` / ownership (`courses.edit_curriculum` for Draft media Content Reference management per `INV-DOM21-20`, distinct from `courses.upload_lectures`, `courses.delete_lectures`, and `courses.edit_metadata`); `reviews.decide_course` is sovereign to `admin`; `assistant_admin` `courses.publish` / `course_unpublish` defaults to `202 PendingApproval` (`INV-R9`, with `assistant_admin` Draft Course scope under `INV-R7` remaining unresolved).
 - **Failure Scenarios:** Stale autosave flush after session switch is rejected by `StaleEpochError` and storage epoch mismatch.
 - **Integration Boundaries & Constraints:**
   - **`API-REC-02` (`OWNER APPROVED — 2026-11-13`):** Target Django backend adopts `/api/admin/courses/:courseId/*` as the canonical Course Review route family, excluding the 16 equivalent legacy/alternative aliases and 1 unused handler while preserving approved canonical route behavior and authorization semantics (`INV-R9`). Does NOT authorize deleting or modifying prototype source code or MSW handlers.

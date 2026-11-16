@@ -70,6 +70,8 @@ To prevent privilege escalation and maintain architectural clarity, the system s
 3. **Role Promotion:** An explicit change to the user's canonical system role through the authorized account-lifecycle workflow (`users.change_role`). Never occurs automatically by selecting permissions.
 4. **Assistant-Administrator Delegation:** Explicit authority for an assistant administrator to execute eligible administrative operations without routine approval. Does NOT bypass protected administrator invariants.
 
+> **Owner Decision (`OWNER APPROVED — 2026-11-14`) — Separation of Group Administration and Content Authorization:** Group-level administrative authority (e.g., group membership operations) and content-level authorization (`materials.upload_files`, `materials.delete_files`, `materials.manage_folders`, `materials.manage_references`) are separate authorization dimensions and must both be enforced according to the operation being performed. Group assignment does not substitute for a content capability check, and possessing a content capability does not bypass group/resource scope (`INV-R7`, `INV-R9`, `INV-DOM17-01`, `file.groupId === groupId`). See [`A-03c-authorization-and-api-lifecycle-investigation-report.md`](../01-requirements/frd/A-03c-authorization-and-api-lifecycle-investigation-report.md).
+
 ---
 
 ## 4. Controlled Role Capability Ceilings
@@ -220,6 +222,7 @@ export interface GroupAssistantAssignment {
    - Manage group interactive meetings (`materials.manage_meetings`).
    - Manage group folder structure (`materials.manage_folders`).
    - Monitor group training progress and trainees.
+   - *(Note — `INV-DOM21-21` `OWNER APPROVED`, `2026-11-13` & Owner Clarification `OWNER APPROVED`, `2026-11-14`: `materials.manage_references` is approved as a distinct permission key for Active / Unsealed Group Renewal Cycle media Content Reference management — adding references, `INV-DOM21-18` Logical Detachment, `INV-DOM21-12` Step 2 repointing, and `INV-DOM21-13`–`15` `title`/`isVisible` updates — separate from `materials.upload_files`, `materials.delete_files`, and `materials.manage_folders`. Per the `2026-11-14` Owner Clarification, `materials.manage_references` preserves the existing group-material permission grant, capability-ceiling, `GroupAssistantAssignment`/`GROUP_SCOPED_CAPABILITIES`, `UserPermissionOverride`, `INV-R7`, `INV-R9`/`DelegatedAuthority`, and `INV-DOM17-01` [`supervisorIds` monitoring-only] model with no new role privileges or expanded eligibility; runtime implementation in `types.ts`/`policy.ts`/`groupHandlers.ts` remains outstanding.)*
 3. **Prohibited Actions (Outside/Above Scope):**
    - Cannot manage unrelated groups.
    - Cannot author or modify course curriculum (`courses.edit_curriculum`, `courses.upload_lectures`, `courses.delete_lectures`).

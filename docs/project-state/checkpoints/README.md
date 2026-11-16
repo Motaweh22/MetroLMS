@@ -2,7 +2,7 @@
 
 > **Document Status:** `ACTIVE — AUTHORITATIVE`
 > **Canonical Role:** Permanent, append-only ledger of immutable project checkpoints. Each checkpoint records a self-contained historical snapshot of project state at the acceptance of every completed Work Package, separately accepted Increment, or Phase closure.
-> **Last Updated:** 2026-11-10 (`CP-007` — WP-2.3 Closure: Rule B Curriculum Versioning, D-12 Progress Rounding & D-13 Version-Scoped Certificates `MFR-10, 09, 46`)
+> **Last Updated:** 2026-11-15 (`CP-012` — REV6 Phase 5, WP-5.5 Checkpoint 3 Closure: Stage 3 / Cluster 3 Groups & Training Operations)
 
 ---
 
@@ -76,19 +76,23 @@ Every checkpoint file created in this directory (`CP-002` onward; `CP-001` remai
 | **`CP-005`** | `2026-11-09` | WP-2.1 Closure (Enrollment Provenance, Per-Attempt Progress & Progress Reader Unification `D-06, MFR-02, 32, 33, 41`) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-005-2026-11-09-wp-2-1-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-005-2026-11-09-wp-2-1-closure.md) |
 | **`CP-006`** | `2026-11-09` | WP-2.2 Closure (Group Member Removal & Per-Course Continuation Grants `D-07`, `MFR-24`) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-006-2026-11-09-wp-2-2-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-006-2026-11-09-wp-2-2-closure.md) |
 | **`CP-007`** | `2026-11-10` | WP-2.3 Closure (Curriculum Versioning `Rule B`, Progress Rounding `D-12` & Version-Scoped Certificates `D-13`, `MFR-10, 09, 46`) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-007-2026-11-10-wp-2-3-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-007-2026-11-10-wp-2-3-closure.md) |
+| **`CP-008`** | `2026-11-14` | WP-2.4 Closure & Phase 2 Closure (Post-Deadline Policy `hide` vs. `keep_no_cert`, Video Player Regressions & Phase 2 Test Suites `MFR-23, 42`) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-008-2026-11-14-wp-2-4-and-phase-2-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-008-2026-11-14-wp-2-4-and-phase-2-closure.md) |
+| **`CP-009`** | `2026-11-14` | REV6 Phase 5 — WP-5.4 Closure (Logical Data Model & Conceptual ERD, `D-OWNER-REV-01`–`33`) | `CLOSED — OWNER APPROVED` *(Immutable)* | [`CP-009-2026-11-14-rev6-wp-5-4-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-009-2026-11-14-rev6-wp-5-4-closure.md) |
+| **`CP-010`** | `2026-11-14` | REV6 Phase 5 — WP-5.5 Checkpoint 1 Closure (Stage 0 & Stage 1: Cluster 1 Identity & Organization, `CP1 #1`–`#11` & `INV-R4` Consolidation) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-010-2026-11-14-wp-5-5-checkpoint-1-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-010-2026-11-14-wp-5-5-checkpoint-1-closure.md) |
+| **`CP-011`** | `2026-11-14` | REV6 Phase 5 — WP-5.5 Checkpoint 2 Closure (Stage 2: Cluster 2 Courses & Learning, `TR-C2-01`–`07` & 6 `NVARCHAR` Lengths) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-011-2026-11-14-wp-5-5-checkpoint-2-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-011-2026-11-14-wp-5-5-checkpoint-2-closure.md) |
+| **`CP-012`** | `2026-11-15` | REV6 Phase 5 — WP-5.5 Checkpoint 3 Closure (Stage 3: Cluster 3 Groups & Training Operations, 18 Active Entities / 98 Fields, `D-01` Role-Aware Policy, `TR-C3-01`–`05` & 5 `NVARCHAR` Lengths) | `COMPLETED AND ACCEPTED` *(Immutable)* | [`CP-012-2026-11-15-wp-5-5-checkpoint-3-closure.md`](file:///d:/LMS%20MEtro%20Project/docs/project-state/checkpoints/CP-012-2026-11-15-wp-5-5-checkpoint-3-closure.md) |
 
 ### 4.2 Planned Sequential Checkpoints Across Active Work Packages & Phases ([`active-roadmap.md` §5.2 & §7.1](file:///d:/LMS%20MEtro%20Project/docs/project-state/active-roadmap.md#52-active-execution-phases-work-package--task-status-phases-14))
 
-*(Note: Checkpoint IDs are allocated sequentially as each Work Package, separately accepted Increment, or Phase is accepted. If an Increment within a Work Package is separately accepted by the Owner, subsequent IDs shift sequentially by `+1`.)*
+*(Note: Checkpoint IDs are allocated sequentially as each Work Package, separately accepted Increment, or Phase is accepted. Following `CP-009` for `REV6` `WP-5.4` closure, planned roadmap IDs below shifted by `+1`.)*
 
 | Sequential ID | Target Work Package / Phase Milestone | Trigger Condition |
 | :---: | :--- | :--- |
-| **`CP-008`** *(Next)* | **`WP-2.4` Closure & `Phase 2 — Core Domain Logic Reconciliation` Closure** | Acceptance of `T-2.4.1`–`T-2.4.2` (`resolveCourseAccess` `hide` vs. `keep_no_cert`) and `T-2.4.3` (Phase 2 test suites authored). Closes both `WP-2.4` and `Phase 2`. |
-| **`CP-009`** | **`WP-3.1` Closure (Lecturer Deletion Workflow `D-03`, `D-11`)** | Acceptance of `T-3.1.1`–`T-3.1.3` (nullable `غير معين` ownership, `409 LECTURER_HAS_ACTIVE_ASSIGNMENTS`, and `DeleteUserModal.tsx` with `مواصلة الحذف`). |
-| **`CP-010`** | **`WP-3.2` Closure (User Deletion Cascade `D-01` & Comment Anonymization `D-02`)** | Acceptance of `T-3.2.1` (16-collection permanent deletion cascade, tombstones, and `مستخدم محذوف` comment anonymization). |
-| **`CP-011`** | **`WP-3.3` Closure & `Gate A` Domain Contract Freeze** | Acceptance of `T-3.3.1` (`HTTP 202` approval execution branches for `D-07, D-01, D-03`) and `T-3.3.2` (6-tier role invariants `INV-R1`–`INV-R10`). Certifies **Gate A**. |
-| **`CP-012`** | **`WP-3.4` Closure & `Phase 3 — Administrative Workflows & Mutation Safety` Closure** | Acceptance of `T-3.4.1` (`D-SEC-01` 11-surface XSS/DOMPurify/CSP hardening), `T-3.4.2` (`MFR-04, 15, 19` UX fixes), and `T-3.4.3` (Phase 3 test suites authored). Closes both `WP-3.4` and `Phase 3`. |
-| **`CP-013`** | **`WP-4.1` Closure (DRF Query Parameter & Response/Error Envelope Normalization)** | Acceptance of `T-4.1.1` and `T-4.1.2`. |
-| **`CP-014`** | **`WP-4.2` Closure (`D-MEDIA-01` Media Upload & Delivery Contract Normalization)** | Acceptance of `T-4.2.1` (`MediaAssetReference` normalization). |
-| **`CP-015`** | **`WP-4.3` Closure (MSW v2 & Service Layer Contract Consistency)** | Acceptance of `T-4.3.1` (1:1 service-to-MSW contract parity). |
-| **`CP-016`** | **`WP-4.4` Closure, `Phase 4` Closure & Final `Gate B` Frontend Readiness Sign-Off** | Acceptance of `T-4.4.1` (100% Vitest pass across `1,174` baseline + all Phase 1–5 suites), `T-4.4.2` (`tsc`, `eslint`, `vite build` 0 errors), and `T-4.4.3` (Final DRF Handoff Package). Closes `WP-4.4`, `Phase 4`, and **Gate B**. |
+| **`CP-010`** *(Next)* | **`WP-3.1` Closure (Lecturer Deletion Workflow `D-03`, `D-11`)** | Acceptance of `T-3.1.1`–`T-3.1.3` (nullable `غير معين` ownership, `409 LECTURER_HAS_ACTIVE_ASSIGNMENTS`, and `DeleteUserModal.tsx` with `مواصلة الحذف`). |
+| **`CP-011`** | **`WP-3.2` Closure (User Deletion Cascade `D-01` & Comment Anonymization `D-02`)** | Acceptance of `T-3.2.1` (16-collection permanent deletion cascade, tombstones, and `مستخدم محذوف` comment anonymization). |
+| **`CP-012`** | **`WP-3.3` Closure & `Gate A` Domain Contract Freeze** | Acceptance of `T-3.3.1` (`HTTP 202` approval execution branches for `D-07, D-01, D-03`) and `T-3.3.2` (6-tier role invariants `INV-R1`–`INV-R10`). Certifies **Gate A**. |
+| **`CP-013`** | **`WP-3.4` Closure & `Phase 3 — Administrative Workflows & Mutation Safety` Closure** | Acceptance of `T-3.4.1` (`D-SEC-01` 11-surface XSS/DOMPurify/CSP hardening), `T-3.4.2` (`MFR-04, 15, 19` UX fixes), and `T-3.4.3` (Phase 3 test suites authored). Closes both `WP-3.4` and `Phase 3`. |
+| **`CP-014`** | **`WP-4.1` Closure (DRF Query Parameter & Response/Error Envelope Normalization)** | Acceptance of `T-4.1.1` and `T-4.1.2`. |
+| **`CP-015`** | **`WP-4.2` Closure (`D-MEDIA-01` Media Upload & Delivery Contract Normalization)** | Acceptance of `T-4.2.1` (`MediaAssetReference` normalization). |
+| **`CP-016`** | **`WP-4.3` Closure (MSW v2 & Service Layer Contract Consistency)** | Acceptance of `T-4.3.1` (1:1 service-to-MSW contract parity). |
+| **`CP-017`** | **`WP-4.4` Closure, `Phase 4` Closure & Final `Gate B` Frontend Readiness Sign-Off** | Acceptance of `T-4.4.1` (100% Vitest pass across `1,174` baseline + all Phase 1–5 suites), `T-4.4.2` (`tsc`, `eslint`, `vite build` 0 errors), and `T-4.4.3` (Final DRF Handoff Package). Closes `WP-4.4`, `Phase 4`, and **Gate B**. |

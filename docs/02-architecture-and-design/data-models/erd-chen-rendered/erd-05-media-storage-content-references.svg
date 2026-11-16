@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2377 815" width="2377" height="815">
+  <defs>
+    <style>
+      .entity-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #174EA6; text-anchor: middle; dominant-baseline: central; }
+      .rel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 700; fill: #B06000; text-anchor: middle; dominant-baseline: central; }
+      .attr-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 600; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .attr-meta { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 9px; fill: #5F6368; text-anchor: middle; dominant-baseline: central; }
+      .attr-key { font-weight: 700; text-decoration: underline; fill: #A50E0E; }
+      .card-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .title-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #202124; text-anchor: start; }
+      .subtitle-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; fill: #5F6368; text-anchor: start; }
+      .panel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: start; }
+    </style>
+  </defs>
+  <rect width="2377" height="815" fill="#FAFAFA" />
+  <g id="header" transform="translate(40, 40)">
+    <text class="title-txt" x="0" y="0">Domain 5: Media Storage &amp; Content References (Chen Notation)</text>
+    <text class="subtitle-txt" x="0" y="22">MetroLMS SQL Server Schema • Classic Chen-Notation Entity-Relationship Diagram (2 Entities, 17 Physical Columns)</text>
+  </g>
+  <line x1="501.5" y1="227.0" x2="289.5" y2="227.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="260.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="421.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="582.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="743.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="212.5" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="374.0" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="550.0" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="501.5" y1="227.0" x2="758.0" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1182.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1343.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1504.5" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1684.5" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1201.0" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1387.5" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1548.5" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1442.5" y1="227.0" x2="1709.5" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="501.5,227.0 501.5,459.5 1909.5,459.5 2004.5,171.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="489.5" y="286.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="501.5" y="296.8">N</text>
+  <polyline points="2004.5,171.0 2204.5,171.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2132.5" y="161.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2144.5" y="171.0">1</text>
+  <polyline points="501.5,227.0 501.5,459.5 1909.5,459.5 2004.5,308.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="489.5" y="286.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="501.5" y="296.8">N</text>
+  <polyline points="2004.5,308.0 2204.5,308.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2132.5" y="298.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2144.5" y="308.0">1</text>
+  <polyline points="1442.5,228.8 983.0,228.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1442.5,225.2 983.0,225.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1292.7" y="217.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1304.7" y="227.0">N</text>
+  <polyline points="983.0,227.0 501.5,227.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="634.0" y="217.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="646.0" y="227.0">1</text>
+  <polyline points="1442.5,227.0 2004.5,445.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1599.1" y="282.4" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1611.1" y="292.4">N</text>
+  <polyline points="2004.5,445.0 2204.5,445.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2132.5" y="435.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2144.5" y="445.0">1</text>
+  <polyline points="1442.5,227.0 2004.5,582.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1599.1" y="323.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1611.1" y="333.5">N</text>
+  <polyline points="2004.5,582.0 2204.5,582.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2132.5" y="572.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2144.5" y="582.0">1</text>
+  <polyline points="1442.5,227.0 2004.5,719.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1599.1" y="364.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1611.1" y="374.6">N</text>
+  <polyline points="2004.5,719.0 2204.5,719.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2132.5" y="709.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2144.5" y="719.0">1</text>
+  <ellipse cx="289.5" cy="227.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="289.5" y="218.0">created_at</text>
+  <text class="attr-meta" x="289.5" y="232.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="289.5" y="243.0">NOT NULL</text>
+  <ellipse cx="260.0" cy="131.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="260.0" y="122.0">id</text>
+  <text class="attr-meta" x="260.0" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="260.0" y="147.0">NOT NULL [PK]</text>
+  <ellipse cx="421.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="421.0" y="122.0">storage_key</text>
+  <text class="attr-meta" x="421.0" y="136.0">NVARCHAR(512)</text>
+  <text class="attr-meta" x="421.0" y="147.0">NOT NULL [UK]</text>
+  <ellipse cx="582.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="582.0" y="122.0">file_name</text>
+  <text class="attr-meta" x="582.0" y="136.0">NVARCHAR(255)</text>
+  <text class="attr-meta" x="582.0" y="147.0">NOT NULL</text>
+  <ellipse cx="743.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="743.0" y="122.0">mime_type</text>
+  <text class="attr-meta" x="743.0" y="136.0">NVARCHAR(127)</text>
+  <text class="attr-meta" x="743.0" y="147.0">NOT NULL</text>
+  <ellipse cx="212.5" cy="323.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="212.5" y="314.0">size_bytes</text>
+  <text class="attr-meta" x="212.5" y="328.0">BIGINT</text>
+  <text class="attr-meta" x="212.5" y="339.0">NOT NULL</text>
+  <ellipse cx="374.0" cy="323.0" rx="73.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="374.0" y="314.0">sha256_checksum</text>
+  <text class="attr-meta" x="374.0" y="328.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="374.0" y="339.0">NOT NULL</text>
+  <ellipse cx="550.0" cy="323.0" rx="87.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="550.0" y="314.0">uploaded_by_user_id</text>
+  <text class="attr-meta" x="550.0" y="328.0">BIGINT</text>
+  <text class="attr-meta" x="550.0" y="339.0">NULL [FK]</text>
+  <ellipse cx="758.0" cy="323.0" rx="105.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="758.0" y="314.0">uploaded_by_tombstone_id</text>
+  <text class="attr-meta" x="758.0" y="328.0">BIGINT</text>
+  <text class="attr-meta" x="758.0" y="339.0">NULL [FK]</text>
+  <ellipse cx="1182.0" cy="131.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1182.0" y="122.0">id</text>
+  <text class="attr-meta" x="1182.0" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="1182.0" y="147.0">NOT NULL [PK]</text>
+  <ellipse cx="1343.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1343.0" y="122.0">media_asset_id</text>
+  <text class="attr-meta" x="1343.0" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="1343.0" y="147.0">NOT NULL [FK]</text>
+  <ellipse cx="1504.5" cy="131.0" rx="73.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1504.5" y="122.0">course_draft_id</text>
+  <text class="attr-meta" x="1504.5" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="1504.5" y="147.0">NULL [FK]</text>
+  <ellipse cx="1684.5" cy="131.0" rx="91.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1684.5" y="122.0">published_version_id</text>
+  <text class="attr-meta" x="1684.5" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="1684.5" y="147.0">NULL [FK]</text>
+  <ellipse cx="1201.0" cy="323.0" rx="98.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1201.0" y="314.0">group_renewal_cycle_id</text>
+  <text class="attr-meta" x="1201.0" y="328.0">BIGINT</text>
+  <text class="attr-meta" x="1201.0" y="339.0">NULL [FK]</text>
+  <ellipse cx="1387.5" cy="323.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1387.5" y="314.0">title</text>
+  <text class="attr-meta" x="1387.5" y="328.0">NVARCHAR(255)</text>
+  <text class="attr-meta" x="1387.5" y="339.0">NOT NULL</text>
+  <ellipse cx="1548.5" cy="323.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1548.5" y="314.0">is_visible</text>
+  <text class="attr-meta" x="1548.5" y="328.0">BIT</text>
+  <text class="attr-meta" x="1548.5" y="339.0">NOT NULL</text>
+  <ellipse cx="1709.5" cy="323.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1709.5" y="314.0">detached_at</text>
+  <text class="attr-meta" x="1709.5" y="328.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="1709.5" y="339.0">NULL</text>
+  <polygon points="2004.5,145.0 2083.9,171.0 2004.5,197.0 1925.1,171.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="2004.5" y="171.0">uploaded_by_user</text>
+  <polygon points="2004.5,282.0 2083.9,308.0 2004.5,334.0 1925.1,308.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="2004.5" y="308.0">uploaded_by_tomb</text>
+  <polygon points="983.0,201.0 1062.4,227.0 983.0,253.0 903.6,227.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="983.0" y="227.0">references_asset</text>
+  <polygon points="2004.5,419.0 2087.8,445.0 2004.5,471.0 1921.2,445.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="2004.5" y="445.0">attached_to_draft</text>
+  <polygon points="2004.5,556.0 2080.0,582.0 2004.5,608.0 1929.0,582.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="2004.5" y="582.0">attached_to_ver</text>
+  <polygon points="2004.5,693.0 2087.8,719.0 2004.5,745.0 1921.2,719.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="2004.5" y="719.0">attached_to_cycle</text>
+  <rect x="414.0" y="201.0" width="175" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="501.5" y="227.0">MediaAsset</text>
+  <rect x="1325.8" y="201.0" width="233.5" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1442.5" y="227.0">MediaContentReference</text>
+  <rect x="2102.0" y="145.0" width="205" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.5" stroke-dasharray="6,4" />
+  <text class="entity-txt" x="2204.5" y="165.0">User</text>
+  <text class="attr-meta" x="2204.5" y="182.0">[External: Domain 1]</text>
+  <rect x="2102.0" y="282.0" width="205" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.5" stroke-dasharray="6,4" />
+  <text class="entity-txt" x="2204.5" y="302.0">DeletedUserTombstone</text>
+  <text class="attr-meta" x="2204.5" y="319.0">[External: Domain 1]</text>
+  <rect x="2102.0" y="419.0" width="205" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.5" stroke-dasharray="6,4" />
+  <text class="entity-txt" x="2204.5" y="439.0">CourseDraft</text>
+  <text class="attr-meta" x="2204.5" y="456.0">[External: Domain 4]</text>
+  <rect x="2102.0" y="556.0" width="205" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.5" stroke-dasharray="6,4" />
+  <text class="entity-txt" x="2204.5" y="576.0">PublishedCourseVersion</text>
+  <text class="attr-meta" x="2204.5" y="593.0">[External: Domain 4]</text>
+  <rect x="2102.0" y="693.0" width="205" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.5" stroke-dasharray="6,4" />
+  <text class="entity-txt" x="2204.5" y="713.0">GroupRenewalCycle</text>
+  <text class="attr-meta" x="2204.5" y="730.0">[External: Domain 6]</text>
+</svg>

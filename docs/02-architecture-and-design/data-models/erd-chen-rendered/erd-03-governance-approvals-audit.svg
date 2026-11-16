@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2055 431" width="2055" height="431">
+  <defs>
+    <style>
+      .entity-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #174EA6; text-anchor: middle; dominant-baseline: central; }
+      .rel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 700; fill: #B06000; text-anchor: middle; dominant-baseline: central; }
+      .attr-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 600; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .attr-meta { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 9px; fill: #5F6368; text-anchor: middle; dominant-baseline: central; }
+      .attr-key { font-weight: 700; text-decoration: underline; fill: #A50E0E; }
+      .card-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .title-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #202124; text-anchor: start; }
+      .subtitle-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; fill: #5F6368; text-anchor: start; }
+      .panel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: start; }
+    </style>
+  </defs>
+  <rect width="2055" height="431" fill="#FAFAFA" />
+  <g id="header" transform="translate(40, 40)">
+    <text class="title-txt" x="0" y="0">Domain 3: Governance, Approvals &amp; Audit (Chen Notation)</text>
+    <text class="subtitle-txt" x="0" y="22">MetroLMS SQL Server Schema • Classic Chen-Notation Entity-Relationship Diagram (2 Entities, 23 Physical Columns)</text>
+  </g>
+  <line x1="571.5" y1="233.0" x2="325.5" y2="199.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="325.5" y2="267.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="817.5" y2="233.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="245.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="406.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="571.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="736.5" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="898.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="212.5" y2="335.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="384.5" y2="335.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="560.5" y2="335.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="747.5" y2="335.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="571.5" y1="233.0" x2="930.5" y2="335.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1382.0" y2="233.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1806.0" y2="233.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1323.5" y2="137.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1484.5" y2="137.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1660.0" y2="137.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1850.0" y2="137.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1315.5" y2="329.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1487.5" y2="329.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1663.5" y2="329.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1594.0" y1="233.0" x2="1850.5" y2="329.0" stroke="#3C4043" stroke-width="1.5" />
+  <ellipse cx="325.5" cy="199.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="325.5" y="190.0">created_at</text>
+  <text class="attr-meta" x="325.5" y="204.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="325.5" y="215.0">NOT NULL</text>
+  <ellipse cx="325.5" cy="267.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="325.5" y="258.0">decided_at</text>
+  <text class="attr-meta" x="325.5" y="272.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="325.5" y="283.0">NULL</text>
+  <ellipse cx="817.5" cy="233.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="817.5" y="224.0">executed_at</text>
+  <text class="attr-meta" x="817.5" y="238.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="817.5" y="249.0">NULL</text>
+  <ellipse cx="245.0" cy="131.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="245.0" y="122.0">id</text>
+  <text class="attr-meta" x="245.0" y="136.0">UNIQUEIDENTIFIER</text>
+  <text class="attr-meta" x="245.0" y="147.0">NOT NULL [PK]</text>
+  <ellipse cx="406.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="406.0" y="122.0">action_type</text>
+  <text class="attr-meta" x="406.0" y="136.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="406.0" y="147.0">NOT NULL</text>
+  <ellipse cx="571.0" cy="131.0" rx="76.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="571.0" y="122.0">execution_status</text>
+  <text class="attr-meta" x="571.0" y="136.0">NVARCHAR(32)</text>
+  <text class="attr-meta" x="571.0" y="147.0">NOT NULL</text>
+  <ellipse cx="736.5" cy="131.0" rx="73.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="736.5" y="122.0">requested_by_id</text>
+  <text class="attr-meta" x="736.5" y="136.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="736.5" y="147.0">NOT NULL</text>
+  <ellipse cx="898.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="898.0" y="122.0">reviewed_by_id</text>
+  <text class="attr-meta" x="898.0" y="136.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="898.0" y="147.0">NULL</text>
+  <ellipse cx="212.5" cy="335.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="212.5" y="326.0">executed_by_id</text>
+  <text class="attr-meta" x="212.5" y="340.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="212.5" y="351.0">NULL</text>
+  <ellipse cx="384.5" cy="335.0" rx="83.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="384.5" y="326.0">target_entity_type</text>
+  <text class="attr-meta" x="384.5" y="340.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="384.5" y="351.0">NOT NULL</text>
+  <ellipse cx="560.5" cy="335.0" rx="76.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="560.5" y="326.0">target_entity_id</text>
+  <text class="attr-meta" x="560.5" y="340.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="560.5" y="351.0">NOT NULL</text>
+  <ellipse cx="747.5" cy="335.0" rx="94.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="747.5" y="326.0">payload_snapshot_json</text>
+  <text class="attr-meta" x="747.5" y="340.0">NVARCHAR(MAX)</text>
+  <text class="attr-meta" x="747.5" y="351.0">NOT NULL</text>
+  <ellipse cx="930.5" cy="335.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="930.5" y="326.0">reason</text>
+  <text class="attr-meta" x="930.5" y="340.0">NVARCHAR(500)</text>
+  <text class="attr-meta" x="930.5" y="351.0">NULL</text>
+  <ellipse cx="1382.0" cy="233.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1382.0" y="224.0">reason</text>
+  <text class="attr-meta" x="1382.0" y="238.0">NVARCHAR(500)</text>
+  <text class="attr-meta" x="1382.0" y="249.0">NULL</text>
+  <ellipse cx="1806.0" cy="233.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1806.0" y="224.0">created_at</text>
+  <text class="attr-meta" x="1806.0" y="238.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="1806.0" y="249.0">NOT NULL</text>
+  <ellipse cx="1323.5" cy="137.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1323.5" y="128.0">id</text>
+  <text class="attr-meta" x="1323.5" y="142.0">BIGINT</text>
+  <text class="attr-meta" x="1323.5" y="153.0">NOT NULL [PK]</text>
+  <ellipse cx="1484.5" cy="137.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1484.5" y="128.0">actor_user_id</text>
+  <text class="attr-meta" x="1484.5" y="142.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="1484.5" y="153.0">NULL</text>
+  <ellipse cx="1660.0" cy="137.0" rx="87.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1660.0" y="128.0">actor_role_snapshot</text>
+  <text class="attr-meta" x="1660.0" y="142.0">NVARCHAR(32)</text>
+  <text class="attr-meta" x="1660.0" y="153.0">NOT NULL</text>
+  <ellipse cx="1850.0" cy="137.0" rx="87.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1850.0" y="128.0">is_developer_masked</text>
+  <text class="attr-meta" x="1850.0" y="142.0">BIT</text>
+  <text class="attr-meta" x="1850.0" y="153.0">NOT NULL</text>
+  <ellipse cx="1315.5" cy="329.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1315.5" y="320.0">action</text>
+  <text class="attr-meta" x="1315.5" y="334.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="1315.5" y="345.0">NOT NULL</text>
+  <ellipse cx="1487.5" cy="329.0" rx="83.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1487.5" y="320.0">target_entity_type</text>
+  <text class="attr-meta" x="1487.5" y="334.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="1487.5" y="345.0">NULL</text>
+  <ellipse cx="1663.5" cy="329.0" rx="76.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1663.5" y="320.0">target_entity_id</text>
+  <text class="attr-meta" x="1663.5" y="334.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="1663.5" y="345.0">NULL</text>
+  <ellipse cx="1850.5" cy="329.0" rx="94.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1850.5" y="320.0">details_snapshot_json</text>
+  <text class="attr-meta" x="1850.5" y="334.0">NVARCHAR(MAX)</text>
+  <text class="attr-meta" x="1850.5" y="345.0">NULL</text>
+  <rect x="450.0" y="207.0" width="243.0" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="571.5" y="233.0">PendingApprovalRequest</text>
+  <rect x="1506.5" y="207.0" width="175" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1594.0" y="233.0">AuditLogEntry</text>
+</svg>

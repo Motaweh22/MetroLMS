@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1776 989" width="1776" height="989">
+  <defs>
+    <style>
+      .entity-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #174EA6; text-anchor: middle; dominant-baseline: central; }
+      .rel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 700; fill: #B06000; text-anchor: middle; dominant-baseline: central; }
+      .attr-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 600; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .attr-meta { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 9px; fill: #5F6368; text-anchor: middle; dominant-baseline: central; }
+      .attr-key { font-weight: 700; text-decoration: underline; fill: #A50E0E; }
+      .card-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .title-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #202124; text-anchor: start; }
+      .subtitle-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; fill: #5F6368; text-anchor: start; }
+      .panel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: start; }
+    </style>
+  </defs>
+  <rect width="1776" height="989" fill="#FAFAFA" />
+  <g id="header" transform="translate(40, 40)">
+    <text class="title-txt" x="0" y="0">Domain 2A: HR Catalogs &amp; Department Tracks (Chen Notation)</text>
+    <text class="subtitle-txt" x="0" y="22">MetroLMS SQL Server Schema • Classic Chen-Notation Entity-Relationship Diagram (6 Entities, 21 Physical Columns)</text>
+  </g>
+  <line x1="454.0" y1="227.0" x2="293.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="227.0" x2="454.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="227.0" x2="615.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="227.0" x2="1176.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="227.0" x2="1337.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="227.0" x2="1498.0" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="560.0" x2="293.0" y2="464.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="560.0" x2="454.0" y2="464.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="560.0" x2="615.0" y2="464.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="560.0" x2="1095.5" y2="464.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="560.0" x2="1256.5" y2="464.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="560.0" x2="1417.5" y2="464.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="560.0" x2="1578.5" y2="464.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="893.0" x2="212.5" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="893.0" x2="373.5" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="893.0" x2="534.5" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.0" y1="893.0" x2="695.5" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="893.0" x2="1081.0" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="893.0" x2="1257.0" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="893.0" x2="1432.5" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1337.0" y1="893.0" x2="1593.5" y2="797.0" stroke="#3C4043" stroke-width="1.5" />
+  <ellipse cx="293.0" cy="131.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="293.0" y="122.0">id</text>
+  <text class="attr-meta" x="293.0" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="293.0" y="147.0">NOT NULL [PK]</text>
+  <ellipse cx="454.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="454.0" y="122.0">name_ar</text>
+  <text class="attr-meta" x="454.0" y="136.0">NVARCHAR(150)</text>
+  <text class="attr-meta" x="454.0" y="147.0">NOT NULL [UK]</text>
+  <ellipse cx="615.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="615.0" y="122.0">name_en</text>
+  <text class="attr-meta" x="615.0" y="136.0">NVARCHAR(150)</text>
+  <text class="attr-meta" x="615.0" y="147.0">NULL</text>
+  <ellipse cx="1176.0" cy="131.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1176.0" y="122.0">id</text>
+  <text class="attr-meta" x="1176.0" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="1176.0" y="147.0">NOT NULL [PK]</text>
+  <ellipse cx="1337.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1337.0" y="122.0">name_ar</text>
+  <text class="attr-meta" x="1337.0" y="136.0">NVARCHAR(150)</text>
+  <text class="attr-meta" x="1337.0" y="147.0">NOT NULL [UK]</text>
+  <ellipse cx="1498.0" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1498.0" y="122.0">name_en</text>
+  <text class="attr-meta" x="1498.0" y="136.0">NVARCHAR(150)</text>
+  <text class="attr-meta" x="1498.0" y="147.0">NULL</text>
+  <ellipse cx="293.0" cy="464.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="293.0" y="455.0">id</text>
+  <text class="attr-meta" x="293.0" y="469.0">BIGINT</text>
+  <text class="attr-meta" x="293.0" y="480.0">NOT NULL [PK]</text>
+  <ellipse cx="454.0" cy="464.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="454.0" y="455.0">name_ar</text>
+  <text class="attr-meta" x="454.0" y="469.0">NVARCHAR(100)</text>
+  <text class="attr-meta" x="454.0" y="480.0">NOT NULL [UK]</text>
+  <ellipse cx="615.0" cy="464.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="615.0" y="455.0">name_en</text>
+  <text class="attr-meta" x="615.0" y="469.0">NVARCHAR(100)</text>
+  <text class="attr-meta" x="615.0" y="480.0">NULL</text>
+  <ellipse cx="1095.5" cy="464.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1095.5" y="455.0">id</text>
+  <text class="attr-meta" x="1095.5" y="469.0">BIGINT</text>
+  <text class="attr-meta" x="1095.5" y="480.0">NOT NULL [PK]</text>
+  <ellipse cx="1256.5" cy="464.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1256.5" y="455.0">code</text>
+  <text class="attr-meta" x="1256.5" y="469.0">NVARCHAR(32)</text>
+  <text class="attr-meta" x="1256.5" y="480.0">NOT NULL [UK]</text>
+  <ellipse cx="1417.5" cy="464.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1417.5" y="455.0">name_ar</text>
+  <text class="attr-meta" x="1417.5" y="469.0">NVARCHAR(100)</text>
+  <text class="attr-meta" x="1417.5" y="480.0">NOT NULL [UK]</text>
+  <ellipse cx="1578.5" cy="464.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1578.5" y="455.0">name_en</text>
+  <text class="attr-meta" x="1578.5" y="469.0">NVARCHAR(100)</text>
+  <text class="attr-meta" x="1578.5" y="480.0">NULL</text>
+  <ellipse cx="212.5" cy="797.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="212.5" y="788.0">id</text>
+  <text class="attr-meta" x="212.5" y="802.0">BIGINT</text>
+  <text class="attr-meta" x="212.5" y="813.0">NOT NULL [PK]</text>
+  <ellipse cx="373.5" cy="797.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="373.5" y="788.0">code</text>
+  <text class="attr-meta" x="373.5" y="802.0">NVARCHAR(32)</text>
+  <text class="attr-meta" x="373.5" y="813.0">NOT NULL [UK]</text>
+  <ellipse cx="534.5" cy="797.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="534.5" y="788.0">name_ar</text>
+  <text class="attr-meta" x="534.5" y="802.0">NVARCHAR(100)</text>
+  <text class="attr-meta" x="534.5" y="813.0">NOT NULL [UK]</text>
+  <ellipse cx="695.5" cy="797.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="695.5" y="788.0">name_en</text>
+  <text class="attr-meta" x="695.5" y="802.0">NVARCHAR(100)</text>
+  <text class="attr-meta" x="695.5" y="813.0">NULL</text>
+  <ellipse cx="1081.0" cy="797.0" rx="73.0" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1081.0" y="788.0">department_code</text>
+  <text class="attr-meta" x="1081.0" y="802.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="1081.0" y="813.0">NOT NULL [PK]</text>
+  <ellipse cx="1257.0" cy="797.0" rx="87.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1257.0" y="788.0">allowed_tracks_json</text>
+  <text class="attr-meta" x="1257.0" y="802.0">NVARCHAR(MAX)</text>
+  <text class="attr-meta" x="1257.0" y="813.0">NOT NULL</text>
+  <ellipse cx="1432.5" cy="797.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1432.5" y="788.0">updated_at</text>
+  <text class="attr-meta" x="1432.5" y="802.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="1432.5" y="813.0">NOT NULL</text>
+  <ellipse cx="1593.5" cy="797.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1593.5" y="788.0">updated_by</text>
+  <text class="attr-meta" x="1593.5" y="802.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="1593.5" y="813.0">NOT NULL</text>
+  <rect x="323.0" y="201.0" width="262.0" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="454.0" y="227.0">OrganizationalDepartment</text>
+  <rect x="1249.5" y="201.0" width="175" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1337.0" y="227.0">JobTitle</text>
+  <rect x="366.5" y="534.0" width="175" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="454.0" y="560.0">MetroLine</text>
+  <rect x="1225.0" y="534.0" width="224.0" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1337.0" y="560.0">MaritalStatusCatalog</text>
+  <rect x="304.0" y="867.0" width="300.0" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="454.0" y="893.0">MilitaryServiceStatusCatalog</text>
+  <rect x="1248.8" y="867.0" width="176.5" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1337.0" y="893.0">DepartmentTrack</text>
+</svg>

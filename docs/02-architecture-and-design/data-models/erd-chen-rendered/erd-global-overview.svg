@@ -1,0 +1,874 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5800 4100" width="5800" height="4100">
+  <defs>
+    <style>
+      .entity-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 14.5px; font-weight: 700; fill: #174EA6; text-anchor: middle; dominant-baseline: central; }
+      .standalone-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 10.5px; font-style: italic; fill: #5F6368; text-anchor: middle; dominant-baseline: central; }
+      .rel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11.5px; font-weight: 700; fill: #B06000; text-anchor: middle; dominant-baseline: central; }
+      .card-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12.5px; font-weight: 700; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .title-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 24px; font-weight: 700; fill: #202124; text-anchor: start; }
+      .subtitle-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 14px; fill: #5F6368; text-anchor: start; }
+      .region-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 16px; font-weight: 700; fill: #202124; text-anchor: start; dominant-baseline: central; }
+    </style>
+  </defs>
+  <rect width="5800" height="4100" fill="#F4F6F8" />
+  <g id="header" transform="translate(80, 70)">
+    <text class="title-txt" x="0" y="0">MetroLMS — Complete Production Database Schema (Global Chen Overview)</text>
+    <text class="subtitle-txt" x="0" y="34">54 Active Entities, 84 Declared FK Relationships (85 FK Columns), 3 Standalone Non-FK Entities • Classic Chen Notation (Attributes in Detailed Diagrams)</text>
+  </g>
+  <rect x="80" y="160" width="2540" height="1720" rx="10" fill="#F8FAFD" stroke="#BDC1C6" stroke-width="2" stroke-dasharray="8 6" />
+  <rect x="80" y="160" width="2540" height="42" rx="10" fill="#E8EAED" stroke="#BDC1C6" stroke-width="1.5" />
+  <text class="region-txt" x="100" y="181">1. Identity, HR Catalogs, Permissions &amp; Governance (19 Entities)</text>
+  <rect x="2880" y="160" width="2840" height="1720" rx="10" fill="#FDFBFA" stroke="#BDC1C6" stroke-width="2" stroke-dasharray="8 6" />
+  <rect x="2880" y="160" width="2840" height="42" rx="10" fill="#E8EAED" stroke="#BDC1C6" stroke-width="1.5" />
+  <text class="region-txt" x="2900" y="181">2. Courses, Curriculum, Versioning &amp; Review Workflow (13 Entities)</text>
+  <rect x="80" y="2160" width="2540" height="1840" rx="10" fill="#F9FAF8" stroke="#BDC1C6" stroke-width="2" stroke-dasharray="8 6" />
+  <rect x="80" y="2160" width="2540" height="42" rx="10" fill="#E8EAED" stroke="#BDC1C6" stroke-width="1.5" />
+  <text class="region-txt" x="100" y="2181">3. Training Groups, Renewal Cycles &amp; Onboarding (8 Entities)</text>
+  <rect x="2880" y="2160" width="1320" height="1840" rx="10" fill="#FAF8FD" stroke="#BDC1C6" stroke-width="2" stroke-dasharray="8 6" />
+  <rect x="2880" y="2160" width="1320" height="42" rx="10" fill="#E8EAED" stroke="#BDC1C6" stroke-width="1.5" />
+  <text class="region-txt" x="2900" y="2181">4. Enrollments, Attempts, Progress &amp; Certificates (5 Entities)</text>
+  <rect x="4460" y="2160" width="1260" height="1840" rx="10" fill="#FAF9F8" stroke="#BDC1C6" stroke-width="2" stroke-dasharray="8 6" />
+  <rect x="4460" y="2160" width="1260" height="42" rx="10" fill="#E8EAED" stroke="#BDC1C6" stroke-width="1.5" />
+  <text class="region-txt" x="4480" y="2181">5. Discussions, Media, Notifications &amp; Scheduled Jobs (9 Entities)</text>
+  <polyline points="1239.0,641.5 999.0,481.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1241.0,638.5 1001.0,478.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1120.0" y="558.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1132.0" y="568.0">N</text>
+  <polyline points="1000.0,480.0 760.0,320.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="880.0" y="398.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="892.0" y="408.0">1</text>
+  <polyline points="1239.4,641.7 759.4,481.7" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1240.6,638.3 760.6,478.3" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1012.0" y="558.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1024.0" y="568.0">N</text>
+  <polyline points="760.0,480.0 280.0,320.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="532.0" y="398.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="544.0" y="408.0">1</text>
+  <polyline points="1239.8,641.8 759.8,591.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1240.2,638.2 760.2,588.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1012.0" y="607.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1024.0" y="617.5">N</text>
+  <polyline points="760.0,590.0 280.0,540.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="532.0" y="557.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="544.0" y="567.5">1</text>
+  <polyline points="1240.2,641.8 760.2,701.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1239.8,638.2 759.8,698.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1012.0" y="657.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1024.0" y="667.0">N</text>
+  <polyline points="760.0,700.0 280.0,760.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="532.0" y="717.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="544.0" y="727.0">1</text>
+  <polyline points="1240.0,320.0 1240.0,480.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1228.0" y="382.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1240.0" y="392.0">N</text>
+  <polyline points="1240.0,480.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1228.0" y="542.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1240.0" y="552.0">1</text>
+  <polyline points="2321.8,320.0 2321.8,480.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="2318.2,320.0 2318.2,480.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2308.0" y="382.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2320.0" y="392.0">N</text>
+  <polyline points="2320.0,480.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2308.0" y="542.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2320.0" y="552.0">1</text>
+  <polyline points="1741.0,321.5 1491.0,481.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1739.0,318.5 1489.0,478.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1615.5" y="382.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1627.5" y="392.0">1</text>
+  <polyline points="1490.0,480.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1365.5" y="542.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1377.5" y="552.0">1</text>
+  <polyline points="1740.0,640.0 1490.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1615.5" y="630.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1627.5" y="640.0">N</text>
+  <polyline points="1490.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1365.5" y="630.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1377.5" y="640.0">1</text>
+  <polyline points="1740.0,640.0 2030.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1858.5" y="630.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1870.5" y="640.0">N</text>
+  <polyline points="2030.0,640.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2148.5" y="630.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2160.5" y="640.0">1</text>
+  <polyline points="1740.0,640.0 1490.0,606.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1615.5" y="614.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1627.5" y="624.7">N</text>
+  <polyline points="1490.0,606.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1365.5" y="611.3" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1377.5" y="621.3">1</text>
+  <polyline points="1740.0,640.0 2030.0,674.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1858.5" y="645.3" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1870.5" y="655.3">N</text>
+  <polyline points="2030.0,674.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2148.5" y="648.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2160.5" y="658.7">1</text>
+  <polyline points="1740.0,1000.0 1490.0,820.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1615.5" y="909.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1627.5" y="919.0">N</text>
+  <polyline points="1490.0,820.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1365.5" y="729.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1377.5" y="739.0">1</text>
+  <polyline points="1740.0,1000.0 2030.0,820.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1858.5" y="909.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1870.5" y="919.0">N</text>
+  <polyline points="2030.0,820.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2148.5" y="729.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2160.5" y="739.0">1</text>
+  <polyline points="758.8,1038.6 998.8,838.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="761.2,1041.4 1001.2,841.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="856.0" y="940.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="868.0" y="950.0">N</text>
+  <polyline points="998.8,838.6 1238.8,638.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1001.2,841.4 1241.2,641.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1096.0" y="740.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1108.0" y="750.0">1</text>
+  <polyline points="760.0,1041.8 520.0,1041.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="760.0,1038.2 520.0,1038.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="640.0" y="1030.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="652.0" y="1040.0">N</text>
+  <polyline points="520.0,1040.0 280.0,1040.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="400.0" y="1030.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="412.0" y="1040.0">1</text>
+  <polyline points="758.8,1481.3 518.8,1261.3" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="761.2,1478.7 521.2,1258.7" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="640.0" y="1371.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="652.0" y="1381.0">N</text>
+  <polyline points="520.0,1260.0 280.0,1040.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="400.0" y="1151.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="412.0" y="1161.0">1</text>
+  <polyline points="760.0,1481.8 520.0,1481.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="760.0,1478.2 520.0,1478.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="640.0" y="1470.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="652.0" y="1480.0">N</text>
+  <polyline points="520.0,1480.0 280.0,1480.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="400.0" y="1470.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="412.0" y="1480.0">1</text>
+  <polyline points="1239.3,1261.6 999.3,1151.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1240.7,1258.4 1000.7,1148.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1120.0" y="1200.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1132.0" y="1210.5">N</text>
+  <polyline points="1000.0,1150.0 760.0,1040.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="880.0" y="1090.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="892.0" y="1100.5">1</text>
+  <polyline points="1240.7,1261.6 1000.7,1371.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1239.3,1258.4 999.3,1368.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1120.0" y="1299.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1132.0" y="1309.5">N</text>
+  <polyline points="1000.0,1370.0 760.0,1480.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="880.0" y="1409.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="892.0" y="1419.5">1</text>
+  <polyline points="3780.0,706.0 3570.0,706.0 3570.0,600.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3558.0" y="648.3" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3570.0" y="658.3">N</text>
+  <polyline points="3570.0,600.0 3570.0,734.0 3670.0,734.0 3780.0,734.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3558.0" y="650.3" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3570.0" y="660.3">1</text>
+  <polyline points="3780.0,721.8 2633.2,720.0 2635.0,248.2 2750.0,248.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3780.0,718.2 2636.8,720.0 2635.0,251.8 2750.0,251.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2674.8" y="240.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2686.8" y="250.0">N</text>
+  <polyline points="2750.0,250.0 2865.0,250.0 2865.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2789.8" y="240.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2801.8" y="250.0">1</text>
+  <polyline points="3780.0,720.0 2649.0,720.0 2649.0,322.0 2750.0,322.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2682.4" y="312.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2694.4" y="322.0">N</text>
+  <polyline points="2750.0,322.0 2851.0,322.0 2851.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2783.4" y="312.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2795.4" y="322.0">1</text>
+  <polyline points="3780.0,720.0 2663.0,720.0 2663.0,394.0 2750.0,394.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2690.2" y="384.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2702.2" y="394.0">N</text>
+  <polyline points="2750.0,394.0 2837.0,394.0 2837.0,640.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2777.2" y="384.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2789.2" y="394.0">1</text>
+  <polyline points="3119.1,1098.4 3449.1,908.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3120.9,1101.6 3450.9,911.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3256.5" y="1004.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3268.5" y="1014.5">N</text>
+  <polyline points="3450.0,910.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3586.5" y="814.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3598.5" y="824.5">1</text>
+  <polyline points="3120.0,1101.8 2675.2,1100.0 2677.0,464.2 2750.0,464.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3120.0,1098.2 2678.8,1100.0 2677.0,467.8 2750.0,467.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2697.8" y="456.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2709.8" y="466.0">N</text>
+  <polyline points="2750.0,466.0 2823.0,466.0 2823.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2770.8" y="456.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2782.8" y="466.0">1</text>
+  <polyline points="3120.9,338.4 3450.9,528.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3119.1,341.6 3449.1,531.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3256.5" y="415.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3268.5" y="425.5">N</text>
+  <polyline points="3450.0,530.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3586.5" y="605.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3598.5" y="615.5">1</text>
+  <polyline points="3120.0,341.8 2636.8,340.0 2635.0,536.2 2750.0,536.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3120.0,338.2 2633.2,340.0 2635.0,539.8 2750.0,539.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2674.8" y="528.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2686.8" y="538.0">N</text>
+  <polyline points="2750.0,538.0 2865.0,538.0 2865.0,1040.0 280.0,1040.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2789.8" y="528.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2801.8" y="538.0">1</text>
+  <polyline points="3120.4,578.2 3450.4,648.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3119.6,581.8 3449.6,651.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3256.5" y="601.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3268.5" y="611.5">N</text>
+  <polyline points="3450.0,650.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3586.5" y="671.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3598.5" y="681.5">1</text>
+  <polyline points="3120.0,581.8 2650.8,580.0 2649.0,608.2 2750.0,608.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3120.0,578.2 2647.2,580.0 2649.0,611.8 2750.0,611.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2682.4" y="600.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2694.4" y="610.0">N</text>
+  <polyline points="2750.0,610.0 2851.0,610.0 2851.0,1480.0 280.0,1480.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2783.4" y="600.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2795.4" y="610.0">1</text>
+  <polyline points="3119.7,818.2 3449.7,768.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3120.3,821.8 3450.3,771.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3256.5" y="787.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3268.5" y="797.5">N</text>
+  <polyline points="3450.0,770.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3586.5" y="737.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3598.5" y="747.5">1</text>
+  <polyline points="3120.0,821.8 2661.2,820.0 2663.0,680.2 2750.0,680.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3120.0,818.2 2664.8,820.0 2663.0,683.8 2750.0,683.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2690.2" y="672.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2702.2" y="682.0">N</text>
+  <polyline points="2750.0,682.0 2837.0,682.0 2837.0,760.0 280.0,760.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2777.2" y="672.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2789.2" y="682.0">1</text>
+  <polyline points="4460.8,381.6 4120.8,551.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="4459.2,378.4 4119.2,548.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4295.0" y="446.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4307.0" y="456.5">1</text>
+  <polyline points="4120.0,550.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3955.0" y="616.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3967.0" y="626.5">1</text>
+  <polyline points="4460.0,380.0 2677.0,380.0 2677.0,754.0 2750.0,754.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2697.8" y="744.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2709.8" y="754.0">N</text>
+  <polyline points="2750.0,754.0 2823.0,754.0 2823.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2770.8" y="744.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2782.8" y="754.0">1</text>
+  <polyline points="4460.0,380.0 2635.0,380.0 2635.0,826.0 2750.0,826.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2674.8" y="816.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2686.8" y="826.0">N</text>
+  <polyline points="2750.0,826.0 2865.0,826.0 2865.0,640.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2789.8" y="816.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2801.8" y="826.0">1</text>
+  <polyline points="4459.3,1021.6 4119.3,871.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="4460.7,1018.4 4120.7,868.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4295.0" y="942.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4307.0" y="952.5">N</text>
+  <polyline points="4120.0,870.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3955.0" y="792.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3967.0" y="802.5">1</text>
+  <polyline points="4460.0,1020.0 2649.0,1020.0 2649.0,898.0 2750.0,898.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2682.4" y="888.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2694.4" y="898.0">N</text>
+  <polyline points="2750.0,898.0 2851.0,898.0 2851.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2783.4" y="888.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2795.4" y="898.0">1</text>
+  <polyline points="4460.0,1020.0 2663.0,1020.0 2663.0,970.0 2750.0,970.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2690.2" y="960.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2702.2" y="970.0">N</text>
+  <polyline points="2750.0,970.0 2837.0,970.0 2837.0,640.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2777.2" y="960.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2789.2" y="970.0">1</text>
+  <polyline points="5020.0,700.0 4740.0,540.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4882.0" y="618.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4894.0" y="628.0">N</text>
+  <polyline points="4740.0,540.0 4460.0,380.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4602.0" y="458.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4614.0" y="468.0">1</text>
+  <polyline points="5020.0,700.0 4740.0,860.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4882.0" y="762.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4894.0" y="772.0">N</text>
+  <polyline points="4740.0,860.0 4460.0,1020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4602.0" y="922.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4614.0" y="932.0">1</text>
+  <polyline points="5460.0,701.8 5240.0,701.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="5460.0,698.2 5240.0,698.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5349.0" y="690.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5361.0" y="700.0">N</text>
+  <polyline points="5240.0,700.0 5020.0,700.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5129.0" y="690.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5141.0" y="700.0">1</text>
+  <polyline points="5458.2,1140.0 5458.2,920.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="5461.8,1140.0 5461.8,920.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5448.0" y="1031.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5460.0" y="1041.0">1</text>
+  <polyline points="5460.0,920.0 5460.0,700.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5448.0" y="811.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5460.0" y="821.0">1</text>
+  <polyline points="3778.2,1340.0 3778.2,1030.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3781.8,1340.0 3781.8,1030.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3768.0" y="1190.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3780.0" y="1200.5">N</text>
+  <polyline points="3780.0,1030.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3768.0" y="880.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3780.0" y="890.5">1</text>
+  <polyline points="3780.0,1340.0 2677.0,1340.0 2677.0,1042.0 2750.0,1042.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2697.8" y="1032.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2709.8" y="1042.0">N</text>
+  <polyline points="2750.0,1042.0 2823.0,1042.0 2823.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2770.8" y="1032.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2782.8" y="1042.0">1</text>
+  <polyline points="3780.0,1340.0 2635.0,1340.0 2635.0,1114.0 2750.0,1114.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2674.8" y="1104.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2686.8" y="1114.0">N</text>
+  <polyline points="2750.0,1114.0 2865.0,1114.0 2865.0,640.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2789.8" y="1104.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2801.8" y="1114.0">1</text>
+  <polyline points="3780.0,1340.0 2649.0,1340.0 2649.0,1186.0 2750.0,1186.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2682.4" y="1176.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2694.4" y="1186.0">N</text>
+  <polyline points="2750.0,1186.0 2851.0,1186.0 2851.0,640.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2783.4" y="1176.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2795.4" y="1186.0">1</text>
+  <polyline points="3780.0,1340.0 2663.0,1340.0 2663.0,1258.0 2750.0,1258.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2690.2" y="1248.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2702.2" y="1258.0">N</text>
+  <polyline points="2750.0,1258.0 2837.0,1258.0 2837.0,640.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2777.2" y="1248.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2789.2" y="1258.0">1</text>
+  <polyline points="4299.0,1681.5 4039.0,1511.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="4301.0,1678.5 4041.0,1508.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4171.0" y="1593.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4183.0" y="1603.5">N</text>
+  <polyline points="4040.0,1510.0 3780.0,1340.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3911.0" y="1423.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3923.0" y="1433.5">1</text>
+  <polyline points="3259.0,1678.5 3519.0,1508.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3261.0,1681.5 3521.0,1511.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3365.0" y="1593.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3377.0" y="1603.5">N</text>
+  <polyline points="3520.0,1510.0 3780.0,1340.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3625.0" y="1423.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3637.0" y="1433.5">1</text>
+  <polyline points="4758.2,2380.0 4760.0,1906.8 3001.8,1905.0 3001.8,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="4761.8,2380.0 4760.0,1903.2 2998.2,1905.0 2998.2,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2988.0" y="1917.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3000.0" y="1927.5">N</text>
+  <polyline points="3000.0,1955.0 3000.0,2125.0 3780.0,2125.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2988.0" y="2021.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3000.0" y="2031.5">1</text>
+  <polyline points="4760.0,2380.0 2645.0,2380.0 2645.0,1995.0 2680.0,1995.0 2680.0,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2668.0" y="2018.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2680.0" y="2028.8">N</text>
+  <polyline points="2680.0,2070.0 2680.0,2135.0 1240.0,2135.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2668.0" y="2089.2" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2680.0" y="2099.2">1</text>
+  <polyline points="5400.0,2381.8 5080.0,2381.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="5400.0,2378.2 5080.0,2378.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5244.0" y="2370.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5256.0" y="2380.0">N</text>
+  <polyline points="5080.0,2380.0 4760.0,2380.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4924.0" y="2370.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4936.0" y="2380.0">1</text>
+  <polyline points="5400.0,2380.0 2661.0,2380.0 2661.0,2007.0 2865.0,2007.0 2865.0,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2853.0" y="2025.3" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2865.0" y="2035.3">N</text>
+  <polyline points="2865.0,2070.0 2865.0,2125.0 1240.0,2125.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2853.0" y="2084.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2865.0" y="2094.8">1</text>
+  <polyline points="4760.0,2820.0 2677.0,2820.0 2677.0,2019.0 3050.0,2019.0 3050.0,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3038.0" y="2032.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3050.0" y="2042.0">N</text>
+  <polyline points="3050.0,2070.0 3050.0,2115.0 1240.0,2115.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3038.0" y="2080.2" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3050.0" y="2090.2">1</text>
+  <polyline points="4760.0,2820.0 2693.0,2820.0 2693.0,2031.0 3235.0,2031.0 3235.0,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3223.0" y="2038.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3235.0" y="2048.6">N</text>
+  <polyline points="3235.0,2070.0 3235.0,2105.0 2320.0,2105.0 2320.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3223.0" y="2075.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3235.0" y="2085.8">1</text>
+  <polyline points="5400.0,2821.8 5080.0,2821.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="5400.0,2818.2 5080.0,2818.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5244.0" y="2810.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5256.0" y="2820.0">N</text>
+  <polyline points="5080.0,2820.0 4760.0,2820.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4924.0" y="2810.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4936.0" y="2820.0">1</text>
+  <polyline points="5400.0,2820.0 5400.0,1917.0 3240.0,1917.0 3240.0,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3228.0" y="1924.1" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3240.0" y="1934.1">N</text>
+  <polyline points="3240.0,1955.0 3240.0,2113.0 4460.0,2113.0 4460.0,380.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3228.0" y="2016.1" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3240.0" y="2026.1">1</text>
+  <polyline points="5400.0,2820.0 5400.0,1929.0 3480.0,1929.0 3480.0,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3468.0" y="1930.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3480.0" y="1940.7">N</text>
+  <polyline points="3480.0,1955.0 3480.0,2101.0 4460.0,2101.0 4460.0,1020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3468.0" y="2010.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3480.0" y="2020.7">1</text>
+  <polyline points="5400.0,2820.0 2709.0,2820.0 2709.0,1995.0 3420.0,1995.0 3420.0,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3408.0" y="2018.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3420.0" y="2028.8">N</text>
+  <polyline points="3420.0,2070.0 3420.0,2135.0 1840.0,2135.0 1840.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3408.0" y="2089.2" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3420.0" y="2099.2">1</text>
+  <polyline points="421.0,2378.5 781.0,2608.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="419.0,2381.5 779.0,2611.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="570.0" y="2473.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="582.0" y="2483.5">N</text>
+  <polyline points="780.0,2610.0 1140.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="930.0" y="2703.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="942.0" y="2713.5">1</text>
+  <polyline points="418.2,2380.0 420.0,1918.2 701.8,1920.0 701.8,2020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="421.8,2380.0 420.0,1921.8 698.2,1920.0 698.2,2020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="688.0" y="1955.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="700.0" y="1965.0">N</text>
+  <polyline points="700.0,2020.0 700.0,2100.0 1240.0,2100.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="688.0" y="2046.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="700.0" y="2056.0">1</text>
+  <polyline points="1840.0,2841.8 1490.0,2841.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1840.0,2838.2 1490.0,2838.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1670.5" y="2830.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1682.5" y="2840.0">N</text>
+  <polyline points="1490.0,2841.8 1140.0,2841.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1490.0,2838.2 1140.0,2838.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1320.5" y="2830.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1332.5" y="2840.0">1</text>
+  <polyline points="2321.2,2401.3 2081.2,2621.3" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="2318.8,2398.7 2078.8,2618.7" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2200.0" y="2489.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2212.0" y="2499.0">N</text>
+  <polyline points="2080.0,2620.0 1840.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1960.0" y="2709.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1972.0" y="2719.0">1</text>
+  <polyline points="2320.0,2398.2 2643.2,2400.0 2645.0,2005.2 3606.8,2007.0 3606.8,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="2320.0,2401.8 2646.8,2400.0 2645.0,2008.8 3603.2,2007.0 3603.2,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3593.0" y="2025.3" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3605.0" y="2035.3">N</text>
+  <polyline points="3605.0,2070.0 3605.0,2125.0 3780.0,2125.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3593.0" y="2084.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3605.0" y="2094.8">1</text>
+  <polyline points="420.0,2838.2 780.0,2838.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="420.0,2841.8 780.0,2841.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="570.0" y="2830.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="582.0" y="2840.0">N</text>
+  <polyline points="780.0,2840.0 1140.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="930.0" y="2830.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="942.0" y="2840.0">1</text>
+  <polyline points="418.2,2840.0 420.0,1938.2 1081.8,1940.0 1081.8,2020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="421.8,2840.0 420.0,1941.8 1078.2,1940.0 1078.2,2020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1068.0" y="1966.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1080.0" y="1976.0">N</text>
+  <polyline points="1080.0,2020.0 1080.0,2080.0 1240.0,2080.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1068.0" y="2037.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1080.0" y="2047.0">1</text>
+  <polyline points="1138.2,3540.0 1138.2,3190.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1141.8,3540.0 1141.8,3190.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1128.0" y="3372.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1140.0" y="3382.5">1</text>
+  <polyline points="1140.0,3190.0 1140.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1128.0" y="3022.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1140.0" y="3032.5">1</text>
+  <polyline points="419.0,3298.5 779.0,3068.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="421.0,3301.5 781.0,3071.5" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="570.0" y="3186.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="582.0" y="3196.5">N</text>
+  <polyline points="780.0,3070.0 1140.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="930.0" y="2956.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="942.0" y="2966.5">1</text>
+  <polyline points="418.2,3300.0 420.0,1958.2 1461.8,1960.0 1461.8,2020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="421.8,3300.0 420.0,1961.8 1458.2,1960.0 1458.2,2020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1448.0" y="1977.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1460.0" y="1987.0">N</text>
+  <polyline points="1460.0,2020.0 1460.0,2060.0 1240.0,2060.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1448.0" y="2028.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1460.0" y="2038.0">1</text>
+  <polyline points="1778.7,3541.2 1458.7,3191.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1781.3,3538.8 1461.3,3188.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1624.0" y="3372.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1636.0" y="3382.5">N</text>
+  <polyline points="1460.0,3190.0 1140.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1304.0" y="3022.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1316.0" y="3032.5">1</text>
+  <polyline points="3180.0,2441.8 2659.2,2440.0 2661.0,2017.2 3791.8,2019.0 3791.8,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3180.0,2438.2 2662.8,2440.0 2661.0,2020.8 3788.2,2019.0 3788.2,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3778.0" y="2032.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3790.0" y="2042.0">N</text>
+  <polyline points="3790.0,2070.0 3790.0,2115.0 1240.0,2115.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3778.0" y="2080.2" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3790.0" y="2090.2">1</text>
+  <polyline points="3178.2,2440.0 3180.0,1903.2 3721.8,1905.0 3721.8,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3181.8,2440.0 3180.0,1906.8 3718.2,1905.0 3718.2,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3708.0" y="1917.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3720.0" y="1927.5">N</text>
+  <polyline points="3720.0,1955.0 3720.0,2125.0 3780.0,2125.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3708.0" y="2021.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3720.0" y="2031.5">1</text>
+  <polyline points="3880.0,2441.8 3530.0,2441.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3880.0,2438.2 3530.0,2438.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3710.5" y="2430.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3722.5" y="2440.0">N</text>
+  <polyline points="3530.0,2441.8 3180.0,2441.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3530.0,2438.2 3180.0,2438.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3360.5" y="2430.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3372.5" y="2440.0">1</text>
+  <polyline points="3880.0,2440.0 2640.0,2440.0 2640.0,2480.0 2750.0,2480.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2677.5" y="2470.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2689.5" y="2480.0">N</text>
+  <polyline points="2750.0,2480.0 2860.0,2480.0 2860.0,2840.0 1140.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2787.5" y="2470.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2799.5" y="2480.0">1</text>
+  <polyline points="3178.2,3040.0 3178.2,2740.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3181.8,3040.0 3181.8,2740.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3168.0" y="2895.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3180.0" y="2905.0">N</text>
+  <polyline points="3180.0,2740.0 3180.0,2440.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3168.0" y="2595.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3180.0" y="2605.0">1</text>
+  <polyline points="3178.2,3040.0 3180.0,1915.2 3961.8,1917.0 3961.8,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3181.8,3040.0 3180.0,1918.8 3958.2,1917.0 3958.2,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3948.0" y="1924.1" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3960.0" y="1934.1">N</text>
+  <polyline points="3960.0,1955.0 3960.0,2113.0 4460.0,2113.0 4460.0,1020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3948.0" y="2016.1" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3960.0" y="2026.1">1</text>
+  <polyline points="3180.0,3040.0 2654.0,3040.0 2654.0,2660.0 2750.0,2660.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2685.2" y="2650.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2697.2" y="2660.0">N</text>
+  <polyline points="2750.0,2660.0 2846.0,2660.0 2846.0,2840.0 1840.0,2840.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="2781.2" y="2650.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="2793.2" y="2660.0">1</text>
+  <polyline points="3880.0,3041.8 3530.0,3041.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3880.0,3038.2 3530.0,3038.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3710.5" y="3030.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3722.5" y="3040.0">N</text>
+  <polyline points="3530.0,3040.0 3180.0,3040.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3360.5" y="3030.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3372.5" y="3040.0">1</text>
+  <polyline points="3878.2,3040.0 3880.0,1927.2 4201.8,1929.0 4201.8,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3881.8,3040.0 3880.0,1930.8 4198.2,1929.0 4198.2,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4188.0" y="1930.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4200.0" y="1940.7">N</text>
+  <polyline points="4200.0,1955.0 4200.0,2101.0 5460.0,2101.0 5460.0,700.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4188.0" y="2010.7" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4200.0" y="2020.7">1</text>
+  <polyline points="3520.0,3680.0 3350.0,3360.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3431.5" y="3526.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3443.5" y="3536.0">1</text>
+  <polyline points="3350.0,3360.0 3180.0,3040.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3261.5" y="3206.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3273.5" y="3216.0">1</text>
+  <polyline points="3518.2,3680.0 3520.0,1903.2 4441.8,1905.0 4441.8,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="3521.8,3680.0 3520.0,1906.8 4438.2,1905.0 4438.2,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4428.0" y="1917.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4440.0" y="1927.5">N</text>
+  <polyline points="4440.0,1955.0 4440.0,2125.0 4460.0,2125.0 4460.0,1020.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4428.0" y="2021.5" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4440.0" y="2031.5">1</text>
+  <polyline points="4760.0,3261.8 2675.2,3260.0 2677.0,2029.2 3976.8,2031.0 3976.8,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="4760.0,3258.2 2678.8,3260.0 2677.0,2032.8 3973.2,2031.0 3973.2,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3963.0" y="2038.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3975.0" y="2048.6">N</text>
+  <polyline points="3975.0,2070.0 3975.0,2105.0 1240.0,2105.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="3963.0" y="2075.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="3975.0" y="2085.8">1</text>
+  <polyline points="5398.2,3260.0 5400.0,1918.8 4681.8,1917.0 4681.8,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="5401.8,3260.0 5400.0,1915.2 4678.2,1917.0 4678.2,1955.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4668.0" y="1924.1" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4680.0" y="1934.1">N</text>
+  <polyline points="4680.0,1955.0 4680.0,2113.0 3780.0,2113.0 3780.0,720.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4668.0" y="2016.1" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4680.0" y="2026.1">1</text>
+  <polyline points="4760.0,3701.8 2691.2,3700.0 2693.0,1993.2 4161.8,1995.0 4161.8,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="4760.0,3698.2 2694.8,3700.0 2693.0,1996.8 4158.2,1995.0 4158.2,2070.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4148.0" y="2018.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4160.0" y="2028.8">N</text>
+  <polyline points="4160.0,2070.0 4160.0,2135.0 1240.0,2135.0 1240.0,640.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="4148.0" y="2089.2" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="4160.0" y="2099.2">1</text>
+  <polyline points="5398.2,3840.0 5398.2,3700.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="5401.8,3840.0 5401.8,3700.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5388.0" y="3767.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5400.0" y="3777.0">N</text>
+  <polyline points="5400.0,3700.0 5400.0,3560.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="5388.0" y="3627.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="5400.0" y="3637.0">1</text>
+  <polygon points="1000.0,459.0 1062.0,480.0 1000.0,501.0 938.0,480.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1000.0" y="480.0">assigned_role</text>
+  <polygon points="760.0,459.0 824.4,480.0 760.0,501.0 695.6,480.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="760.0" y="480.0">marital_status</text>
+  <polygon points="760.0,569.0 828.0,590.0 760.0,611.0 692.0,590.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="760.0" y="590.0">military_status</text>
+  <polygon points="760.0,679.0 822.0,700.0 760.0,721.0 698.0,700.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="760.0" y="700.0">assigned_line</text>
+  <polygon points="1240.0,459.0 1302.0,480.0 1240.0,501.0 1178.0,480.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1240.0" y="480.0">belongs_to</text>
+  <polygon points="2320.0,459.0 2382.0,480.0 2320.0,501.0 2258.0,480.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2320.0" y="480.0">aliases</text>
+  <polygon points="1490.0,459.0 1552.0,480.0 1490.0,501.0 1428.0,480.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1490.0" y="480.0">overrides</text>
+  <polygon points="1490.0,619.0 1552.0,640.0 1490.0,661.0 1428.0,640.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1490.0" y="640.0">granted_to</text>
+  <polygon points="2030.0,619.0 2092.0,640.0 2030.0,661.0 1968.0,640.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2030.0" y="640.0">grantee_tomb</text>
+  <polygon points="1490.0,585.0 1552.0,606.0 1490.0,627.0 1428.0,606.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1490.0" y="606.0">granted_by</text>
+  <polygon points="2030.0,653.0 2092.0,674.0 2030.0,695.0 1968.0,674.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2030.0" y="674.0">grantor_tomb</text>
+  <polygon points="1490.0,799.0 1552.0,820.0 1490.0,841.0 1428.0,820.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1490.0" y="820.0">for_user</text>
+  <polygon points="2030.0,799.0 2092.0,820.0 2030.0,841.0 1968.0,820.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2030.0" y="820.0">for_tomb</text>
+  <polygon points="1000.0,819.0 1062.0,840.0 1000.0,861.0 938.0,840.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1000.0" y="840.0">member_user</text>
+  <polygon points="520.0,1019.0 582.0,1040.0 520.0,1061.0 458.0,1040.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="520.0" y="1040.0">in_dept</text>
+  <polygon points="520.0,1239.0 582.0,1260.0 520.0,1281.0 458.0,1260.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="520.0" y="1260.0">dept_allows</text>
+  <polygon points="520.0,1459.0 582.0,1480.0 520.0,1501.0 458.0,1480.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="520.0" y="1480.0">allows_title</text>
+  <polygon points="1000.0,1129.0 1062.0,1150.0 1000.0,1171.0 938.0,1150.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1000.0" y="1150.0">user_in_dept</text>
+  <polygon points="1000.0,1349.0 1064.4,1370.0 1000.0,1391.0 935.6,1370.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1000.0" y="1370.0">dept_has_title</text>
+  <polygon points="3570.0,579.0 3632.0,600.0 3570.0,621.0 3508.0,600.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3570.0" y="600.0">supplements</text>
+  <polygon points="2750.0,229.0 2821.6,250.0 2750.0,271.0 2678.4,250.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="250.0">primary_lecturer</text>
+  <polygon points="2750.0,301.0 2818.0,322.0 2750.0,343.0 2682.0,322.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="322.0">created_by_user</text>
+  <polygon points="2750.0,373.0 2818.0,394.0 2750.0,415.0 2682.0,394.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="394.0">created_by_tomb</text>
+  <polygon points="3450.0,889.0 3514.4,910.0 3450.0,931.0 3385.6,910.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3450.0" y="910.0">assists_course</text>
+  <polygon points="2750.0,445.0 2814.4,466.0 2750.0,487.0 2685.6,466.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="466.0">assistant_user</text>
+  <polygon points="3450.0,509.0 3532.4,530.0 3450.0,551.0 3367.6,530.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3450.0" y="530.0">targets_course_dept</text>
+  <polygon points="2750.0,517.0 2812.0,538.0 2750.0,559.0 2688.0,538.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="538.0">targets_dept</text>
+  <polygon points="3450.0,629.0 3536.0,650.0 3450.0,671.0 3364.0,650.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3450.0" y="650.0">targets_course_title</text>
+  <polygon points="2750.0,589.0 2812.0,610.0 2750.0,631.0 2688.0,610.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="610.0">targets_title</text>
+  <polygon points="3450.0,749.0 3532.4,770.0 3450.0,791.0 3367.6,770.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3450.0" y="770.0">targets_course_line</text>
+  <polygon points="2750.0,661.0 2812.0,682.0 2750.0,703.0 2688.0,682.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="682.0">targets_line</text>
+  <polygon points="4120.0,529.0 4182.0,550.0 4120.0,571.0 4058.0,550.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4120.0" y="550.0">draft_of</text>
+  <polygon points="2750.0,733.0 2818.0,754.0 2750.0,775.0 2682.0,754.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="754.0">updated_by_user</text>
+  <polygon points="2750.0,805.0 2818.0,826.0 2750.0,847.0 2682.0,826.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="826.0">updated_by_tomb</text>
+  <polygon points="4120.0,849.0 4182.0,870.0 4120.0,891.0 4058.0,870.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4120.0" y="870.0">version_of</text>
+  <polygon points="2750.0,877.0 2825.2,898.0 2750.0,919.0 2674.8,898.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="898.0">published_by_user</text>
+  <polygon points="2750.0,949.0 2825.2,970.0 2750.0,991.0 2674.8,970.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="970.0">published_by_tomb</text>
+  <polygon points="4740.0,519.0 4802.0,540.0 4740.0,561.0 4678.0,540.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4740.0" y="540.0">in_draft</text>
+  <polygon points="4740.0,839.0 4811.6,860.0 4740.0,881.0 4668.4,860.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4740.0" y="860.0">in_published_ver</text>
+  <polygon points="5240.0,679.0 5302.0,700.0 5240.0,721.0 5178.0,700.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="5240.0" y="700.0">in_module</text>
+  <polygon points="5460.0,899.0 5522.0,920.0 5460.0,941.0 5398.0,920.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="5460.0" y="920.0">quiz_for</text>
+  <polygon points="3780.0,1009.0 3844.4,1030.0 3780.0,1051.0 3715.6,1030.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3780.0" y="1030.0">submission_for</text>
+  <polygon points="2750.0,1021.0 2825.2,1042.0 2750.0,1063.0 2674.8,1042.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="1042.0">submitted_by_user</text>
+  <polygon points="2750.0,1093.0 2825.2,1114.0 2750.0,1135.0 2674.8,1114.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="1114.0">submitted_by_tomb</text>
+  <polygon points="2750.0,1165.0 2821.6,1186.0 2750.0,1207.0 2678.4,1186.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="1186.0">reviewed_by_user</text>
+  <polygon points="2750.0,1237.0 2821.6,1258.0 2750.0,1279.0 2678.4,1258.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="1258.0">reviewed_by_tomb</text>
+  <polygon points="4040.0,1489.0 4102.0,1510.0 4040.0,1531.0 3978.0,1510.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4040.0" y="1510.0">staged_for</text>
+  <polygon points="3520.0,1489.0 3582.0,1510.0 3520.0,1531.0 3458.0,1510.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3520.0" y="1510.0">note_on</text>
+  <polygon points="3000.0,1934.0 3062.0,1955.0 3000.0,1976.0 2938.0,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3000.0" y="1955.0">comment_on</text>
+  <polygon points="2680.0,2049.0 2742.0,2070.0 2680.0,2091.0 2618.0,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2680.0" y="2070.0">authored_by</text>
+  <polygon points="5080.0,2359.0 5148.0,2380.0 5080.0,2401.0 5012.0,2380.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="5080.0" y="2380.0">reports_comment</text>
+  <polygon points="2865.0,2049.0 2927.0,2070.0 2865.0,2091.0 2803.0,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2865.0" y="2070.0">reported_by</text>
+  <polygon points="3050.0,2049.0 3121.6,2070.0 3050.0,2091.0 2978.4,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3050.0" y="2070.0">uploaded_by_user</text>
+  <polygon points="3235.0,2049.0 3306.6,2070.0 3235.0,2091.0 3163.4,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3235.0" y="2070.0">uploaded_by_tomb</text>
+  <polygon points="5080.0,2799.0 5151.6,2820.0 5080.0,2841.0 5008.4,2820.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="5080.0" y="2820.0">references_asset</text>
+  <polygon points="3240.0,1934.0 3315.2,1955.0 3240.0,1976.0 3164.8,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3240.0" y="1955.0">attached_to_draft</text>
+  <polygon points="3480.0,1934.0 3548.0,1955.0 3480.0,1976.0 3412.0,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3480.0" y="1955.0">attached_to_ver</text>
+  <polygon points="3420.0,2049.0 3495.2,2070.0 3420.0,2091.0 3344.8,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3420.0" y="2070.0">attached_to_cycle</text>
+  <polygon points="780.0,2589.0 842.0,2610.0 780.0,2631.0 718.0,2610.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="780.0" y="2610.0">assists_group</text>
+  <polygon points="700.0,1999.0 778.8,2020.0 700.0,2041.0 621.2,2020.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="700.0" y="2020.0">assistant_user_grp</text>
+  <polygon points="1490.0,2819.0 1554.4,2840.0 1490.0,2861.0 1425.6,2840.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1490.0" y="2840.0">cycle_of_group</text>
+  <polygon points="2080.0,2599.0 2151.6,2620.0 2080.0,2641.0 2008.4,2620.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2080.0" y="2620.0">assigns_in_cycle</text>
+  <polygon points="3605.0,2049.0 3669.4,2070.0 3605.0,2091.0 3540.6,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3605.0" y="2070.0">assigns_course</text>
+  <polygon points="780.0,2819.0 848.0,2840.0 780.0,2861.0 712.0,2840.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="780.0" y="2840.0">member_of_group</text>
+  <polygon points="1080.0,1999.0 1148.0,2020.0 1080.0,2041.0 1012.0,2020.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1080.0" y="2020.0">member_user_grp</text>
+  <polygon points="1140.0,3169.0 1202.0,3190.0 1140.0,3211.0 1078.0,3190.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1140.0" y="3190.0">qr_for_group</text>
+  <polygon points="780.0,3049.0 844.4,3070.0 780.0,3091.0 715.6,3070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="780.0" y="3070.0">requests_group</text>
+  <polygon points="1460.0,1999.0 1522.0,2020.0 1460.0,2041.0 1398.0,2020.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1460.0" y="2020.0">requested_by</text>
+  <polygon points="1460.0,3169.0 1522.0,3190.0 1460.0,3211.0 1398.0,3190.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="1460.0" y="3190.0">resource_for</text>
+  <polygon points="3790.0,2049.0 3852.0,2070.0 3790.0,2091.0 3728.0,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3790.0" y="2070.0">enrolled_user</text>
+  <polygon points="3720.0,1934.0 3782.0,1955.0 3720.0,1976.0 3658.0,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3720.0" y="1955.0">enrolled_in</text>
+  <polygon points="3530.0,2419.0 3592.0,2440.0 3530.0,2461.0 3468.0,2440.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3530.0" y="2440.0">grant_for</text>
+  <polygon points="2750.0,2459.0 2821.6,2480.0 2750.0,2501.0 2678.4,2480.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="2480.0">granted_by_group</text>
+  <polygon points="3180.0,2719.0 3242.0,2740.0 3180.0,2761.0 3118.0,2740.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3180.0" y="2740.0">attempt_of</text>
+  <polygon points="3960.0,1934.0 4022.0,1955.0 3960.0,1976.0 3898.0,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3960.0" y="1955.0">uses_version</text>
+  <polygon points="2750.0,2639.0 2812.0,2660.0 2750.0,2681.0 2688.0,2660.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="2750.0" y="2660.0">in_cycle</text>
+  <polygon points="3530.0,3019.0 3592.0,3040.0 3530.0,3061.0 3468.0,3040.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3530.0" y="3040.0">progress_in</text>
+  <polygon points="4200.0,1934.0 4262.0,1955.0 4200.0,1976.0 4138.0,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4200.0" y="1955.0">tracks_lesson</text>
+  <polygon points="3350.0,3339.0 3412.0,3360.0 3350.0,3381.0 3288.0,3360.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3350.0" y="3360.0">certifies</text>
+  <polygon points="4440.0,1934.0 4504.4,1955.0 4440.0,1976.0 4375.6,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4440.0" y="1955.0">issued_for_ver</text>
+  <polygon points="3975.0,2049.0 4037.0,2070.0 3975.0,2091.0 3913.0,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="3975.0" y="2070.0">notifies_user</text>
+  <polygon points="4680.0,1934.0 4742.0,1955.0 4680.0,1976.0 4618.0,1955.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4680.0" y="1955.0">contact_for</text>
+  <polygon points="4160.0,2049.0 4224.4,2070.0 4160.0,2091.0 4095.6,2070.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="4160.0" y="2070.0">visibility_for</text>
+  <polygon points="5400.0,3679.0 5462.0,3700.0 5400.0,3721.0 5338.0,3700.0" fill="#FEF7E0" stroke="#E37400" stroke-width="1.9" />
+  <text class="rel-txt" x="5400.0" y="3700.0">execution_of</text>
+  <rect x="160.0" y="296.0" width="240.0" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="280.0" y="320.0">MaritalStatusCatalog</text>
+  <rect x="119.2" y="516.0" width="321.59999999999997" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="280.0" y="540.0">MilitaryServiceStatusCatalog</text>
+  <rect x="175.0" y="736.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="280.0" y="760.0">MetroLine</text>
+  <rect x="139.6" y="1016.0" width="280.79999999999995" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="280.0" y="1040.0">OrganizationalDepartment</text>
+  <rect x="175.0" y="1456.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="280.0" y="1480.0">JobTitle</text>
+  <rect x="175.0" y="1709.0" width="210" height="62" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="280.0" y="1731.0">DepartmentTrack</text>
+  <text class="standalone-txt" x="280.0" y="1753.0">[Standalone Config — No FK]</text>
+  <rect x="599.2" y="1016.0" width="321.59999999999997" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="760.0" y="1040.0">UserOrganizationalDepartment</text>
+  <rect x="650.2" y="1456.0" width="219.6" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="760.0" y="1480.0">DepartmentJobTitle</text>
+  <rect x="1135.0" y="1236.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1240.0" y="1260.0">UserJobTitle</text>
+  <rect x="655.0" y="296.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="760.0" y="320.0">RolePolicy</text>
+  <rect x="1135.0" y="296.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1240.0" y="320.0">ServerSession</text>
+  <rect x="1135.0" y="616.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1240.0" y="640.0">User</text>
+  <rect x="1609.8" y="296.0" width="260.4" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1740.0" y="320.0">UserPermissionOverride</text>
+  <rect x="1630.2" y="616.0" width="219.6" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1740.0" y="640.0">DelegatedAuthority</text>
+  <rect x="2200.0" y="616.0" width="240.0" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="2320.0" y="640.0">DeletedUserTombstone</text>
+  <rect x="2215.0" y="296.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="2320.0" y="320.0">DeletedUserAlias</text>
+  <rect x="1563.9" y="976.0" width="352.2" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1740.0" y="1000.0">HistoricalServiceTrainingRecord</text>
+  <rect x="1609.8" y="1649.0" width="260.4" height="62" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1740.0" y="1671.0">PendingApprovalRequest</text>
+  <text class="standalone-txt" x="1740.0" y="1693.0">[Standalone — Non-FK Polymorphic]</text>
+  <rect x="2215.0" y="1649.0" width="210" height="62" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="2320.0" y="1671.0">AuditLogEntry</text>
+  <text class="standalone-txt" x="2320.0" y="1693.0">[Standalone — Non-FK Snapshot]</text>
+  <rect x="2979.6" y="316.0" width="280.79999999999995" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3120.0" y="340.0">CourseAudienceDepartment</text>
+  <rect x="2989.8" y="556.0" width="260.4" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3120.0" y="580.0">CourseAudienceJobTitle</text>
+  <rect x="2984.7" y="796.0" width="270.6" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3120.0" y="820.0">CourseAudienceMetroLine</text>
+  <rect x="2984.7" y="1076.0" width="270.6" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3120.0" y="1100.0">CourseAssistantLecturer</text>
+  <rect x="3675.0" y="696.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3780.0" y="720.0">Course</text>
+  <rect x="4355.0" y="356.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="4460.0" y="380.0">CourseDraft</text>
+  <rect x="4329.8" y="996.0" width="260.4" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="4460.0" y="1020.0">PublishedCourseVersion</text>
+  <rect x="4915.0" y="676.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5020.0" y="700.0">Module</text>
+  <rect x="5355.0" y="676.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5460.0" y="700.0">LessonItem</text>
+  <rect x="5355.0" y="1116.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5460.0" y="1140.0">QuizDefinition</text>
+  <rect x="3649.8" y="1316.0" width="260.4" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3780.0" y="1340.0">CourseReviewSubmission</text>
+  <rect x="3155.0" y="1656.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3260.0" y="1680.0">WorkingNote</text>
+  <rect x="4195.0" y="1656.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="4300.0" y="1680.0">StagedAdminEdit</text>
+  <rect x="279.6" y="2356.0" width="280.79999999999995" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="420.0" y="2380.0">GroupAssistantAssignment</text>
+  <rect x="315.0" y="2816.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="420.0" y="2840.0">GroupMembership</text>
+  <rect x="315.0" y="3276.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="420.0" y="3300.0">GroupJoinRequest</text>
+  <rect x="1035.0" y="2816.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1140.0" y="2840.0">TrainingGroup</text>
+  <rect x="1035.0" y="3516.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1140.0" y="3540.0">GroupQrCode</text>
+  <rect x="1675.0" y="3516.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1780.0" y="3540.0">GroupResource</text>
+  <rect x="1735.0" y="2816.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="1840.0" y="2840.0">GroupRenewalCycle</text>
+  <rect x="2194.9" y="2376.0" width="250.2" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="2320.0" y="2400.0">GroupCourseAssignment</text>
+  <rect x="3075.0" y="2416.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3180.0" y="2440.0">Enrollment</text>
+  <rect x="3754.9" y="2416.0" width="250.2" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3880.0" y="2440.0">EnrollmentSourceGrant</text>
+  <rect x="3075.0" y="3016.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3180.0" y="3040.0">CourseAttempt</text>
+  <rect x="3775.0" y="3016.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3880.0" y="3040.0">LessonProgress</text>
+  <rect x="3415.0" y="3656.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="3520.0" y="3680.0">CertificateRecord</text>
+  <rect x="4655.0" y="2356.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="4760.0" y="2380.0">CourseComment</text>
+  <rect x="5285.1" y="2356.0" width="229.79999999999998" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5400.0" y="2380.0">CourseCommentReport</text>
+  <rect x="4655.0" y="2796.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="4760.0" y="2820.0">MediaAsset</text>
+  <rect x="5274.9" y="2796.0" width="250.2" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5400.0" y="2820.0">MediaContentReference</text>
+  <rect x="4655.0" y="3236.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="4760.0" y="3260.0">NotificationItem</text>
+  <rect x="5295.0" y="3236.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5400.0" y="3260.0">WhatsAppContact</text>
+  <rect x="4629.8" y="3676.0" width="260.4" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="4760.0" y="3700.0">UserWhatsAppVisibility</text>
+  <rect x="5295.0" y="3536.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5400.0" y="3560.0">ScheduledJob</text>
+  <rect x="5295.0" y="3816.0" width="210" height="48" rx="4" fill="#E8F0FE" stroke="#1967D2" stroke-width="2.2" />
+  <text class="entity-txt" x="5400.0" y="3840.0">ScheduledJobRun</text>
+</svg>

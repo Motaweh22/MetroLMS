@@ -1,0 +1,877 @@
+openapi: 3.1.0
+info:
+  title: MetroLMS Master REST API Specification (Draft — WP-5.3)
+  version: 0.5.3-draft
+  description: >
+    DRAFT OpenAPI 3.1.0 specification for MetroLMS (Django 5+ / DRF / Microsoft SQL Server).
+    Grounded in WP-5.1 Discovery Baseline, WP-5.2 OpenAPI Foundations (METROLMS-API-FOUND-001),
+    Cluster 1 (METROLMS-API-DOM-001), and Cluster 2 (METROLMS-API-DOM-002).
+    NOT FROZEN: Subject to OD-API-01..04, A-03a-1, A-03c-1..3, and WP-5.5 Schema Review Gate.
+servers:
+  - url: /
+    description: Same-origin Django origin (OD-API-01 versioning pending)
+
+security:
+  - djangoSessionCookie: []
+    djangoCsrfHeader: []
+
+tags:
+  - name: Domain01-Auth
+  - name: Domain02-Users
+  - name: Domain03-Permissions
+  - name: Domain04-Catalog
+  - name: Domain05-Builder-Gated
+  - name: Domain06-Content-Comments
+  - name: Domain07-CourseReview
+  - name: Domain08-Groups
+  - name: Domain09-Membership
+  - name: Domain10-Renewals
+  - name: Domain11-14-Learning
+  - name: Domain15-Certificates
+  - name: Domain17-Monitoring
+  - name: Domain18-Approvals-Audit
+  - name: Domain19-Notifications-WhatsApp
+  - name: Domain21-Media-Gated
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Domain01-Auth]
+      summary: Authenticate user via phone number and password and issue server-side Django session cookie (D-AUTH-01, D-OWNER-REV-13)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password]
+              properties:
+                phone: { type: string, description: "Globally unique canonical E.164 phone-number login identifier (D-OWNER-REV-13, D-OWNER-REV-18; normalized to E.164 before matching; shared phones prohibited)" }
+                password: { type: string, format: password }
+      responses:
+        "200": { description: Authenticated user payload (no client token in prod) }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "403": { $ref: "#/components/responses/ForbiddenError" }
+  /api/auth/logout:
+    post:
+      tags: [Domain01-Auth]
+      summary: Destroy server-side session (LOGOUT_CONFIRMED)
+      responses:
+        "200": { description: "{ status: LOGOUT_CONFIRMED }" }
+  /api/auth/me:
+    get:
+      tags: [Domain01-Auth]
+      summary: Rehydrate active session user & capabilities (D-AUTH-01)
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: Authenticated user profile }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+
+  /api/admin/users:
+    get:
+      tags: [Domain02-Users]
+      summary: List managed users (INV-R8 excludes Developer for non-Developers)
+      security: [{ djangoSessionCookie: [] }]
+      parameters:
+        - { name: query, in: query, schema: { type: string } }
+        - { name: role, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: department, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/PageQueryParam" }
+        - { $ref: "#/components/parameters/PageSizeQueryParam" }
+      responses:
+        "200": { description: ManagedUserDTO list / paginated (OD-API-02/03 provisional) }
+    post:
+      tags: [Domain02-Users]
+      summary: Create managed user (INV-R1..R3)
+      responses:
+        "201": { description: Created ManagedUserDTO }
+        "400": { $ref: "#/components/responses/BadRequestError" }
+        "422": { $ref: "#/components/responses/UnprocessableEntityError" }
+  /api/admin/users/{id}/role:
+    patch:
+      tags: [Domain02-Users]
+      summary: Update user role (INV-R2, INV-R3, INV-R8)
+      parameters: [{ $ref: "#/components/parameters/IdPathParam" }]
+      responses:
+        "200": { description: Updated user }
+        "403": { $ref: "#/components/responses/ForbiddenError" }
+        "404": { $ref: "#/components/responses/NotFoundError" }
+  /api/admin/users/{id}/status:
+    patch:
+      tags: [Domain02-Users]
+      summary: Suspend or reactivate user (INV-R8)
+      parameters: [{ $ref: "#/components/parameters/IdPathParam" }]
+      responses:
+        "200": { description: Updated user }
+        "404": { $ref: "#/components/responses/NotFoundError" }
+  /api/admin/users/{id}:
+    delete:
+      tags: [Domain02-Users]
+      summary: Delete/anonymize user (D-01; INV-R9 202 for assistant_admin; INV-R8 404)
+      parameters: [{ $ref: "#/components/parameters/IdPathParam" }]
+      responses:
+        "200": { description: User soft-deleted }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+        "404": { $ref: "#/components/responses/NotFoundError" }
+  /api/admin/users/{userId}/transcript:
+    get:
+      tags: [Domain02-Users]
+      summary: Get unified user learning transcript (MFR-33, INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses:
+        "200": { description: UserTranscriptDTO }
+        "404": { $ref: "#/components/responses/NotFoundError" }
+  /api/profile:
+    get:
+      tags: [Domain02-Users]
+      summary: Get self profile and learning stats
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: UserProfileResponse }
+
+  /api/admin/permissions/roles:
+    get:
+      tags: [Domain03-Permissions]
+      summary: List 6-tier role permission baselines
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: RolePermissionsConfig[] }
+  /api/admin/permissions/roles/{role}:
+    put:
+      tags: [Domain03-Permissions]
+      summary: Update role baseline permissions within ceilings
+      parameters: [{ name: role, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Updated RolePermissionsConfig }
+        "422": { $ref: "#/components/responses/UnprocessableEntityError" }
+  /api/admin/permissions/users/{userId}:
+    get:
+      tags: [Domain03-Permissions]
+      summary: Get individual UserPermissionOverride (INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses:
+        "200": { description: Override wrapper }
+    put:
+      tags: [Domain03-Permissions]
+      summary: Set individual UserPermissionOverride within role ceiling
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses:
+        "200": { description: Saved UserPermissionOverride }
+    delete:
+      tags: [Domain03-Permissions]
+      summary: Reset user permission override
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses:
+        "200": { description: Override removed }
+  /api/admin/permissions/effective/{userId}:
+    get:
+      tags: [Domain03-Permissions]
+      summary: Compute 6-step effective permissions
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses:
+        "200": { description: EffectiveUserPermissions }
+  /api/admin/permissions/governance/delegation/{userId}:
+    get:
+      tags: [Domain03-Permissions]
+      summary: Get exact-capability DelegatedAuthority status
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses:
+        "200": { description: Delegation status }
+    post:
+      tags: [Domain03-Permissions]
+      summary: Update exact-capability DelegatedAuthority (INV-R9)
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses:
+        "200": { description: Updated delegation }
+  /api/admin/permissions/governance/approvals:
+    get:
+      tags: [Domain18-Approvals-Audit]
+      summary: List PendingApprovalRequest queue
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: ApprovalRequest[] }
+    post:
+      tags: [Domain18-Approvals-Audit]
+      summary: Submit approval request
+      responses:
+        "201": { description: Created request }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+  /api/admin/permissions/governance/approvals/{id}/approve:
+    post:
+      tags: [Domain18-Approvals-Audit]
+      summary: Approve and execute PendingApprovalRequest with INV-R10 revalidation
+      parameters: [{ $ref: "#/components/parameters/IdPathParam" }]
+      responses:
+        "200": { description: Executed }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/UnprocessableEntityError" }
+  /api/admin/permissions/governance/approvals/{id}/reject:
+    post:
+      tags: [Domain18-Approvals-Audit]
+      summary: Reject PendingApprovalRequest
+      parameters: [{ $ref: "#/components/parameters/IdPathParam" }]
+      responses:
+        "200": { description: Rejected }
+  /api/admin/audit:
+    get:
+      tags: [Domain18-Approvals-Audit]
+      summary: Query paginated security audit log (D-14, INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/PageQueryParam" }
+        - { $ref: "#/components/parameters/PageSizeQueryParam" }
+      responses:
+        "200": { description: Paginated audit entries }
+  /api/admin/audit/{id}:
+    get:
+      tags: [Domain18-Approvals-Audit]
+      summary: Get single audit entry (INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdPathParam" }]
+      responses:
+        "200": { description: SystemAuditLogEntryDTO }
+        "404": { $ref: "#/components/responses/NotFoundError" }
+  /api/admin/department-tracks:
+    get:
+      tags: [Domain03-Permissions]
+      summary: List department track mappings
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: DepartmentTracksCatalogResponse }
+  /api/admin/department-tracks/{departmentId}:
+    get:
+      tags: [Domain03-Permissions]
+      summary: Get single department track mapping
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ name: departmentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: SingleDepartmentTracksResponse }
+    put:
+      tags: [Domain03-Permissions]
+      summary: Update allowed tracks (INV-R9 202 for assistant_admin)
+      parameters: [{ name: departmentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Updated }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+
+  /api/courses:
+    get:
+      tags: [Domain04-Catalog]
+      summary: List published courses (ADR-008 excludes archived)
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: Course[] }
+  /api/courses/{courseId}:
+    get:
+      tags: [Domain04-Catalog]
+      summary: Get published course details
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: Course }
+        "404": { $ref: "#/components/responses/NotFoundError" }
+  /api/lecturer/courses:
+    get:
+      tags: [Domain05-Builder-Gated]
+      summary: List lecturer-owned or admin-visible courses
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: Course[] }
+    post:
+      tags: [Domain05-Builder-Gated]
+      summary: Create new draft course
+      responses:
+        "201": { description: Created draft Course }
+  /api/lecturer/courses/{courseId}:
+    get:
+      tags: [Domain05-Builder-Gated]
+      summary: Fetch course structure for builder
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: Course }
+  /api/lecturer/courses/{courseId}/draft:
+    put:
+      tags: [Domain05-Builder-Gated]
+      summary: "PROVISIONAL (GATED A-03a-1): Save course draft preserving PublishedCourseVersion (Rule B)"
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: SaveDraftResponse }
+
+  /api/courses/{courseId}/comments:
+    get:
+      tags: [Domain06-Content-Comments]
+      summary: List active course comments
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: CourseComment[] }
+    post:
+      tags: [Domain06-Content-Comments]
+      summary: Post course comment (D-SEC-01 sanitized)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "201": { description: CourseComment }
+  /api/courses/{courseId}/comments/{commentId}:
+    delete:
+      tags: [Domain06-Content-Comments]
+      summary: Delete course comment (instructor-scoped)
+      parameters:
+        - { $ref: "#/components/parameters/CourseIdPathParam" }
+        - { name: commentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Deleted }
+  /api/comments/{commentId}/report:
+    post:
+      tags: [Domain06-Content-Comments]
+      summary: Report inappropriate comment
+      parameters: [{ name: commentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Reported CourseComment }
+  /api/admin/comments:
+    get:
+      tags: [Domain06-Content-Comments]
+      summary: List all comments for moderation
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: CourseComment[] }
+  /api/admin/comments/reported:
+    get:
+      tags: [Domain06-Content-Comments]
+      summary: List reported comments queue
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: CourseComment[] }
+  /api/admin/comments/summary:
+    get:
+      tags: [Domain06-Content-Comments]
+      summary: Comment moderation summary metrics
+      security: [{ djangoSessionCookie: [] }]
+      responses:
+        "200": { description: CommentModerationSummaryDTO }
+  /api/admin/comments/{commentId}:
+    delete:
+      tags: [Domain06-Content-Comments]
+      summary: Delete comment (INV-R9 202 for assistant_admin)
+      parameters: [{ name: commentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Deleted }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+  /api/admin/comments/{commentId}/ignore-report:
+    patch:
+      tags: [Domain06-Content-Comments]
+      summary: Clear comment report flag
+      parameters: [{ name: commentId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Updated CourseComment }
+  /api/admin/courses/{courseId}/comments-toggle:
+    patch:
+      tags: [Domain06-Content-Comments]
+      summary: Toggle course comments policy (INV-R9)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: Updated policy }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+  /api/courses/{courseId}/instructors:
+    put:
+      tags: [Domain06-Content-Comments]
+      summary: Assign primary and co-lecturers
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: Updated Course }
+
+  # Domain 07 — API-REC-02 Canonical Course Review Family (16 legacy aliases excluded)
+  /api/courses/{courseId}/submit:
+    post:
+      tags: [Domain07-CourseReview]
+      summary: Submit course draft for review
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: Submitted }
+  /api/courses/{courseId}/review-data:
+    get:
+      tags: [Domain07-CourseReview]
+      summary: Get course review data
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: CourseReviewDataResponseDTO }
+  /api/admin/courses/{courseId}/review:
+    get:
+      tags: [Domain07-CourseReview]
+      summary: Canonical admin review payload (API-REC-02)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses:
+        "200": { description: Admin review data }
+  /api/admin/courses/{courseId}/staged-edits:
+    get:
+      tags: [Domain07-CourseReview]
+      summary: Get staged admin edits (API-REC-02)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Staged edits } }
+    put:
+      tags: [Domain07-CourseReview]
+      summary: Save staged admin edits (API-REC-02)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Saved } }
+    delete:
+      tags: [Domain07-CourseReview]
+      summary: Discard staged admin edits (API-REC-02)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Discarded } }
+  /api/admin/courses/{courseId}/working-notes:
+    get:
+      tags: [Domain07-CourseReview]
+      summary: Get reviewer working notes (API-REC-02)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: ReviewerWorkingNotes } }
+    put:
+      tags: [Domain07-CourseReview]
+      summary: Save reviewer working notes (API-REC-02)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Saved } }
+  /api/admin/courses/{courseId}/working-notes/{targetType}/{targetId}:
+    delete:
+      tags: [Domain07-CourseReview]
+      summary: Delete specific working note (API-REC-02)
+      parameters:
+        - { $ref: "#/components/parameters/CourseIdPathParam" }
+        - { name: targetType, in: path, required: true, schema: { type: string } }
+        - { name: targetId, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: Deleted } }
+  /api/admin/courses/{courseId}/decision:
+    post:
+      tags: [Domain07-CourseReview]
+      summary: Execute canonical review decision (API-REC-02)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Decision applied } }
+  /api/admin/courses/{courseId}/approve:
+    post:
+      tags: [Domain07-CourseReview]
+      summary: Approve and publish immutable PublishedCourseVersion (API-REC-02, Rule B)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Approved } }
+  /api/admin/courses/{courseId}/return-with-edits:
+    post:
+      tags: [Domain07-CourseReview]
+      summary: Return draft with staged edits (API-REC-02)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Returned } }
+  /api/admin/courses/{courseId}/reject:
+    post:
+      tags: [Domain07-CourseReview]
+      summary: Reject course submission (API-REC-02)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Rejected } }
+
+  /api/groups/my:
+    get:
+      tags: [Domain08-Groups]
+      summary: List trainee groups (ADR-008 excludes archived)
+      security: [{ djangoSessionCookie: [] }]
+      responses: { "200": { description: TraineeGroupItemDTO[] } }
+  /api/groups/{groupId}:
+    get:
+      tags: [Domain08-Groups]
+      summary: Get enriched group details for member
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: EnrichedTrainingGroup } }
+  /api/admin/groups:
+    get:
+      tags: [Domain08-Groups]
+      summary: List admin groups (Rule A / INV-R7)
+      security: [{ djangoSessionCookie: [] }]
+      responses: { "200": { description: GroupSummaryDTO[] } }
+    post:
+      tags: [Domain08-Groups]
+      summary: Create training group (enforces autoRenewalEnabled end-date rule)
+      responses:
+        "201": { description: TrainingGroup }
+        "422": { $ref: "#/components/responses/UnprocessableEntityError" }
+  /api/admin/groups/{groupId}:
+    get:
+      tags: [Domain08-Groups]
+      summary: Get admin group details
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: TrainingGroup } }
+    put:
+      tags: [Domain08-Groups]
+      summary: Update group (Option A / INV-DOM10-10 end-date removal rule)
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Updated TrainingGroup } }
+    delete:
+      tags: [Domain08-Groups]
+      summary: Delete group (INV-R9 202 for assistant_admin)
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses:
+        "200": { description: Deleted }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+  /api/groups/{groupId}/assistants:
+    get:
+      tags: [Domain08-Groups]
+      summary: List group assistants (API-REC-02a RETAIN)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Group assistants } }
+    post:
+      tags: [Domain08-Groups]
+      summary: Add individual group assistant (API-REC-02b RETAIN)
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "201": { description: Assigned } }
+  /api/groups/{groupId}/assistants/{lecturerId}:
+    delete:
+      tags: [Domain08-Groups]
+      summary: Remove group assistant assignment (API-REC-02c RETAIN)
+      parameters:
+        - { $ref: "#/components/parameters/GroupIdPathParam" }
+        - { name: lecturerId, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: Removed } }
+  /api/admin/groups/{groupId}/assistants:
+    put:
+      tags: [Domain08-Groups]
+      summary: Bulk update group assistants
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Updated } }
+  /api/admin/lecturers:
+    get:
+      tags: [Domain08-Groups]
+      summary: List candidate lecturers (INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      responses: { "200": { description: CandidateLecturerDTO[] } }
+  /api/admin/groups/{groupId}/monitoring:
+    get:
+      tags: [Domain17-Monitoring]
+      summary: Group monitoring dashboard (INV-DOM17-01 supervisorIds read-only)
+      security: [{ djangoSessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/GroupIdPathParam" }
+        - { name: cycleId, in: query, schema: { type: string } }
+      responses: { "200": { description: Monitoring metrics } }
+
+  /api/admin/groups/{groupId}/members:
+    get:
+      tags: [Domain09-Membership]
+      summary: List group members
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: GroupMember[] } }
+    post:
+      tags: [Domain09-Membership]
+      summary: Add group members (requires groups.manage_members + INV-R7; A-03c)
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses:
+        "200": { description: Added }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+  /api/admin/groups/{groupId}/members/{userId}:
+    delete:
+      tags: [Domain09-Membership]
+      summary: Remove member with per-course retention (D-07, groups.manage_members, INV-R9)
+      parameters:
+        - { $ref: "#/components/parameters/GroupIdPathParam" }
+        - { $ref: "#/components/parameters/UserIdPathParam" }
+      responses:
+        "200": { description: Removed with per-course grant outcome }
+        "202": { $ref: "#/components/responses/AcceptedPendingApproval" }
+  /api/admin/trainees:
+    get:
+      tags: [Domain09-Membership]
+      summary: List candidate trainees (INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      responses: { "200": { description: CandidateTraineeDTO[] } }
+  /api/groups/join/{code}/info:
+    get:
+      tags: [Domain09-Membership]
+      summary: Preview group info by QR join code
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: GroupPreviewInfoDTO } }
+  /api/groups/join:
+    post:
+      tags: [Domain09-Membership]
+      summary: Join group via QR code
+      responses: { "200": { description: JoinGroupQRResponseDTO } }
+  /api/admin/groups/{groupId}/qr-code/rotate:
+    post:
+      tags: [Domain09-Membership]
+      summary: Rotate group QR code
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Rotated } }
+  /api/admin/groups/{groupId}/qr-code/toggle:
+    post:
+      tags: [Domain09-Membership]
+      summary: Enable/disable group QR code
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Toggled } }
+  /api/admin/groups/{groupId}/join-requests:
+    get:
+      tags: [Domain09-Membership]
+      summary: List group join requests
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Join requests } }
+  /api/admin/groups/{groupId}/join-requests/{requestId}/review:
+    post:
+      tags: [Domain09-Membership]
+      summary: Approve or reject join request
+      parameters:
+        - { $ref: "#/components/parameters/GroupIdPathParam" }
+        - { name: requestId, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: Reviewed } }
+
+  /api/admin/groups/{groupId}/renew:
+    post:
+      tags: [Domain10-Renewals]
+      summary: Manual in-place renewal (API-REC-08A/08B, INV-DOM10-11, INV-DOM10-12)
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses:
+        "200": { description: New GroupRenewalCycle }
+        "409": { $ref: "#/components/responses/ConflictError" }
+        "422": { $ref: "#/components/responses/UnprocessableEntityError" }
+  /api/admin/groups/{groupId}/cycles:
+    get:
+      tags: [Domain10-Renewals]
+      summary: List group renewal cycles
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: GroupRenewalCycle[] } }
+  /api/admin/groups/{groupId}/cycles/{cycleId}:
+    get:
+      tags: [Domain10-Renewals]
+      summary: Get single renewal cycle
+      security: [{ djangoSessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/GroupIdPathParam" }
+        - { $ref: "#/components/parameters/CycleIdPathParam" }
+      responses: { "200": { description: GroupRenewalCycle } }
+  /api/admin/groups/{groupId}/courses:
+    post:
+      tags: [Domain10-Renewals]
+      summary: Assign courses to group cycle
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Updated } }
+
+  /api/courses/{courseId}/enrollments:
+    post:
+      tags: [Domain11-14-Learning]
+      summary: Direct self-enrollment (creates standalone attempt)
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: EnrollmentResponse } }
+  /api/courses/{courseId}/enrollment:
+    get:
+      tags: [Domain11-14-Learning]
+      summary: Check enrollment status
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: EnrollmentStatusResponse } }
+  /api/enrollments/my:
+    get:
+      tags: [Domain11-14-Learning]
+      summary: List current trainee enrollments
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ name: enriched, in: query, schema: { type: boolean } }]
+      responses: { "200": { description: CourseEnrollment[] / EnrichedCourseDetail[] } }
+  /api/users/{userId}/courses/{courseId}/attempts:
+    get:
+      tags: [Domain11-14-Learning]
+      summary: List isolated CourseAttempts (D-06, INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/UserIdPathParam" }
+        - { $ref: "#/components/parameters/CourseIdPathParam" }
+      responses: { "200": { description: CourseAttempt[] } }
+  /api/courses/{courseId}/progress:
+    get:
+      tags: [Domain11-14-Learning]
+      summary: Fetch attempt-scoped progress (D-12 rounding)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: CourseProgressResponse } }
+  /api/courses/{courseId}/items/{itemId}/activity:
+    post:
+      tags: [Domain11-14-Learning]
+      summary: Record attempt-scoped lesson activity
+      parameters:
+        - { $ref: "#/components/parameters/CourseIdPathParam" }
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: Updated LessonProgress } }
+  /api/courses/{courseId}/items/{itemId}/complete:
+    post:
+      tags: [Domain11-14-Learning]
+      summary: Complete lesson item & evaluate D-13 certificate issuance
+      parameters:
+        - { $ref: "#/components/parameters/CourseIdPathParam" }
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: CompleteLessonResponse } }
+  /api/lecturer/courses/{courseId}/performance:
+    get:
+      tags: [Domain11-14-Learning]
+      summary: Course performance report (MFR-32 standalone included)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: CoursePerformanceReportDTO } }
+  /api/certificates/verify/{code}:
+    get:
+      tags: [Domain15-Certificates]
+      summary: "PROPOSED TARGET: Verify version-scoped certificate (D-13)"
+      security: []
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Verification status } }
+
+  /api/notifications:
+    get:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: List user notifications (D-08)
+      security: [{ djangoSessionCookie: [] }]
+      responses: { "200": { description: NotificationsResponse } }
+  /api/notifications/{id}/read:
+    patch:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: Mark notification as read
+      parameters: [{ $ref: "#/components/parameters/IdPathParam" }]
+      responses: { "200": { description: Updated notification + unreadCount } }
+  /api/notifications/mark-all-read:
+    post:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: Mark all notifications read
+      responses: { "200": { description: "{ success, unreadCount }" } }
+  /api/courses/{courseId}/whatsapp-contacts:
+    get:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: Get course WhatsApp contacts (D-09)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Contacts } }
+    put:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: Update course WhatsApp contacts
+      parameters: [{ $ref: "#/components/parameters/CourseIdPathParam" }]
+      responses: { "200": { description: Updated Course } }
+  /api/admin/users/{userId}/whatsapp-visibility:
+    get:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: Get user WhatsApp support visibility (INV-R8)
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses: { "200": { description: UserWhatsAppVisibilityConfigDTO } }
+    put:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: Update user WhatsApp support visibility
+      parameters: [{ $ref: "#/components/parameters/UserIdPathParam" }]
+      responses: { "200": { description: UserWhatsAppVisibilityConfigDTO } }
+  /api/public/support-contacts:
+    get:
+      tags: [Domain19-Notifications-WhatsApp]
+      summary: Public support WhatsApp contact resolver
+      security: []
+      parameters: [{ name: scenario, in: query, required: true, schema: { type: string } }]
+      responses: { "200": { description: PublicSupportContactsResponseDTO } }
+
+  /api/admin/groups/{groupId}/materials:
+    get:
+      tags: [Domain21-Media-Gated]
+      summary: List active group cycle folders & MediaAssetReferences
+      security: [{ djangoSessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GroupIdPathParam" }]
+      responses: { "200": { description: Materials list } }
+  /api/admin/groups/{groupId}/materials/files/{fileId}:
+    patch:
+      tags: [Domain21-Media-Gated]
+      summary: Update reference-level title/isVisible (INV-DOM21-13..15, materials.manage_references)
+      parameters:
+        - { $ref: "#/components/parameters/GroupIdPathParam" }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Updated reference }
+        "422": { $ref: "#/components/responses/UnprocessableEntityError" }
+    delete:
+      tags: [Domain21-Media-Gated]
+      summary: "BLOCKED (A-03c-1): Logical Detachment of media reference (INV-DOM21-18)"
+      parameters:
+        - { $ref: "#/components/parameters/GroupIdPathParam" }
+        - { name: fileId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Logically detached (DTO pending A-03c-1) }
+
+components:
+  securitySchemes:
+    djangoSessionCookie:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    djangoCsrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRFToken
+  parameters:
+    IdPathParam: { name: id, in: path, required: true, schema: { type: string } }
+    UserIdPathParam: { name: userId, in: path, required: true, schema: { type: string } }
+    CourseIdPathParam: { name: courseId, in: path, required: true, schema: { type: string } }
+    GroupIdPathParam: { name: groupId, in: path, required: true, schema: { type: string } }
+    CycleIdPathParam: { name: cycleId, in: path, required: true, schema: { type: string } }
+    PageQueryParam: { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSizeQueryParam: { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    PendingApprovalResponse:
+      type: object
+      required: [status, approvalRequestId, actionType, requestedByUserId, createdAt, message]
+      properties:
+        status: { type: string, const: PendingApproval }
+        approvalRequestId: { type: string }
+        actionType: { type: string }
+        requestedByUserId: { type: string }
+        createdAt: { type: string, format: date-time }
+        message: { type: string }
+    StandardErrorResponse:
+      type: object
+      required: [status, code, message]
+      properties:
+        status: { type: string, const: ERROR }
+        code: { type: string }
+        message: { type: string }
+        fieldErrors:
+          type: object
+          additionalProperties: { type: array, items: { type: string } }
+    MediaAssetReference:
+      type: object
+      required: [assetId, url, mimeType, fileName]
+      properties:
+        assetId: { type: string }
+        url: { type: string, format: uri-reference }
+        mimeType: { type: string }
+        fileName: { type: string }
+        sizeBytes: { type: integer, minimum: 0 }
+        disposition: { type: string, enum: [inline, attachment] }
+  responses:
+    AcceptedPendingApproval:
+      description: 202 Accepted — Pending Admin Approval (INV-R9)
+      content: { application/json: { schema: { $ref: "#/components/schemas/PendingApprovalResponse" } } }
+    BadRequestError:
+      description: 400 Bad Request
+      content: { application/json: { schema: { $ref: "#/components/schemas/StandardErrorResponse" } } }
+    UnauthorizedError:
+      description: 401 Unauthorized
+      content: { application/json: { schema: { $ref: "#/components/schemas/StandardErrorResponse" } } }
+    ForbiddenError:
+      description: 403 Forbidden
+      content: { application/json: { schema: { $ref: "#/components/schemas/StandardErrorResponse" } } }
+    NotFoundError:
+      description: 404 Not Found (includes INV-R8 Developer masking)
+      content: { application/json: { schema: { $ref: "#/components/schemas/StandardErrorResponse" } } }
+    ConflictError:
+      description: 409 Conflict
+      content: { application/json: { schema: { $ref: "#/components/schemas/StandardErrorResponse" } } }
+    UnprocessableEntityError:
+      description: 422 Unprocessable Entity
+      content: { application/json: { schema: { $ref: "#/components/schemas/StandardErrorResponse" } } }
+

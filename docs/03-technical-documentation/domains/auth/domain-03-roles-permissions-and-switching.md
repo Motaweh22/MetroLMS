@@ -40,7 +40,7 @@
 
 - **Failure Scenarios & Edge Cases:**
   - Override exceeding role ceiling: Rejected with Arabic error (`"الصلاحية [X] تقع خارج السقف الأقصى المسموح به لدور [Y]..."`).
-  - `superior`/`super_admin` attempting any mutation (`INV-R6`): Immediate `403 Forbidden`.
+  - Ordinary `admin` attempting to appoint/create/mutate `admin`, `super_admin`, or `developer` (`INV-R2`, `INV-R3`, Owner Clarification `2026-11-13`): Immediate `403 Forbidden` (`INVARIANT_ADMIN_PROTECTED` / `INVARIANT_SUPER_ADMIN_EXCLUSIVITY`); `super_admin` (`Superior`) mutating peer `super_admin` (`OD-01`): Immediate `403 Forbidden`.
   - `/design-system` accessed in production or by non-Developer: `404 Not Found` (`MFR-25`).
 - **Integration Boundaries & Constraints:** Detailed approval queue execution (`PendingApprovalRequest` state transitions) is specified in Phase 4 (Domain 18).
 

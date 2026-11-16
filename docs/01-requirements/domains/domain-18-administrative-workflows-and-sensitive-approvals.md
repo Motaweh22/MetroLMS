@@ -36,7 +36,7 @@
 
 ## 3. Approved vs. Current Prototype vs. Target Behavior
 
-- **Approved Business Behavior:** `INV-R9` (`202 Accepted` default), `INV-R10` (re-validation on execution), `D-04`/`D-05` role ceilings, `D-14` neutral projection, and `OBS-01` (`super_admin` vs. `superior` alias ambiguity **remains unresolved**).
+- **Approved Business Behavior:** `INV-R9` (`202 Accepted` default), `INV-R10` (re-validation on execution), `D-04`/`D-05` role ceilings, `D-14` neutral projection, and `OBS-01` **reconciled by Owner Clarification (`2026-11-13`)**: `Superior` and `Super Admin` (`super_admin`) are the same Tier 1 administrative role (inheriting all `admin` capabilities plus exclusive non-Developer `admin` appointment).
 - **Current Prototype Behavior:** `permissionsApi.ts` (`/api/admin/permissions/governance/approvals*`, `/delegation/:userId`), `permissionsHandlers.ts`, `inMemoryStore.ts`.
 - **Implementation Gap:** Prototype executes approval mutations synchronously in-memory without SQL Server row locking (`SELECT FOR UPDATE`) on the `ApprovalRequest` row.
 - **Target Backend Behavior:** Django executes approval decisions inside `transaction.atomic()` with `select_for_update()` on `ApprovalRequest`, preserving `409 ALREADY_DECIDED`, `failed_execution`, and `INV-R10` re-validation.

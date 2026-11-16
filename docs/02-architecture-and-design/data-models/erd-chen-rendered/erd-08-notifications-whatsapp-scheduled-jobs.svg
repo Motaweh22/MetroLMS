@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2232 1277" width="2232" height="1277">
+  <defs>
+    <style>
+      .entity-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #174EA6; text-anchor: middle; dominant-baseline: central; }
+      .rel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 700; fill: #B06000; text-anchor: middle; dominant-baseline: central; }
+      .attr-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; font-weight: 600; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .attr-meta { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 9px; fill: #5F6368; text-anchor: middle; dominant-baseline: central; }
+      .attr-key { font-weight: 700; text-decoration: underline; fill: #A50E0E; }
+      .card-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: middle; dominant-baseline: central; }
+      .title-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #202124; text-anchor: start; }
+      .subtitle-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 12px; fill: #5F6368; text-anchor: start; }
+      .panel-txt { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; font-size: 13px; font-weight: 700; fill: #202124; text-anchor: start; }
+    </style>
+  </defs>
+  <rect width="2232" height="1277" fill="#FAFAFA" />
+  <g id="header" transform="translate(40, 40)">
+    <text class="title-txt" x="0" y="0">Domain 7: Notifications, WhatsApp &amp; Scheduled Jobs (Chen Notation)</text>
+    <text class="subtitle-txt" x="0" y="22">MetroLMS SQL Server Schema • Classic Chen-Notation Entity-Relationship Diagram (5 Entities, 28 Physical Columns)</text>
+  </g>
+  <line x1="454.5" y1="227.0" x2="293.5" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="227.0" x2="454.5" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="227.0" x2="615.5" y2="131.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="227.0" x2="293.5" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="227.0" x2="454.5" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="227.0" x2="615.5" y2="323.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="275.0" x2="1081.5" y2="179.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="275.0" x2="1242.5" y2="179.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="275.0" x2="1403.5" y2="179.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="275.0" x2="1564.5" y2="179.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="704.0" x2="213.0" y2="608.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="704.0" x2="374.0" y2="608.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="704.0" x2="535.0" y2="608.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="704.0" x2="696.0" y2="608.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="656.0" x2="1161.5" y2="560.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="656.0" x2="1322.5" y2="560.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="656.0" x2="1484.0" y2="560.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="656.0" x2="1242.5" y2="752.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="1323.0" y1="656.0" x2="1403.5" y2="752.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="241.8" y2="1085.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="212.5" y2="989.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="373.5" y2="989.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="535.0" y2="989.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="696.5" y2="989.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="213.0" y2="1181.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="374.0" y2="1181.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="535.0" y2="1181.0" stroke="#3C4043" stroke-width="1.5" />
+  <line x1="454.5" y1="1085.0" x2="696.0" y2="1181.0" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="456.3,227.0 454.5,421.7 1765.9,422.3 1860.9,535.8" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="452.7,227.0 454.5,425.3 1763.1,424.7 1858.1,538.2" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="442.5" y="275.9" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="454.5" y="285.9">N</text>
+  <polyline points="1859.5,537.0 2059.5,570.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1987.5" y="550.1" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1999.5" y="560.1">1</text>
+  <polyline points="1324.1,273.6 1860.6,705.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="1321.9,276.4 1858.4,708.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1472.0" y="394.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1484.0" y="404.6">N</text>
+  <polyline points="1859.5,707.0 2059.5,707.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1987.5" y="697.0" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1999.5" y="707.0">1</text>
+  <polyline points="456.3,704.0 454.5,864.7 1762.8,865.9 1857.8,602.4" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="452.7,704.0 454.5,868.3 1766.2,867.1 1861.2,603.6" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="442.5" y="742.8" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="454.5" y="752.8">N</text>
+  <polyline points="1859.5,603.0 2059.5,570.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1987.5" y="569.9" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1999.5" y="579.9">1</text>
+  <polyline points="453.7,1083.4 888.0,868.9" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <polyline points="455.3,1086.6 889.5,872.1" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="572.8" y="1010.6" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="584.8" y="1020.6">N</text>
+  <polyline points="888.8,870.5 1323.0,656.0" fill="none" stroke="#3C4043" stroke-width="1.5" />
+  <rect x="1180.7" y="710.4" width="24" height="20" rx="3" fill="#FFFFFF" stroke="#DADCE0" stroke-width="1" />
+  <text class="card-txt" x="1192.7" y="720.4">1</text>
+  <ellipse cx="293.5" cy="131.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="293.5" y="122.0">id</text>
+  <text class="attr-meta" x="293.5" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="293.5" y="147.0">NOT NULL [PK]</text>
+  <ellipse cx="454.5" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="454.5" y="122.0">user_id</text>
+  <text class="attr-meta" x="454.5" y="136.0">BIGINT</text>
+  <text class="attr-meta" x="454.5" y="147.0">NOT NULL [FK]</text>
+  <ellipse cx="615.5" cy="131.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="615.5" y="122.0">title</text>
+  <text class="attr-meta" x="615.5" y="136.0">NVARCHAR(255)</text>
+  <text class="attr-meta" x="615.5" y="147.0">NOT NULL</text>
+  <ellipse cx="293.5" cy="323.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="293.5" y="314.0">body</text>
+  <text class="attr-meta" x="293.5" y="328.0">NVARCHAR(MAX)</text>
+  <text class="attr-meta" x="293.5" y="339.0">NOT NULL</text>
+  <ellipse cx="454.5" cy="323.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="454.5" y="314.0">is_read</text>
+  <text class="attr-meta" x="454.5" y="328.0">BIT</text>
+  <text class="attr-meta" x="454.5" y="339.0">NOT NULL</text>
+  <ellipse cx="615.5" cy="323.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="615.5" y="314.0">created_at</text>
+  <text class="attr-meta" x="615.5" y="328.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="615.5" y="339.0">NOT NULL</text>
+  <ellipse cx="1081.5" cy="179.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1081.5" y="170.0">id</text>
+  <text class="attr-meta" x="1081.5" y="184.0">BIGINT</text>
+  <text class="attr-meta" x="1081.5" y="195.0">NOT NULL [PK]</text>
+  <ellipse cx="1242.5" cy="179.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1242.5" y="170.0">course_id</text>
+  <text class="attr-meta" x="1242.5" y="184.0">BIGINT</text>
+  <text class="attr-meta" x="1242.5" y="195.0">NOT NULL [FK]</text>
+  <ellipse cx="1403.5" cy="179.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1403.5" y="170.0">phone_e164</text>
+  <text class="attr-meta" x="1403.5" y="184.0">NVARCHAR(16)</text>
+  <text class="attr-meta" x="1403.5" y="195.0">NOT NULL</text>
+  <ellipse cx="1564.5" cy="179.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1564.5" y="170.0">label</text>
+  <text class="attr-meta" x="1564.5" y="184.0">NVARCHAR(150)</text>
+  <text class="attr-meta" x="1564.5" y="195.0">NOT NULL</text>
+  <ellipse cx="213.0" cy="608.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="213.0" y="599.0">id</text>
+  <text class="attr-meta" x="213.0" y="613.0">BIGINT</text>
+  <text class="attr-meta" x="213.0" y="624.0">NOT NULL [PK]</text>
+  <ellipse cx="374.0" cy="608.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="374.0" y="599.0">user_id</text>
+  <text class="attr-meta" x="374.0" y="613.0">BIGINT</text>
+  <text class="attr-meta" x="374.0" y="624.0">NOT NULL [FK]</text>
+  <ellipse cx="535.0" cy="608.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="535.0" y="599.0">scenario_key</text>
+  <text class="attr-meta" x="535.0" y="613.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="535.0" y="624.0">NOT NULL</text>
+  <ellipse cx="696.0" cy="608.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="696.0" y="599.0">is_visible</text>
+  <text class="attr-meta" x="696.0" y="613.0">BIT</text>
+  <text class="attr-meta" x="696.0" y="624.0">NOT NULL</text>
+  <ellipse cx="1161.5" cy="560.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="1161.5" y="551.0">id</text>
+  <text class="attr-meta" x="1161.5" y="565.0">BIGINT</text>
+  <text class="attr-meta" x="1161.5" y="576.0">NOT NULL [PK]</text>
+  <ellipse cx="1322.5" cy="560.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1322.5" y="551.0">job_key</text>
+  <text class="attr-meta" x="1322.5" y="565.0">NVARCHAR(100)</text>
+  <text class="attr-meta" x="1322.5" y="576.0">NOT NULL [UK]</text>
+  <ellipse cx="1484.0" cy="560.0" rx="73.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1484.0" y="551.0">schedule_config</text>
+  <text class="attr-meta" x="1484.0" y="565.0">NVARCHAR(255)</text>
+  <text class="attr-meta" x="1484.0" y="576.0">NOT NULL</text>
+  <ellipse cx="1242.5" cy="752.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1242.5" y="743.0">timezone</text>
+  <text class="attr-meta" x="1242.5" y="757.0">NVARCHAR(64)</text>
+  <text class="attr-meta" x="1242.5" y="768.0">NOT NULL</text>
+  <ellipse cx="1403.5" cy="752.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="1403.5" y="743.0">is_enabled</text>
+  <text class="attr-meta" x="1403.5" y="757.0">BIT</text>
+  <text class="attr-meta" x="1403.5" y="768.0">NOT NULL</text>
+  <ellipse cx="241.8" cy="1085.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="241.8" y="1076.0">details_json</text>
+  <text class="attr-meta" x="241.8" y="1090.0">NVARCHAR(MAX)</text>
+  <text class="attr-meta" x="241.8" y="1101.0">NULL</text>
+  <ellipse cx="212.5" cy="989.0" rx="72.5" ry="26.0" fill="#FCE8E6" stroke="#C5221F" stroke-width="1.6" />
+  <text class="attr-txt attr-key" x="212.5" y="980.0">id</text>
+  <text class="attr-meta" x="212.5" y="994.0">BIGINT</text>
+  <text class="attr-meta" x="212.5" y="1005.0">NOT NULL [PK]</text>
+  <ellipse cx="373.5" cy="989.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="373.5" y="980.0">job_id</text>
+  <text class="attr-meta" x="373.5" y="994.0">BIGINT</text>
+  <text class="attr-meta" x="373.5" y="1005.0">NOT NULL [FK]</text>
+  <ellipse cx="535.0" cy="989.0" rx="73.0" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="535.0" y="980.0">idempotency_key</text>
+  <text class="attr-meta" x="535.0" y="994.0">NVARCHAR(128)</text>
+  <text class="attr-meta" x="535.0" y="1005.0">NOT NULL [UK]</text>
+  <ellipse cx="696.5" cy="989.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="696.5" y="980.0">status</text>
+  <text class="attr-meta" x="696.5" y="994.0">NVARCHAR(20)</text>
+  <text class="attr-meta" x="696.5" y="1005.0">NOT NULL</text>
+  <ellipse cx="213.0" cy="1181.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="213.0" y="1172.0">retry_count</text>
+  <text class="attr-meta" x="213.0" y="1186.0">INT</text>
+  <text class="attr-meta" x="213.0" y="1197.0">NOT NULL</text>
+  <ellipse cx="374.0" cy="1181.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="374.0" y="1172.0">started_at</text>
+  <text class="attr-meta" x="374.0" y="1186.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="374.0" y="1197.0">NOT NULL</text>
+  <ellipse cx="535.0" cy="1181.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="535.0" y="1172.0">completed_at</text>
+  <text class="attr-meta" x="535.0" y="1186.0">DATETIMEOFFSET(7)</text>
+  <text class="attr-meta" x="535.0" y="1197.0">NULL</text>
+  <ellipse cx="696.0" cy="1181.0" rx="72.5" ry="26.0" fill="#FFFFFF" stroke="#5F6368" stroke-width="1.5" />
+  <text class="attr-txt" x="696.0" y="1172.0">error_message</text>
+  <text class="attr-meta" x="696.0" y="1186.0">NVARCHAR(MAX)</text>
+  <text class="attr-meta" x="696.0" y="1197.0">NULL</text>
+  <polygon points="1859.5,511.0 1927.2,537.0 1859.5,563.0 1791.8,537.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="1859.5" y="537.0">notifies_user</text>
+  <polygon points="1859.5,681.0 1922.0,707.0 1859.5,733.0 1797.0,707.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="1859.5" y="707.0">contact_for</text>
+  <polygon points="1859.5,577.0 1931.1,603.0 1859.5,629.0 1787.9,603.0" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="1859.5" y="603.0">visibility_for</text>
+  <polygon points="888.8,844.5 952.5,870.5 888.8,896.5 825.0,870.5" fill="#FEF7E0" stroke="#E37400" stroke-width="2" />
+  <text class="rel-txt" x="888.8" y="870.5">execution_of</text>
+  <rect x="361.5" y="201.0" width="186.0" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="454.5" y="227.0">NotificationItem</text>
+  <rect x="1234.8" y="249.0" width="176.5" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1323.0" y="275.0">WhatsAppContact</text>
+  <rect x="333.0" y="678.0" width="243.0" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="454.5" y="704.0">UserWhatsAppVisibility</text>
+  <rect x="1235.5" y="630.0" width="175" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="1323.0" y="656.0">ScheduledJob</text>
+  <rect x="366.2" y="1059.0" width="176.5" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="2" />
+  <text class="entity-txt" x="454.5" y="1085.0">ScheduledJobRun</text>
+  <rect x="1957.0" y="544.0" width="205" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.5" stroke-dasharray="6,4" />
+  <text class="entity-txt" x="2059.5" y="564.0">User</text>
+  <text class="attr-meta" x="2059.5" y="581.0">[External: Domain 1]</text>
+  <rect x="1957.0" y="681.0" width="205" height="52" rx="3" fill="#E8F0FE" stroke="#1967D2" stroke-width="1.5" stroke-dasharray="6,4" />
+  <text class="entity-txt" x="2059.5" y="701.0">Course</text>
+  <text class="attr-meta" x="2059.5" y="718.0">[External: Domain 4]</text>
+</svg>
