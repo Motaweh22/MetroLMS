@@ -304,18 +304,6 @@ export const DownloadPoliciesEditor: React.FC<DownloadPoliciesEditorProps> = ({
           </div>
         )}
       </div>
-
-      {/* Storage Architecture & Future Migration Notice */}
-      <div className="p-4 rounded-xl border border-warning/30 bg-warning/5 text-xs text-text-muted space-y-1.5">
-        <div className="font-bold text-text-heading flex items-center gap-2">
-          <Icon name="info" size="sm" className="text-warning-dark" />
-          <span>تنويه المعمارية والبيئة التخزينية:</span>
-        </div>
-        <p className="leading-relaxed">
-          في هذه المرحلة التحديثية، تُدار الملفات المرفقة والتعديلات في بيئة المتصفح والذاكرة المؤقتة (In-Memory / Local Storage Backup).
-          سيتم ربط التخزين الدائم للوسائط الكبيرة وحزم الأرشيف مع خدمة التخزين السحابي الآمنة (Cloud Object Storage) في المراحل الخلفية.
-        </p>
-      </div>
     </div>
   );
 };

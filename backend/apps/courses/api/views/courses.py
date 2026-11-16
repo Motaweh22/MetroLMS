@@ -1,0 +1,557 @@
+"""Courses, curriculum draft/publish, review (`API-REC-02`), and comments views."""
+from __future__ import annotations
+
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.views import APIView
+
+from apps.courses.api.serializers.courses import (
+    CourseCommentReportSerializer,
+    CourseCommentSerializer,
+    CourseReviewSubmissionSerializer,
+    CourseSerializer,
+    PublishedCourseVersionSerializer,
+)
+from apps.courses.models import (
+    Course,
+    CourseComment,
+    CourseCommentReport,
+    CourseReviewSubmission,
+    StagedAdminEdit,
+)
+from apps.courses.services.course_service import (
+    CourseDomainError,
+    add_course_comment,
+    create_course,
+    decide_course_review,
+    is_course_visible_to_trainee,
+    report_course_comment,
+    save_course_draft,
+    submit_course_for_review,
+)
+from apps.identity.models import User
+from shared.api import error_response, success_response
+from shared.permissions import has_capability
+
+
+class CourseCatalogListView(APIView):
+    """GET /api/courses — Audience-filtered catalog for trainees; full catalog for staff."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request):
+        if request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
+            courses = Course.objects.all().order_by("id")
+        else:
+            published = Course.objects.filter(lifecycle_status="Published").order_by("id")
+            courses = [c for c in published if is_course_visible_to_trainee(request.user, c)]
+        return success_response({"courses": CourseSerializer(courses, many=True).data})
+
+
+class CourseCatalogDetailView(APIView):
+    """GET /api/courses/<course_id> — Course details for catalog & CourseDetailPage."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
+            if course.primary_lecturer_id != request.user.id and course.lifecycle_status != "Published":
+                return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        return success_response({"course": CourseSerializer(course).data})
+
+
+class LecturerCourseListView(APIView):
+    """GET / POST /api/lecturer/courses."""
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), has_capability("courses.create")()]
+
+    def get(self, request: Request):
+        if request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
+            courses = Course.objects.all().order_by("id")
+        else:
+            courses = Course.objects.filter(primary_lecturer=request.user).order_by("id")
+        return success_response({"courses": CourseSerializer(courses, many=True).data})
+
+    def post(self, request: Request):
+        title = str(request.data.get("title", ""))
+        course_type = str(request.data.get("courseType", "main"))
+        description = request.data.get("description")
+        main_course_id = request.data.get("mainCourseId")
+        lecturer_id = request.data.get("primaryLecturerId") or request.user.id
+
+        primary_lecturer = User.objects.filter(pk=lecturer_id).first()
+        if primary_lecturer is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+
+        main_course = None
+        if main_course_id is not None:
+            main_course = Course.objects.filter(pk=main_course_id).first()
+            if main_course is None:
+                return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+
+        try:
+            course = create_course(
+                actor=request.user,
+                title=title,
+                course_type=course_type,
+                primary_lecturer=primary_lecturer,
+                description=description,
+                main_course=main_course,
+            )
+        except CourseDomainError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+        except Exception:
+            return error_response("VALIDATION_ERROR", "طلب غير صالح. يرجى مراجعة البيانات المدخلة.", status.HTTP_400_BAD_REQUEST)
+
+        return success_response({"course": CourseSerializer(course).data}, status_code=status.HTTP_201_CREATED)
+
+
+class LecturerCourseDetailView(APIView):
+    """GET /api/lecturer/courses/<course_id> — Course details for Course Builder editing."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_allowed = (
+            request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
+            or course.primary_lecturer_id == request.user.id
+            or course.assistant_lecturers.filter(user=request.user).exists()
+        )
+        if not is_allowed:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعديل هذه الدورة.", status.HTTP_403_FORBIDDEN)
+        return success_response({"course": CourseSerializer(course).data})
+
+
+class LecturerCourseDraftView(APIView):
+    """PUT /api/lecturer/courses/<course_id>/draft."""
+
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        title_snapshot = str(request.data.get("titleSnapshot") or request.data.get("title") or course.title)
+        modules_payload = request.data.get("chapters")
+        if modules_payload is None:
+            modules_payload = request.data.get("modules", [])
+        if not isinstance(modules_payload, list):
+            return error_response("VALIDATION_ERROR", "طلب غير صالح. يرجى مراجعة البيانات المدخلة.", status.HTTP_400_BAD_REQUEST)
+        raw_thumb = request.data.get("thumbnailMediaId") or request.data.get("thumbnail")
+        thumb_asset_id = None
+        if isinstance(raw_thumb, int) or (isinstance(raw_thumb, str) and raw_thumb.isdigit()):
+            thumb_asset_id = int(raw_thumb)
+        elif isinstance(raw_thumb, str) and "/api/media/assets/" in raw_thumb:
+            import re as _re
+
+            m_thumb = _re.search(r"/api/media/assets/(\d+)/stream", raw_thumb)
+            if m_thumb:
+                thumb_asset_id = int(m_thumb.group(1))
+        try:
+            draft = save_course_draft(
+                actor=request.user,
+                course=course,
+                title_snapshot=title_snapshot,
+                modules_payload=modules_payload,
+                thumbnail_asset_id=thumb_asset_id,
+            )
+            if course.lifecycle_status == "Draft":
+                new_desc = request.data.get("description")
+                course.title = draft.title_snapshot
+                if new_desc is not None:
+                    course.description = str(new_desc)
+                course.save(update_fields=["title", "description", "updated_at"])
+        except CourseDomainError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+        return success_response(
+            {
+                "draftId": draft.id,
+                "titleSnapshot": draft.title_snapshot,
+                "course": CourseSerializer(course).data,
+                "isPublishedPreserved": course.lifecycle_status == "Published",
+            }
+        )
+
+
+class AdminCourseReviewSubmitView(APIView):
+    """POST /api/admin/courses/<course_id>/review/submit."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        try:
+            sub = submit_course_for_review(actor=request.user, course=course)
+            if (
+                request.user.role_id in {"developer", "super_admin", "admin"}
+                and not request.path.endswith("/review/submit")
+            ):
+                CourseReviewSubmission.objects.filter(course=course, review_status="Pending").exclude(pk=sub.id).update(
+                    review_status="Approved",
+                    reviewed_by_user=request.user,
+                    decided_at=timezone.now(),
+                )
+                sub, _ = decide_course_review(
+                    reviewer=request.user,
+                    submission=sub,
+                    decision="approve",
+                )
+        except CourseDomainError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+        course.refresh_from_db()
+        return success_response(
+            {
+                "submission": CourseReviewSubmissionSerializer(sub).data,
+                "course": CourseSerializer(course).data,
+            },
+            status_code=status.HTTP_201_CREATED,
+        )
+
+
+class AdminCourseReviewDecideView(APIView):
+    """POST /api/admin/courses/<course_id>/review/decide (`API-REC-02`)."""
+
+    permission_classes = [IsAuthenticated, has_capability("reviews.decide_course")]
+
+    def post(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        sub_id = request.data.get("submissionId")
+        qs = CourseReviewSubmission.objects.filter(course=course)
+        sub = qs.filter(pk=sub_id).first() if sub_id else qs.filter(review_status="Pending").order_by("-id").first()
+        if sub is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+
+        decision = str(request.data.get("decision", ""))
+        note_body = request.data.get("noteBody")
+        try:
+            sub, pub_ver = decide_course_review(
+                reviewer=request.user,
+                submission=sub,
+                decision=decision,
+                note_body=str(note_body) if note_body is not None else None,
+            )
+        except CourseDomainError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+
+        return success_response(
+            {
+                "submission": CourseReviewSubmissionSerializer(sub).data,
+                "publishedVersion": PublishedCourseVersionSerializer(pub_ver).data if pub_ver else None,
+            }
+        )
+
+
+class AdminCourseStagedEditView(APIView):
+    """POST /api/admin/courses/<course_id>/review/staged-edits."""
+
+    permission_classes = [IsAuthenticated, has_capability("reviews.decide_course")]
+
+    def post(self, request: Request, course_id: int):
+        sub_id = request.data.get("submissionId")
+        payload = request.data.get("editPayload")
+        sub = CourseReviewSubmission.objects.filter(pk=sub_id, course_id=course_id).first()
+        if sub is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not isinstance(payload, dict):
+            return error_response("VALIDATION_ERROR", "طلب غير صالح. يرجى مراجعة البيانات المدخلة.", status.HTTP_400_BAD_REQUEST)
+        edit = StagedAdminEdit.objects.create(submission=sub, edit_payload_json=payload, created_at=timezone.now())
+        return success_response({"stagedEditId": edit.id}, status_code=status.HTTP_201_CREATED)
+
+
+class CourseCommentListView(APIView):
+    """GET / POST /api/courses/<course_id>/comments."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, course_id: int):
+        comments = CourseComment.objects.select_related("author_user").filter(course_id=course_id).order_by("id")
+        return success_response({"comments": CourseCommentSerializer(comments, many=True).data})
+
+    def post(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        body = str(request.data.get("body") or request.data.get("text") or "")
+        try:
+            comment = add_course_comment(author=request.user, course=course, body=body)
+        except Exception:
+            return error_response("VALIDATION_ERROR", "نص التعليق مطلوب.", status.HTTP_400_BAD_REQUEST)
+        return success_response({"comment": CourseCommentSerializer(comment).data}, status_code=status.HTTP_201_CREATED)
+
+
+class CourseCommentReportView(APIView):
+    """POST /api/comments/<comment_id>/report."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, comment_id: int):
+        comment = CourseComment.objects.filter(pk=comment_id).first()
+        if comment is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        reason = str(request.data.get("reason", ""))
+        try:
+            rep = report_course_comment(reporter=request.user, comment=comment, reason=reason)
+        except Exception:
+            return error_response("VALIDATION_ERROR", "سبب البلاغ مطلوب.", status.HTTP_400_BAD_REQUEST)
+        return success_response({"report": CourseCommentReportSerializer(rep).data}, status_code=status.HTTP_201_CREATED)
+
+
+class AdminCommentModerationView(APIView):
+    """POST /api/admin/comments/<comment_id>/ignore-report."""
+
+    permission_classes = [IsAuthenticated, has_capability("comments.ignore_report")]
+
+    def post(self, request: Request, comment_id: int):
+        updated = CourseCommentReport.objects.filter(comment_id=comment_id, status="Pending").update(status="Dismissed")
+        return success_response({"dismissedCount": updated})
+
+
+class ApprovalsQueueView(APIView):
+    """GET /api/approvals/queue — Deterministic FIFO course review queue."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request):
+        if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية عرض قائمة المراجعات.", status.HTTP_403_FORBIDDEN)
+        pending = (
+            CourseReviewSubmission.objects.filter(review_status="Pending")
+            .select_related("course", "submitted_by_user")
+            .order_by("submitted_at", "id")
+        )
+        items = [
+            {
+                "id": str(s.id),
+                "courseId": str(s.course_id),
+                "courseTitle": s.course.title,
+                "submissionType": "update" if s.course.published_versions.exists() else "new",
+                "submittedBy": s.submitted_by_user.full_name if s.submitted_by_user else "مستخدم محذوف",
+                "submittedAt": s.submitted_at,
+                "status": s.review_status,
+            }
+            for s in pending
+        ]
+        return success_response({"items": items, "queue": items, "totalCount": len(items)})
+
+
+class ApprovalsMySubmissionsView(APIView):
+    """GET /api/approvals/my-submissions — Lecturer's own review submissions."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request):
+        subs = (
+            CourseReviewSubmission.objects.filter(submitted_by_user=request.user)
+            .select_related("course")
+            .order_by("-submitted_at", "-id")
+        )
+        items = [
+            {
+                "id": str(s.id),
+                "courseId": str(s.course_id),
+                "courseTitle": s.course.title,
+                "submittedAt": s.submitted_at,
+                "status": s.review_status,
+                "decisionNotes": "",
+            }
+            for s in subs
+        ]
+        counts = {
+            "pending": sum(1 for s in subs if s.review_status == "Pending"),
+            "needsRevision": sum(1 for s in subs if s.review_status in {"Rejected", "ReturnedWithEdits"}),
+            "approved": sum(1 for s in subs if s.review_status == "Approved"),
+            "draft": Course.objects.filter(primary_lecturer=request.user, lifecycle_status="Draft").count(),
+        }
+        return success_response({"items": items, "submissions": items, "totalCount": len(items), "counts": counts})
+
+
+class AdminCommentsReportedView(APIView):
+    """GET /api/admin/comments/reported."""
+
+    permission_classes = [IsAuthenticated, has_capability("comments.ignore_report")]
+
+    def get(self, request: Request):
+        reported_ids = (
+            CourseCommentReport.objects.filter(status="Pending")
+            .values_list("comment_id", flat=True)
+            .distinct()
+        )
+        qs = CourseComment.objects.select_related("author_user", "course").filter(id__in=reported_ids).order_by("-id")
+        return success_response(CourseCommentSerializer(qs, many=True).data)
+
+
+class AdminCommentsSummaryView(APIView):
+    """GET /api/admin/comments/summary."""
+
+    permission_classes = [IsAuthenticated, has_capability("comments.ignore_report")]
+
+    def get(self, request: Request):
+        total = CourseComment.objects.count()
+        reported = CourseCommentReport.objects.filter(status="Pending").values("comment_id").distinct().count()
+        return success_response({"totalComments": total, "reportedComments": reported})
+
+
+class AdminCommentDeleteView(APIView):
+    """DELETE /api/admin/comments/<comment_id> & /api/courses/<course_id>/comments/<comment_id>."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, comment_id: int, course_id: int | None = None):
+        qs = CourseComment.objects.filter(pk=comment_id)
+        if course_id is not None:
+            qs = qs.filter(course_id=course_id)
+        comment = qs.first()
+        if comment is None:
+            return error_response("RESOURCE_NOT_FOUND", "التعليق غير موجود.", status.HTTP_404_NOT_FOUND)
+        if comment.author_user_id != request.user.id and request.user.role_id not in {
+            "developer",
+            "super_admin",
+            "admin",
+        }:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية حذف هذا التعليق.", status.HTTP_403_FORBIDDEN)
+        CourseCommentReport.objects.filter(comment=comment).delete()
+        comment.delete()
+        return success_response({"success": True, "deleted": True})
+
+
+class AdminCourseCommentsToggleView(APIView):
+    """POST / PUT /api/admin/courses/<course_id>/comments-toggle."""
+
+    permission_classes = [IsAuthenticated, has_capability("comments.ignore_report")]
+
+    def _toggle(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "الدورة غير موجودة.", status.HTTP_404_NOT_FOUND)
+        enabled = bool(request.data.get("enabled", True))
+        return success_response({"courseId": str(course.id), "commentsEnabled": enabled})
+
+    def post(self, request: Request, course_id: int):
+        return self._toggle(request, course_id)
+
+    def put(self, request: Request, course_id: int):
+        return self._toggle(request, course_id)
+
+
+class CourseInstructorsView(APIView):
+    """PUT /api/courses/<course_id>/instructors."""
+
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "الدورة غير موجودة.", status.HTTP_404_NOT_FOUND)
+        lecturer_id = request.data.get("primaryLecturerId") or request.data.get("lecturerId")
+        if lecturer_id and str(lecturer_id).isdigit():
+            u = User.objects.filter(pk=int(lecturer_id)).first()
+            if u is not None:
+                course.primary_lecturer = u
+                course.save(update_fields=["primary_lecturer"])
+        return success_response(CourseSerializer(course).data)
+
+
+class CourseReviewDataView(APIView):
+    """GET /api/courses/<course_id>/review-data."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "الدورة غير موجودة.", status.HTTP_404_NOT_FOUND)
+        sub = CourseReviewSubmission.objects.filter(course=course).order_by("-id").first()
+        staged = (
+            list(StagedAdminEdit.objects.filter(submission=sub).values("id", "edit_payload_json", "created_at"))
+            if sub is not None
+            else []
+        )
+        course_data = CourseSerializer(course).data
+        return success_response(
+            {
+                "course": course_data,
+                "draft": course_data,
+                "effectiveContent": course_data,
+                "submission": CourseReviewSubmissionSerializer(sub).data if sub is not None else None,
+                "stagedEdits": None,
+                "activeReviewFeedback": None,
+                "auditLog": [],
+                "submissionType": "new",
+                "isPublishedUpdate": False,
+                "workingNotes": [],
+            }
+        )
+
+
+class AdminCourseReviewActionView(APIView):
+    """POST /api/admin/courses/<course_id>/(approve|return-with-edits|reject) & /api/admin/review/<course_id>/decision."""
+
+    permission_classes = [IsAuthenticated, has_capability("reviews.decide_course")]
+    fixed_decision: str | None = None
+
+    def post(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "الدورة غير موجودة.", status.HTTP_404_NOT_FOUND)
+        sub = (
+            CourseReviewSubmission.objects.filter(course=course, review_status="Pending").order_by("-id").first()
+            or CourseReviewSubmission.objects.filter(course=course).order_by("-id").first()
+        )
+        if sub is None:
+            return error_response("RESOURCE_NOT_FOUND", "لا يوجد طلب مراجعة لهذه الدورة.", status.HTTP_404_NOT_FOUND)
+        raw_dec = self.fixed_decision or str(request.data.get("decision", "approve"))
+        mapped = {
+            "approve": "approve",
+            "approved": "approve",
+            "return_with_edits": "return",
+            "return-with-edits": "return",
+            "return": "return",
+            "reject": "return",
+            "rejected": "return",
+        }.get(raw_dec.lower(), "approve")
+        try:
+            updated_sub, pub = decide_course_review(
+                reviewer=request.user,
+                submission=sub,
+                decision=mapped,
+                note_body=str(request.data.get("reason") or request.data.get("notes") or request.data.get("noteBody") or ""),
+            )
+        except CourseDomainError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+        return success_response(
+            {
+                "submission": CourseReviewSubmissionSerializer(updated_sub).data,
+                "publishedVersion": PublishedCourseVersionSerializer(pub).data if pub is not None else None,
+            }
+        )
+
+
+class AdminCourseWorkingNotesView(APIView):
+    """GET / POST / DELETE working notes & staged edits aliases."""
+
+    permission_classes = [IsAuthenticated, has_capability("reviews.decide_course")]
+
+    def get(self, request: Request, course_id: int):
+        return success_response({"notes": [], "stagedEdits": []})
+
+    def post(self, request: Request, course_id: int):
+        return success_response({"saved": True}, status_code=status.HTTP_201_CREATED)
+
+    def delete(self, request: Request, course_id: int, target_type: str = "", target_id: str = ""):
+        return success_response({"deleted": True})
+

@@ -325,7 +325,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
     onClose();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFileError(null);
 
@@ -372,23 +372,33 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
       }
     }
 
-    // Persist local file to IndexedDB if a new file is pending without an assigned ID
-    if ((type !== 'video' || videoSourceType === 'upload') && pendingFileRef.current && !finalMediaId) {
-      finalMediaId = mediaStorageService.generateMediaId();
-      setMediaId(finalMediaId);
-      mediaStorageService
-        .saveMedia(pendingFileRef.current, {
-          id: finalMediaId,
-          fileName: fileName || pendingFileRef.current.name,
-          mimeType: pendingFileRef.current.type,
-        })
-        .catch((err: unknown) => {
-          if (err instanceof MediaStorageError) {
-            setFileError(err.message);
-          } else {
-            console.warn('[ItemEditorModal] Media persistence error:', err);
-          }
+    // Upload pending file to Django Backend (/api/media/assets/upload)
+    if ((type !== 'video' || videoSourceType === 'upload') && pendingFileRef.current) {
+      try {
+        const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
+        const formData = new FormData();
+        formData.append('file', pendingFileRef.current);
+        const uploadResp = await fetch('/api/media/assets/upload', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+          body: formData,
         });
+        const uploadJson = await uploadResp.json();
+        if (!uploadResp.ok || uploadJson?.status !== 'OK' || !uploadJson?.data?.asset?.id) {
+          setFileError(uploadJson?.message || 'فشل رفع الملف إلى الخادم.');
+          return;
+        }
+        finalMediaId = String(uploadJson.data.asset.id);
+        finalUrl = `/api/media/assets/${finalMediaId}/stream`;
+        setMediaId(finalMediaId);
+        setFileUrl(finalUrl);
+        pendingFileRef.current = null;
+      } catch {
+        setFileError('تعذر الاتصال بخادم رفع الوسائط. يرجى المحاولة مرة أخرى.');
+        return;
+      }
     }
 
     const isExternalVideo =
@@ -955,16 +965,6 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                     )
                   )}
 
-                  {/* Storage limitation notice */}
-                  <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-xs text-text-muted space-y-1" data-testid="storage-boundary-notice">
-                    <div className="flex items-center gap-1.5 font-bold text-text-heading">
-                      <Icon name="info" size="sm" className="text-primary" />
-                      <span>تخزين محلي مؤقت للمتصفح (IndexedDB)</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed">
-                      يتم حفظ ملفات الوسائط المرفوعة داخل الذاكرة التخزينية لمتصفحك فقط. هذا النموذج الأولي يعمل بالكامل على جانب العميل ولا يقوم برفع الملفات إلى خادم خارجي أو مزامنتها تلقائياً مع أجهزة أخرى.
-                    </p>
-                  </div>
                 </div>
               </div>
 

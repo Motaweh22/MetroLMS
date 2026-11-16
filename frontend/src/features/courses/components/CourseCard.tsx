@@ -96,19 +96,19 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, index = 0 }) => 
         <div className="course-card-meta flex items-center gap-3.5 flex-wrap mb-4 text-xs text-text-muted">
           <span className="course-meta-item rating flex items-center gap-1 font-semibold text-text">
             <Icon name="star" size="sm" className="text-amber-500 fill-amber-500 shrink-0" />
-            <span className="meta-value">{course.rating.toFixed(1)}</span>
-            <span className="meta-count">({course.ratingCount})</span>
+            <span className="meta-value">{(course.rating ?? 0).toFixed(1)}</span>
+            <span className="meta-count">({course.ratingCount ?? 0})</span>
           </span>
 
           <span className="course-meta-item flex items-center gap-1">
             <Icon name="users" size="sm" className="text-text-muted shrink-0" />
-            <span className="meta-value">{course.enrollmentCount}</span>
+            <span className="meta-value">{course.enrollmentCount ?? 0}</span>
             <span className="text-[11px] text-text-muted">متدرب</span>
           </span>
 
           <span className="course-meta-item flex items-center gap-1">
             <Icon name="clock" size="sm" className="text-text-muted shrink-0" />
-            <span className="meta-value">{course.estimatedHours}</span>
+            <span className="meta-value">{course.estimatedHours ?? 0}</span>
             <span className="text-[11px] text-text-muted">ساعة</span>
           </span>
         </div>

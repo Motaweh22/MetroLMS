@@ -23,19 +23,24 @@ export const coursesApi = {
     if (params?.level && params.level !== 'all') queryParams.level = params.level;
     if (params?.sortBy) queryParams.sortBy = params.sortBy;
 
-    return apiClient<Course[]>('/api/courses', {
+    const res = await apiClient<Course[] | { courses: Course[] }>('/api/courses', {
       method: 'GET',
       params: queryParams,
     });
+    return Array.isArray(res) ? res : (res?.courses ?? []);
   },
 
   /**
    * Fetch single course details by ID
    */
   async getCourseById(courseId: string): Promise<Course> {
-    return apiClient<Course>(`/api/courses/${encodeURIComponent(courseId)}`, {
-      method: 'GET',
-    });
+    const res = await apiClient<Course | { course: Course }>(
+      `/api/courses/${encodeURIComponent(courseId)}`,
+      {
+        method: 'GET',
+      }
+    );
+    return 'course' in res ? res.course : res;
   },
 
   /**
@@ -66,21 +71,23 @@ export const coursesApi = {
    * Retrieve all enrollments for the current trainee
    */
   async getMyEnrollments(): Promise<CourseEnrollment[]> {
-    return apiClient<CourseEnrollment[]>('/api/enrollments/my', {
+    const res = await apiClient<CourseEnrollment[] | { enrollments: CourseEnrollment[] }>('/api/enrollments/my', {
       method: 'GET',
     });
+    return Array.isArray(res) ? res : (res?.enrollments ?? []);
   },
 
   /**
    * Retrieve all enriched enrolled courses for the current trainee
    */
   async getMyEnrolledCourses(): Promise<import('@/core/courses/types').EnrolledCourseDetail[]> {
-    return apiClient<import('@/core/courses/types').EnrolledCourseDetail[]>(
-      '/api/enrollments/my?enriched=true',
-      {
-        method: 'GET',
-      }
-    );
+    const res = await apiClient<
+      | import('@/core/courses/types').EnrolledCourseDetail[]
+      | { enrollments: import('@/core/courses/types').EnrolledCourseDetail[] }
+    >('/api/enrollments/my?enriched=true', {
+      method: 'GET',
+    });
+    return Array.isArray(res) ? res : (res?.enrollments ?? []);
   },
 
   /**

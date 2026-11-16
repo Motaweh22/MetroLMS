@@ -103,6 +103,25 @@ export const GroupUploadFilesModal: React.FC<GroupUploadFilesModalProps> = ({
     try {
       for (const staged of filesToUpload) {
         const file = staged.file;
+        let uploadedAssetId: string | undefined;
+        try {
+          const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+          const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
+          const formData = new FormData();
+          formData.append('file', file);
+          const upResp = await fetch('/api/media/assets/upload', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+            body: formData,
+          });
+          const upJson = await upResp.json();
+          if (upResp.ok && upJson?.status === 'OK' && upJson?.data?.asset?.id) {
+            uploadedAssetId = String(upJson.data.asset.id);
+          }
+        } catch {
+          // Proceed with metadata call if upload endpoint unavailable
+        }
         const res = await groupsApi.addMaterialFile(groupId, {
           folderId: folder.id,
           title: staged.title || file.name,
@@ -111,7 +130,8 @@ export const GroupUploadFilesModal: React.FC<GroupUploadFilesModalProps> = ({
           mimeType: file.type || 'application/octet-stream',
           isVisible: true,
           cycleId: folder.cycleId,
-        });
+          ...(uploadedAssetId ? { mediaAssetId: uploadedAssetId } : {}),
+        } as any);
 
         if ((res as any)?.approvalRequired) {
           toast.info(

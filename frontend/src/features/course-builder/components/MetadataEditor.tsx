@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Course, CourseLevel } from '@/core/courses/types';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { INITIAL_MANAGED_USERS } from '@/mocks/fixtures/userDirectoryFixtures';
+import { userManagementApi } from '@/features/user-management/services/userManagementApi';
 
 export interface MetadataEditorProps {
   course: Course;
@@ -64,17 +64,44 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
   isAdmin,
 }) => {
   const { user } = useAuth();
-  const effectiveIsAdmin = isAdmin !== undefined ? isAdmin : user?.role === 'admin';
+  const effectiveIsAdmin =
+    isAdmin !== undefined
+      ? isAdmin
+      : user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer';
 
-  const defaultLecturers = INITIAL_MANAGED_USERS.filter((u) => u.role === 'lecturer').map((u) => ({
-    id: u.id,
-    name: u.name,
-    phone: u.phone,
-    department: u.department,
-  }));
+  const [fetchedLecturers, setFetchedLecturers] = useState<
+    Array<{ id: string; name: string; email?: string; phone?: string; department?: string }>
+  >([]);
+
+  useEffect(() => {
+    if (availableLecturers && availableLecturers.length > 0) return;
+    let cancelled = false;
+    userManagementApi
+      .getManagedUsers()
+      .then((users) => {
+        if (cancelled || !Array.isArray(users)) return;
+        const eligible = users
+          .filter((u) => String(u.status || '').toLowerCase() === 'active')
+          .filter((u) => u.role === 'lecturer' || u.role === 'admin' || u.role === 'super_admin' || u.role === 'assistant_admin')
+          .map((u) => ({
+            id: String(u.id),
+            name: u.name,
+            email: u.email,
+            phone: (u as { phoneE164?: string }).phoneE164 || u.phone,
+            department: u.department,
+          }));
+        setFetchedLecturers(eligible);
+      })
+      .catch(() => {
+        // Non-blocking fallback
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [availableLecturers]);
 
   const lecturersList =
-    availableLecturers && availableLecturers.length > 0 ? availableLecturers : defaultLecturers;
+    availableLecturers && availableLecturers.length > 0 ? availableLecturers : fetchedLecturers;
 
   // Selected Co-Lecturer to add from dropdown
   const [selectedCoLecturerToAdd, setSelectedCoLecturerToAdd] = useState('');
@@ -257,10 +284,33 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
   // --- Cover Image & Background Color Controls ---
   const coverType = course.coverType || (course.thumbnail ? 'image' : course.coverColor ? 'color' : 'default');
 
-  const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     const file = files[0];
+    try {
+      const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
+      const formData = new FormData();
+      formData.append('file', file);
+      const resp = await fetch('/api/media/assets/upload', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+        body: formData,
+      });
+      const json = await resp.json();
+      if (resp.ok && json?.status === 'OK' && json?.data?.asset?.id) {
+        onChange({
+          ...course,
+          thumbnail: `/api/media/assets/${json.data.asset.id}/stream`,
+          coverType: 'image',
+        });
+        return;
+      }
+    } catch {
+      // Fallback to object URL preview if offline
+    }
     const objectUrl = URL.createObjectURL(file);
     onChange({
       ...course,

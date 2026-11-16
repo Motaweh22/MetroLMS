@@ -17,28 +17,36 @@ export const builderApi = {
    * Fetch courses assigned to the current lecturer (or all courses for admins)
    */
   async getLecturerCourses(): Promise<(Course & { hasDraft?: boolean })[]> {
-    return apiClient<(Course & { hasDraft?: boolean })[]>('/api/lecturer/courses', {
+    const res = await apiClient<
+      (Course & { hasDraft?: boolean })[] | { courses: (Course & { hasDraft?: boolean })[] }
+    >('/api/lecturer/courses', {
       method: 'GET',
     });
+    return Array.isArray(res) ? res : (res?.courses ?? []);
   },
 
   /**
    * Fetch course structure for editing in Course Builder
    */
   async getCourseForEditing(courseId: string): Promise<Course> {
-    return apiClient<Course>(`/api/lecturer/courses/${encodeURIComponent(courseId)}`, {
-      method: 'GET',
-    });
+    const res = await apiClient<Course | { course: Course }>(
+      `/api/lecturer/courses/${encodeURIComponent(courseId)}`,
+      {
+        method: 'GET',
+      }
+    );
+    return 'course' in res ? res.course : res;
   },
 
   /**
    * Create a new course in draft status
    */
   async createCourse(data: CreateCourseRequest): Promise<Course> {
-    return apiClient<Course>('/api/lecturer/courses', {
+    const res = await apiClient<Course | { course: Course }>('/api/lecturer/courses', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+    return 'course' in res ? res.course : res;
   },
 
   /**

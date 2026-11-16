@@ -277,8 +277,8 @@ export const LecturerCoursesPage: React.FC = () => {
       {!loading && filteredCourses.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredCourses.map((course) => {
-            const totalLessons = course.chapters.reduce(
-              (acc, ch) => acc + ch.items.length,
+            const totalLessons = (course.chapters || []).reduce(
+              (acc, ch) => acc + (ch.items?.length || 0),
               0
             );
             const isDraft = course.status === 'draft';

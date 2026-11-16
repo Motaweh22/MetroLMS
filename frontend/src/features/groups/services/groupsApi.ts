@@ -97,10 +97,11 @@ export const groupsApi = {
    * List all training groups with aggregate metrics (Admin: all, Supervisor: assigned only)
    */
   async getAdminGroups(options?: RequestOptions): Promise<GroupSummaryDTO[]> {
-    return apiClient<GroupSummaryDTO[]>('/api/admin/groups', {
+    const res = await apiClient<GroupSummaryDTO[] | { groups: GroupSummaryDTO[] }>('/api/admin/groups', {
       method: 'GET',
       ...options,
     });
+    return Array.isArray(res) ? res : (res?.groups ?? []);
   },
 
   /**
@@ -110,11 +111,12 @@ export const groupsApi = {
     dto: CreateGroupRequestDTO,
     options?: RequestOptions
   ): Promise<TrainingGroup> {
-    return apiClient<TrainingGroup>('/api/admin/groups', {
+    const res = await apiClient<TrainingGroup | { group: TrainingGroup }>('/api/admin/groups', {
       method: 'POST',
       body: JSON.stringify(dto),
       ...options,
     });
+    return 'group' in res ? res.group : res;
   },
 
   /**
@@ -124,13 +126,14 @@ export const groupsApi = {
     groupId: string,
     options?: RequestOptions
   ): Promise<AdminEnrichedTrainingGroup> {
-    return apiClient<AdminEnrichedTrainingGroup>(
+    const res = await apiClient<AdminEnrichedTrainingGroup | { group: AdminEnrichedTrainingGroup }>(
       `/api/admin/groups/${encodeURIComponent(groupId)}`,
       {
         method: 'GET',
         ...options,
       }
     );
+    return 'group' in res ? res.group : res;
   },
 
   /**
@@ -141,11 +144,15 @@ export const groupsApi = {
     dto: UpdateGroupRequestDTO,
     options?: RequestOptions
   ): Promise<TrainingGroup> {
-    return apiClient<TrainingGroup>(`/api/admin/groups/${encodeURIComponent(groupId)}`, {
-      method: 'PUT',
-      body: JSON.stringify(dto),
-      ...options,
-    });
+    const res = await apiClient<TrainingGroup | { group: TrainingGroup }>(
+      `/api/admin/groups/${encodeURIComponent(groupId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(dto),
+        ...options,
+      }
+    );
+    return 'group' in res ? res.group : res;
   },
 
   /**
@@ -240,13 +247,14 @@ export const groupsApi = {
    * List all historical and active cycles for a group
    */
   async getGroupCycles(groupId: string, options?: RequestOptions): Promise<GroupRenewalCycle[]> {
-    return apiClient<GroupRenewalCycle[]>(
+    const res = await apiClient<GroupRenewalCycle[] | { cycles: GroupRenewalCycle[] }>(
       `/api/admin/groups/${encodeURIComponent(groupId)}/cycles`,
       {
         method: 'GET',
         ...options,
       }
     );
+    return Array.isArray(res) ? res : (res?.cycles ?? []);
   },
 
   /**

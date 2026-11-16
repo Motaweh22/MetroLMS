@@ -114,6 +114,10 @@ CSRF_TRUSTED_ORIGINS = [
 MEDIA_ROOT = Path(os.environ.get("METROLMS_MEDIA_ROOT", r"D:\MetroLMSMedia"))
 STATIC_URL = "/static/"
 
+AUTHENTICATION_BACKENDS = [
+    "apps.identity.services.auth_backend.PhoneE164Backend",
+]
+
 # DRF Baseline (Session-only auth; no JWT/Bearer in production)
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -122,6 +126,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "EXCEPTION_HANDLER": "shared.api.exceptions.metrolms_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
 }

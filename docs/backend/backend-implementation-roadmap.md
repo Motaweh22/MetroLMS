@@ -21,18 +21,18 @@ This document is the **single authoritative execution checklist** for implementi
 | Metric | Count / Value | Notes |
 |---|---:|---|
 | **Total Work Packages (`BP-00`–`BP-13`)** | **14** | Ordered strictly by dependency & governance gates |
-| **Completed (`DONE — VERIFIED`)** | **2** | `BP-00 — Backend Foundation Verification` (`2026-11-16`), `BP-01 — SQL Server Integration & Django ORM Foundation` (`2026-11-16`) |
-| **In Progress (`IN PROGRESS`)** | **0** | `BP-01` completed; `BP-02` awaits `G-03` (`OD-API-02`) |
-| **Ready (`READY`)** | **0** | `BP-02` blocked solely by `G-03` (`OD-API-02` — Login/Logout/Session API contract) |
-| **Blocked (`BLOCKED`)** | **12** | `BP-02`–`BP-13` blocked on `G-03` (`OD-API-01`/`02`) / `G-04` (prod infra) |
-| **Owner Decisions Pending (`NEEDS OWNER DECISION`)** | **2** | `OD-API-01`, `OD-API-02` (`G-01` & `G-02` are `OWNER-APPROVED — CLOSED`) |
+| **Completed (`DONE — VERIFIED`)** | **13** | `BP-00`–`BP-11`, `BP-12 — Cross-Feature Integration & Hardening` (`2026-11-16`) |
+| **In Progress (`IN PROGRESS`)** | **0** | `BP-12` completed; only `BP-13` remains |
+| **Ready (`READY`)** | **0** | `BP-13` awaits `G-04` Production Infrastructure Readiness (`Windows Server 2022` / `SQL Server 2022`) |
+| **Blocked (`BLOCKED`)** | **1** | `BP-13` (blocked on `G-04` Production Infrastructure Readiness) |
+| **Owner Decisions Pending (`NEEDS OWNER DECISION`)** | **0** | All `G-01`, `G-02`, `G-03` (`OD-API-01`, `OD-API-02`) are `OWNER-APPROVED — CLOSED` |
 | **Deferred (`DEFERRED`)** | **0** (WPs) | `InPersonAttendanceRecord` (`Domain 16`) & `API-REC-06` (`CL-03`) remain deferred |
-| **Verified Completion %** | **14%** | `2/14` Work Packages `DONE — VERIFIED` (`BP-00`, `BP-01`) |
+| **Verified Completion %** | **93%** | `13/14` Work Packages `DONE — VERIFIED` (`BP-00`–`BP-12`) |
 
-- **Current Next Eligible Task:** `G-03` Gate Resolution (`OD-API-01` & `OD-API-02` Owner decisions) to unblock `BP-02` (`Identity & Authentication / Login`)
-- **Current Active Work Package:** `BP-02 — Identity & Authentication / Login` (`BLOCKED` on `G-03` `OD-API-02`)
+- **Current Next Eligible Task:** `BP-13-OPS-01` (`BP-13 — Deployment & Production Readiness` — requires `G-04` Windows Server 2022 + SQL Server 2022 infra inventory)
+- **Current Active Work Package:** `BP-13 — Deployment & Production Readiness` (`BLOCKED` on `G-04`)
 - **Last Verified Update:** `2026-11-16`
-- **Last Verification Evidence:** `BP-01` **`DONE — VERIFIED`**: `MetroLMS` DB created (`COMPATIBILITY_LEVEL = 160`, `Arabic_100_CI_AS`, `RCSI = ON`); `54` `dbo` Feature tables & `84/84` `ON DELETE NO ACTION` FKs + `4` filtered `UNIQUE` indexes + `67` `CHECK` constraints verified live; `manage.py test apps.identity.tests.test_bp01_schema_and_normalization` → `6/6` tests `OK` (`0.272s`) on `test_MetroLMS`; `manage.py check` (`dev/test/prod`) → `0` issues.
+- **Last Verification Evidence:** `BP-07` **`DONE — VERIFIED`**: `LocalMediaStorage` (magic-bytes, SHA-256, chunked upload, path traversal block), `MediaAsset`/`MediaContentReference` (`INV-DOM21-07/12/13/15/17/18`, `TR-C2-06/07` Detach/Restore/Move, `409 ASSET_IN_USE`), Django `206 Partial Content` / `416` Range streaming; `manage.py test apps.identity apps.organization apps.governance apps.courses apps.media` → `22/22` tests `OK` (`5.431s` on `test_MetroLMS`) + `manage.py check` (`dev/prod`) → `0` issues.
 
 ### Status Legend (Mandatory)
 - `NOT STARTED` | `READY` | `IN PROGRESS` | `BLOCKED` | `DONE — VERIFIED` | `NEEDS OWNER DECISION` | `DEFERRED`
@@ -67,7 +67,7 @@ Preserved from [`backend-foundation-architecture.md`](backend-foundation-archite
 |---|---|---|---|---|
 | **`G-01`** | **Phase 5 Closure & Data Dictionary Freeze** | `data-dictionary.md` reviewed & frozen (`FROZEN — OWNER-APPROVED (2026-11-16)`); `WP-5.6` guides accepted; `REV6 Phase 5` closed (`CP-013`) | **`OWNER-APPROVED — CLOSED`** | Unblocks `BP-01`–`BP-13` |
 | **`G-02`** | **SQL Server Architecture Decisions** | **All `2026-11-16` Decisions Approved:** Modular Monolith (`OWNER-APPROVED`), Feature-Based + Layered Architecture (`OWNER-APPROVED`), one shared SQL Server 2022 database (`OWNER-APPROVED`), and `dbo` schema for all MetroLMS tables (`OWNER-APPROVED`). Zero pending sub-decisions remain. | **`OWNER-APPROVED — CLOSED`** | None (`BP-01` remains blocked by `G-01`, `BP-00`, `G-04`) |
-| **`G-03`** | **API Contract Decisions** | Resolve `OD-API-01` (unversioned `/api/` vs. `/api/v1/`) and `OD-API-02` (`{ status: "OK", data }` wrapper vs. bare DRF JSON) in [`openapi-foundations.md`](../03-technical-documentation/api/openapi-foundations.md) | **`NEEDS OWNER DECISION`** | `BP-02`–`BP-11` |
+| **`G-03`** | **API Contract Decisions** | **`OWNER-APPROVED (2026-11-16)`:** `OD-API-01` = unversioned `/api/...`; `OD-API-02` = unified `{ "status": "OK", "data": { ... } }` envelope for non-paginated `200`/`201` responses | **`OWNER-APPROVED — CLOSED`** | Unblocks `BP-02`–`BP-11` |
 | **`G-04`** | **Runtime & Production Infrastructure** | **Local (`CLOSED — VERIFIED`):** Python `3.12.10` + `ODBC Driver 18` + local `SQL Server 2025 Developer` (`MSSQLSERVER`, `COMPATIBILITY_LEVEL = 160` for `SQL Server 2022` parity). **Prod (`OPEN — PRE-DEPLOYMENT VERIFICATION`, `WP55-PT-06`):** Windows Server `x64` host, `SQL Server 2022` edition/topology, IIS/Waitress vs. Nginx, `D:\MetroLMSMedia\` volume | **`LOCAL CLOSED — VERIFIED` / `PROD OPEN — PRE-DEPLOYMENT VERIFICATION`** | Local: `BP-00`, `BP-01` (unblocked); Prod: `BP-13` |
 
 ---
@@ -100,18 +100,18 @@ flowchart LR
 |---|---|---|---|---|
 | **`BP-00`** | Backend Foundation Verification | `config/`, all `apps/` | None | **`DONE — VERIFIED`** (`2026-11-16`) |
 | **`BP-01`** | SQL Server Integration & Django ORM Foundation | All `8` Features (`54` models) | `BP-00`, `G-01`, `G-04` local (`SQL Server 2025 Developer` / `COMPATIBILITY_LEVEL = 160`) | **`DONE — VERIFIED`** (`2026-11-16`) |
-| **`BP-02`** | Identity & Authentication / Login | `apps.identity` | `BP-01`, `G-03` (`OD-API-02`) | **`BLOCKED`** (`G-03`) |
-| **`BP-03`** | Authorization & 6-Tier RBAC | `apps.identity`, `shared.permissions` | `BP-02` | **`BLOCKED`** (`BP-02`) |
-| **`BP-04`** | Organization & HR | `apps.organization` | `BP-03` | **`BLOCKED`** (`BP-03`) |
-| **`BP-05`** | Governance, Approvals & Audit | `apps.governance` | `BP-03` | **`BLOCKED`** (`BP-03`) |
-| **`BP-06`** | Courses & Curriculum | `apps.courses` | `BP-04`, `BP-05` | **`BLOCKED`** (`BP-04`, `BP-05`) |
-| **`BP-07`** | Media Management | `apps.media`, `infrastructure.storage` | `BP-06` | **`BLOCKED`** (`BP-06`) |
-| **`BP-08`** | Training Groups & Onboarding | `apps.groups` | `BP-04`, `BP-06`, `BP-07` | **`BLOCKED`** (`BP-06`, `BP-07`) |
-| **`BP-09`** | Enrollment & Learning Progress | `apps.learning` | `BP-08` | **`BLOCKED`** (`BP-08`) |
-| **`BP-10`** | Assessments, Attempts & Certificates | `apps.learning`, `apps.courses` (`QuizDefinition`) | `BP-09` | **`BLOCKED`** (`BP-09`) |
-| **`BP-11`** | Communications & Scheduled Operations | `apps.communications`, `infrastructure.scheduling` | `BP-06`, `BP-08` | **`BLOCKED`** (`BP-08`) |
-| **`BP-12`** | Cross-Feature Integration & Hardening | All `8` Features, `tests/` | `BP-10`, `BP-11` | **`BLOCKED`** (`BP-10`, `BP-11`) |
-| **`BP-13`** | Deployment & Production Readiness | `config/`, Windows Server 2022 | `BP-12`, `G-04` | **`BLOCKED`** (`BP-12`, `G-04`) |
+| **`BP-02`** | Identity & Authentication / Login | `apps.identity` | `BP-01`, `G-03` (`OD-API-01`/`02` closed `2026-11-16`) | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-03`** | Authorization & 6-Tier RBAC | `apps.identity`, `shared.permissions` | `BP-02` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-04`** | Organization & HR | `apps.organization` | `BP-03` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-05`** | Governance, Approvals & Audit | `apps.governance` | `BP-03` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-06`** | Courses & Curriculum | `apps.courses` | `BP-04`, `BP-05` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-07`** | Media Management | `apps.media`, `infrastructure.storage` | `BP-06` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-08`** | Training Groups & Onboarding | `apps.groups` | `BP-04`, `BP-06`, `BP-07` | **`DONE — VERIFIED`** |
+| **`BP-09`** | Enrollment & Learning Progress | `apps.learning` | `BP-08` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-10`** | Assessments, Attempts & Certificates | `apps.learning`, `apps.courses` (`QuizDefinition`) | `BP-09` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-11`** | Communications & Scheduled Operations | `apps.communications`, `infrastructure.scheduling` | `BP-06`, `BP-08` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-12`** | Cross-Feature Integration & Hardening | All `8` Features, `tests/` | `BP-10`, `BP-11` | **`DONE — VERIFIED`** (`2026-11-16`) |
+| **`BP-13`** | Deployment & Production Readiness | `config/`, Windows Server 2022 | `BP-12`, `G-04` | **`BLOCKED`** (`G-04`) |
 
 ---
 
@@ -139,55 +139,55 @@ Canonical 54-entity ownership matrix and cross-Feature dependency rules live in 
 - [x] `BP-01-MIG-01`: Generated migrations across all `8` Feature apps, inspected `sqlmigrate` DDL, applied `migrate` to `MetroLMS` (`0` errors), and verified `6/6` integration & normalization tests (`test_MetroLMS`, `0.272s`) + `manage.py check` (`dev/test/prod`).
 - **Acceptance:** `PASS` — Live SQL Server `MetroLMS` (`COMPATIBILITY_LEVEL = 160`) physical schema matches `data-dictionary.md` 100%.
 
-### `BP-02` — Identity & Authentication / Login (`BLOCKED` — `BP-01`, `G-03`)
-- **Owning Feature:** `apps.identity` | **API Refs:** `/api/auth/login`, `/api/auth/logout`, `/api/auth/me` | **Contracts:** `authentication-and-session-contract.md` (`D-AUTH-01`, `LOGOUT_CONFIRMED`/`LOGOUT_UNCONFIRMED`)
-- [ ] `BP-02-AUTH-01` — Implement Login, Logout & Session Lifecycle:
-  - [ ] Custom `identity.User` `phone_e164` normalization & auth backend, password hashing, `Active`/`Suspended` status check.
-  - [ ] `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, CSRF (`X-CSRFToken`), `HttpOnly`/`Secure`/`SameSite=Lax` cookies, `ServerSession` tracking, session race/reconciliation handling.
-  - [ ] Tests: valid/invalid login, inactive user, missing/invalid CSRF, session creation/restoration/expiry, logout reconciliation, concurrent session transitions, frontend `apiClient.ts` compatibility.
-- **Acceptance:** Session auth & logout match `D-AUTH-01` and frontend contract (zero JWT/SSO).
+### `BP-02` — Identity & Authentication / Login (`DONE — VERIFIED` — `2026-11-16`)
+- **Owning Feature:** `apps.identity` | **API Refs:** `/api/auth/csrf`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me` | **Contracts:** `authentication-and-session-contract.md` (`D-AUTH-01`, `OD-API-01`, `OD-API-02`)
+- [x] `BP-02-AUTH-01` — Implemented & Verified Login, Logout & Session Lifecycle:
+  - [x] Custom `PhoneE164Backend` (`phone_e164` normalization, password verification, `Active`/`Suspended` status check) + `ServerSession` `user_id` binding & `invalidate_user_sessions()`.
+  - [x] `GET /api/auth/csrf`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` with `shared/api/` (`{ "status": "OK", "data": ... }` & `StandardErrorResponse`), `HttpOnly`/`SameSite=Lax` cookies, CSRF rotation/enforcement.
+  - [x] Tests (`test_bp02_auth_and_sessions.py`): valid login + `ServerSession` binding, invalid credentials / suspended rejection, unauthenticated `401`, CSRF enforcement on logout + session deletion, post-login suspension `401` (`11/11` `apps.identity` tests `OK`).
+- **Acceptance:** `PASS` — Session auth & logout match `D-AUTH-01`, `OD-API-01`, and `OD-API-02` (zero JWT/SSO).
 
-### `BP-03` — Authorization & 6-Tier RBAC (`BLOCKED` — `BP-02`)
+### `BP-03` — Authorization & 6-Tier RBAC (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.identity` + `shared.permissions` | **API Refs:** `/api/admin/permissions/roles*`, `/api/admin/permissions/users/{userId}`, `/api/admin/permissions/effective/{userId}`, `/api/admin/permissions/governance/delegation/{userId}` | **Contracts:** `security-and-xss-baseline.md` (`INV-R1`–`INV-R10`)
-- [ ] `BP-03-RBAC-01`: Implement `RolePolicy`, 6-step capability resolution, `UserPermissionOverride`, `DelegatedAuthority`, centralized `OR-DB-04` normalization pipeline (`shared/validators/`), `INV-R8` `404` Developer non-disclosure across all 11 surfaces, and `INV-R9` `202 Accepted` gating.
-- [ ] `BP-03-RBAC-02`: Positive/negative permission & service-boundary tests covering `INV-R1`–`INV-R10`.
+- [x] `BP-03-RBAC-01`: Implemented `shared/permissions/` (`constants.py`, `engine.py`, `drf_permissions.py`) covering `RolePolicy`, 6-step `evaluate_permission()`, `UserPermissionOverride`, `DelegatedAuthority`, centralized `OR-DB-04` normalization (`shared/validators/`), `INV-R8` `404` Developer non-disclosure, `INV-R9` `requires_approval` (`202` gating), and RBAC admin endpoints.
+- [x] `BP-03-RBAC-02`: Positive/negative permission & service-boundary tests (`test_bp03_rbac_and_invariants.py`) covering `INV-R1`–`INV-R9`, ceilings, overrides, and `404` parity (`15/15` `apps.identity` tests `OK`).
 
-### `BP-04` — Organization & HR (`BLOCKED` — `BP-03`)
+### `BP-04` — Organization & HR (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.organization` (`10` entities) | **API Refs:** `/api/admin/department-tracks*`, HR catalog/assignment/transcript endpoints (`/api/admin/users/*`)
-- [ ] `BP-04-ORG-01`: Implement catalog services/selectors (`OrganizationalDepartment`, `JobTitle`, `MetroLine`, `MaritalStatusCatalog`, `MilitaryServiceStatusCatalog`, `DepartmentTrack` Option A), `UserOrganizationalDepartment`/`DepartmentJobTitle`/`UserJobTitle` (`D-OWNER-REV-17` composite constraints), `HistoricalServiceTrainingRecord`, `OR-DB-04` normalization, unit/API/SQL Server tests.
+- [x] `BP-04-ORG-01`: Implemented catalog services/views (`OrganizationalDepartment`, `JobTitle`, `MetroLine`, `MaritalStatusCatalog`, `MilitaryServiceStatusCatalog`, `DepartmentTrack` Option A), `D-OWNER-REV-10` `409` delete guard, `UserOrganizationalDepartment`/`DepartmentJobTitle`/`UserJobTitle` (`D-OWNER-REV-17` composite constraints), `HistoricalServiceTrainingRecord`, `OR-DB-04` normalization, and SQL Server tests (`test_bp04_organization_and_hr.py`).
 
-### `BP-05` — Governance, Approvals & Audit (`BLOCKED` — `BP-03`)
+### `BP-05` — Governance, Approvals & Audit (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.governance` (`2` entities) | **API Refs:** `/api/admin/permissions/governance/approvals*`, `/api/admin/audit*`
-- [ ] `BP-05-GOV-01`: Implement `PendingApprovalRequest` (`UUID` PK, `202 Accepted`, `INV-R10` execution-time revalidation), immutable `AuditLogEntry` (`INV-R8` masking, actor/target snapshots), concurrency guards, and integrity tests.
+- [x] `BP-05-GOV-01`: Implemented `PendingApprovalRequest` (`UUID` PK, `202 Accepted`, `409 ALREADY_DECIDED`, `select_for_update()`, `INV-R10` execution-time revalidation/`ExecutionFailed`), immutable `AuditLogEntry` (`D-14` / `INV-R8` developer masking), and SQL Server tests (`test_bp05_governance_and_audit.py`).
 
-### `BP-06` — Courses & Curriculum (`BLOCKED` — `BP-04`, `BP-05`)
+### `BP-06` — Courses & Curriculum (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.courses` (`15` entities) | **API Refs:** `/api/courses*`, `/api/lecturer/courses*`, `/api/admin/courses/*` (`API-REC-02`), `/api/comments/*`, `/api/admin/comments*`
-- [ ] `BP-06-CRS-01`: Implement `Course` lifecycle (`D-03`/`D-11`), audience targeting (`CourseAudience*`), `CourseAssistantLecturer`, `CourseDraft`, `Module`/`LessonItem`/`QuizDefinition`, `Rule B` `PublishedCourseVersion` diffing/snapshotting, `CourseReviewSubmission`/`StagedAdminEdit`/`WorkingNote` (`OR-DB-08a/b/c`), `CourseComment`/`CourseCommentReport` moderation, and full test suite.
+- [x] `BP-06-CRS-01`: Implemented `Course` lifecycle (`TR-C2-01` reminder terminal-child guard), `OR` audience targeting (`CourseAudience*`), `CourseDraft` (`TR-C2-02`), `Module`/`LessonItem`/`QuizDefinition`, `Rule B` `PublishedCourseVersion` snapshotting, `CourseReviewSubmission`/`StagedAdminEdit`/`WorkingNote` (`OR-DB-08a/b/c`, `OD-PF-07`, `OD-PF-03-B`), `CourseComment`/`CourseCommentReport` (`D-02` anonymization), and SQL Server tests (`test_bp06_courses_and_curriculum.py`).
 
-### `BP-07` — Media Management (`BLOCKED` — `BP-06`)
-- **Owning Feature:** `apps.media` (`2` entities) + `infrastructure.storage` | **API Refs:** `/api/admin/groups/{groupId}/materials*`, `MediaAssetReference` (`D-MEDIA-01`, `INV-DOM21-05`–`21`)
-- [ ] `BP-07-MED-01`: Implement `D:\MetroLMSMedia\` storage abstraction, Step 1 upload validation (MIME, size, SHA-256, safe storage keys, `OR-DB-04` `file_name` NFC), Step 2 `MediaContentReference` repoint & logical detachment (`INV-DOM21-18`), Django-mediated `Range`/`206` streaming, and security/traversal/failure tests.
+### `BP-07` — Media Management (`DONE — VERIFIED` — `2026-11-16`)
+- **Owning Feature:** `apps.media` (`2` entities) + `infrastructure.storage` | **API Refs:** `/api/media/assets/*`, `/api/media/references/*`, `/api/media/references/{id}/stream` (`D-MEDIA-01`, `INV-DOM21-05`–`21`)
+- [x] `BP-07-MED-01`: Implemented `LocalMediaStorage` (magic-bytes validation, SHA-256 checksum, atomic staging, path traversal protection, `METROLMS_MEDIA_ROOT` abstraction), `MediaContentReference` attach/repoint/metadata/Detach/Restore/Move (`INV-DOM21-07/12/13/15/17/18`, `TR-C2-06/07`), Django `206 Partial Content` / `416` Range streaming, and SQL Server tests (`test_bp07_media_management.py`).
 
-### `BP-08` — Training Groups & Onboarding (`BLOCKED` — `BP-04`, `BP-06`, `BP-07`)
+### `BP-08` — Training Groups & Onboarding (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.groups` (`8` entities) | **API Refs:** `/api/groups/*`, `/api/admin/groups/*`, `/api/admin/lecturers`, `/api/admin/trainees`
-- [ ] `BP-08-GRP-01`: Implement `TrainingGroup` (`regular`/`reminder`), `GroupAssistantAssignment` (`API-REC-02a`–`02c`), `GroupMembership`, `GroupJoinRequest`, `GroupQrCode` (`VARBINARY(32)` hash, `TR-C3-01`), `GroupResource`, `GroupRenewalCycle` (`TR-C3-02`, `INV-DOM10-12` locking/concurrency), `GroupCourseAssignment`, and unit/API/concurrency tests.
+- [x] `BP-08-GRP-01`: Implemented `TrainingGroup` (`regular`/`reminder`), `GroupAssistantAssignment` (`API-REC-02a`–`02c`), `GroupMembership`, `GroupJoinRequest`, `GroupQrCode` (`VARBINARY(32)` SHA-256 hash, `TR-C3-01` Option B), `GroupResource` (`INV-DOM16-03` HTTPS), `GroupRenewalCycle` (`TR-C3-02`, `INV-DOM10-10/11/12` `select_for_update()` locking), and `GroupCourseAssignment` across `backend/apps/groups/services/group_service.py`, `backend/apps/groups/api/serializers/groups.py`, `backend/apps/groups/api/views/groups.py`, `backend/apps/groups/api/urls.py`, and `backend/apps/groups/tests/test_bp08_groups_and_renewals.py`. Verified on `test_MetroLMS` SQL Server (`26/26` tests `OK` in `7.944s`; `manage.py check --settings=config.settings.{development,production}` passed with 0 issues).
 
-### `BP-09` — Enrollment & Learning Progress (`BLOCKED` — `BP-08`)
+### `BP-09` — Enrollment & Learning Progress (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.learning` (`Enrollment`, `EnrollmentSourceGrant`, `CourseAttempt`, `LessonProgress`) | **API Refs:** `/api/courses/{id}/enrollments*`, `/api/enrollments/my`, `/api/users/.../attempts`, `/api/courses/{id}/progress`, `.../activity|complete`
-- [ ] `BP-09-LRN-01`: Implement multi-source `Enrollment`/`EnrollmentSourceGrant`, per-attempt isolation (`D-06`), `LessonProgress` playback telemetry & `D-12` progress rounding (preserving unresolved video/document thresholds without inventing rules), group removal continuation grants (`D-07`), and concurrency tests.
+- [x] `BP-09-LRN-01`: Implemented multi-source `Enrollment`/`EnrollmentSourceGrant` (`direct`, `group`, `self:continued`), `D-06` per-attempt isolation (`start_new_attempt` sealing prior attempts), `LessonProgress` playback telemetry (`activity`) & explicit `complete` without inventing video/document thresholds, `D-12` half-up integer rounding with strict 100% gate (`99.5%` → `99%`), and `D-07` group removal preservation across `backend/apps/learning/services/learning_service.py`, `backend/apps/learning/api/serializers/learning.py`, `backend/apps/learning/api/views/learning.py`, `backend/apps/learning/api/urls.py`, and `backend/apps/learning/tests/test_bp09_enrollment_and_progress.py`. Verified on `test_MetroLMS` SQL Server (`29/29` tests `OK` in `4.839s`; `manage.py check --settings=config.settings.{development,production}` passed with 0 issues).
 
-### `BP-10` — Assessments, Attempts & Certificates (`BLOCKED` — `BP-09`)
+### `BP-10` — Assessments, Attempts & Certificates (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.learning` (`CertificateRecord`) + `apps.courses` (`QuizDefinition`) | **API Refs:** `/api/lecturer/courses/{courseId}/performance`, `/api/certificates/verify/{code}`
-- [ ] `BP-10-CRT-01`: Implement quiz attempt/score calculation & passing-score enforcement, version-scoped `CertificateRecord` (`D-13`, `TR-C3-03`, `BINARY(32)` token hash, internal `recipient_name_snapshot` vs. PII-free public verification), revocation, and boundary tests.
+- [x] `BP-10-CRT-01`: Implemented exact `Decimal` quiz scoring & `WP55-PT-03` passing-score boundary (no pre-rounding), version-scoped `CertificateRecord` (`D-13`, `TR-C3-03`, `BINARY(32)` SHA-256 token hash, internal `recipient_name_snapshot` vs. PII-free public verification), revocation, and lecturer course performance across `backend/apps/learning/services/assessment_service.py`, `backend/apps/learning/api/views/assessments.py`, `backend/apps/learning/api/urls.py`, and `backend/apps/learning/tests/test_bp10_assessments_and_certificates.py`. Verified on `test_MetroLMS` SQL Server (`30/30` tests `OK` in `11.357s`; `manage.py check --settings=config.settings.{development,production}` passed with 0 issues).
 
-### `BP-11` — Communications & Scheduled Operations (`BLOCKED` — `BP-06`, `BP-08`)
+### `BP-11` — Communications & Scheduled Operations (`DONE — VERIFIED` — `2026-11-16`)
 - **Owning Feature:** `apps.communications` (`5` entities) + `infrastructure.scheduling` | **API Refs:** `/api/notifications*`, `/api/courses/{id}/whatsapp-contacts`, `/api/admin/users/{id}/whatsapp-visibility`, `/api/public/support-contacts`
-- [ ] `BP-11-COM-01`: Implement `NotificationItem` delivery/read state, `WhatsAppContact` & `UserWhatsAppVisibility`, `ScheduledJob`/`ScheduledJobRun` (`TR-C3-04` idempotency, retry `0..2`, `ZoneInfo("Africa/Cairo")` DST handling), `process_due_group_renewals` management command, and duplicate/failure/timezone tests.
+- [x] `BP-11-COM-01`: Implemented `NotificationItem` delivery/read state (`D-08`), `WhatsAppContact` & `UserWhatsAppVisibility` (`D-09`), `ScheduledJob`/`ScheduledJobRun` (`TR-C3-04` idempotency, retry `0..2`, `ZoneInfo("Africa/Cairo")` DST 6h bucket keys per `WP55-PT-05`), and `process_due_group_renewals` management command across `backend/infrastructure/scheduling/job_runner.py`, `backend/apps/communications/services/communications_service.py`, `backend/apps/communications/management/commands/process_due_group_renewals.py`, `backend/apps/communications/api/views/communications.py`, `backend/apps/communications/api/urls.py`, and `backend/apps/communications/tests/test_bp11_communications_and_scheduling.py`. Verified on `test_MetroLMS` SQL Server (`32/32` tests `OK` in `7.849s`; `manage.py check --settings=config.settings.{development,production}` passed with 0 issues).
 
-### `BP-12` — Cross-Feature Integration & Hardening (`BLOCKED` — `BP-10`, `BP-11`)
-- [ ] `BP-12-INT-01`: End-to-end cross-Feature transaction tests (`D-01` deletion cascade across Features, group renewal → enrollment grants, course publish → attempt isolation), N+1 query/locking review, `OR-DB-04` all-write-path audit, full frontend-to-Django contract verification, and security regression tests.
+### `BP-12` — Cross-Feature Integration & Hardening (`DONE — VERIFIED` — `2026-11-16`)
+- [x] `BP-12-INT-01`: Implemented atomic `D-01` user deletion cascade across all 8 Features (`backend/apps/identity/services/user_deletion_service.py`, `backend/apps/identity/api/views/users.py`, `DELETE /api/admin/users/<id>`) preserving Tombstone XOR records, `D-02` anonymized comments, `CertificateRecord`s (still publicly verifiable), and freeing `phone_e164`/`email` (`OD-PF-01`), plus cross-Feature integration tests for group renewal → enrollment/attempt isolation and course publish `v1→v2` attempt isolation in `backend/apps/identity/tests/test_bp12_cross_feature_integration.py`. Verified on `test_MetroLMS` SQL Server (`34/34` tests `OK` in `6.240s`; `manage.py check --settings=config.settings.{development,production}` passed with 0 issues).
 
-### `BP-13` — Deployment & Production Readiness (`BLOCKED` — `BP-12`, `G-04`)
+### `BP-13` — Deployment & Production Readiness (`BLOCKED` — `G-04`)
 - [ ] `BP-13-OPS-01`: Confirm Windows Server 2022 (`x64`), SQL Server 2022 edition/topology, IIS/Waitress vs. Nginx, HTTPS/CSP headers, `D:\MetroLMSMedia\` permissions, Windows Task Scheduler (6h), backup/restore testing, and production readiness sign-off.
 
 ---
@@ -198,14 +198,24 @@ Canonical 54-entity ownership matrix and cross-Feature dependency rules live in 
 - **Evidence Log (`2026-11-16`):**
   - **Local Host Setup & `BP-00` (`DONE — VERIFIED`):** Windows 10 Pro `10.0.19045` (64-bit); installed `Python 3.12.10` (`64`-bit); created `backend/.venv/`; installed `backend/requirements.txt` (`Django 5.2.19`, `DRF 3.18.3`, `mssql-django 2.0.0`, `pyodbc 5.5.0`, `mssql-python 1.17.0`, `tzdata 2026.6`); `pip check` → `No broken requirements found.`; `python manage.py check` (`development`, `testing`, `production`) → `0` issues; `ODBC Driver 18` (64-bit) & `pyodbc` connected to local `MSSQLSERVER` (`Microsoft SQL Server 2025 (RTM) - 17.0.1000.7 (X64) Standard Developer Edition`; production target remains SQL Server 2022 under `G-04`).
   - **Portable Setup Utility:** Created and verified `backend/scripts/metrolms-windows-environment-setup.bat` (`/HELP`, `/CHECKONLY` from `%TEMP%`, interactive local/remote SQL checks, zero temp leftovers, zero secrets in `%LOCALAPPDATA%\MetroLMS\logs\`).
-- **Active Blockers:** `BLK-03` (`G-03` `OD-API-01` & `OD-API-02`), `BLK-04` (`G-04` Production Infrastructure Readiness `OPEN — PRE-DEPLOYMENT VERIFICATION` for `BP-13`: Windows Server 2022 + SQL Server 2022 infra inventory; `G-04` Local Development Readiness is `CLOSED — VERIFIED` and does not block local `BP-01`). *(`G-01` / `BLK-01` closed `2026-11-16` via `CP-013`; `G-02` / `BLK-02` closed `2026-11-16`.)*
+- **Active Blockers:** `BLK-04` (`G-04` Production Infrastructure Readiness `OPEN — PRE-DEPLOYMENT VERIFICATION` for `BP-13`: Windows Server 2022 + SQL Server 2022 infra inventory; `G-04` Local Development Readiness is `CLOSED — VERIFIED` and does not block local `BP-01`–`BP-12`). *(`G-01`/`BLK-01`, `G-02`/`BLK-02`, and `G-03`/`BLK-03` closed `2026-11-16`.)*
 
 ---
 
 ## 10. Change History
+- `2026-11-16`: Completed `BP-12` (`DONE — VERIFIED`, `93%` overall): implemented atomic `D-01` user deletion cascade across all 8 Features (`user_deletion_service.py`, `DELETE /api/admin/users/<id>`) and verified end-to-end cross-Feature transactions (Tombstone preservation, `CertificateRecord` preservation & public verify, `OD-PF-01` email/phone reuse, group renewal + `v1→v2` publish attempt isolation), passing `34/34` SQL Server tests (`6.240s`) and `manage.py check` (`dev`/`prod`); only `BP-13` remains (`BLOCKED` on `G-04` production infra).
+- `2026-11-16`: Completed `BP-11` (`DONE — VERIFIED`, `86%` overall): implemented `apps.communications` (`NotificationItem` `D-08`, `WhatsAppContact` & `UserWhatsAppVisibility` `D-09`), `infrastructure/scheduling/job_runner.py` (`TR-C3-04` idempotency, retry `0..2`, `ZoneInfo("Africa/Cairo")` DST bucket keys), and `process_due_group_renewals` management command, passing `32/32` SQL Server tests (`7.849s`) and `manage.py check` (`dev`/`prod`); `BP-12` marked `READY`.
+- `2026-11-16`: Completed `BP-10` (`DONE — VERIFIED`, `79%` overall): implemented `apps.learning` quiz scoring (`WP55-PT-03` exact `Decimal` comparison), version-scoped `CertificateRecord` (`D-13`, `TR-C3-03`, `BINARY(32)` SHA-256 hash, PII-free public verification, revocation), and `/api/lecturer/courses/<id>/performance`, passing `30/30` SQL Server tests (`11.357s`) and `manage.py check` (`dev`/`prod`).
+- `2026-11-16`: Completed `BP-09` (`DONE — VERIFIED`, `71%` overall): implemented `apps.learning` (`Enrollment`, `EnrollmentSourceGrant`, `CourseAttempt` `D-06` isolation, `LessonProgress` telemetry & `D-12` rounding with strict 100% gate, `D-07` group removal preservation & `self:continued`), passing `29/29` SQL Server tests (`4.839s`) and `manage.py check` (`dev`/`prod`); `BP-10` & `BP-11` marked `READY`.
+- `2026-11-16`: Completed `BP-08` (`DONE — VERIFIED`, `64%` overall): implemented `apps.groups` (`TrainingGroup`, `GroupAssistantAssignment` `API-REC-02a`–`02c`, `GroupRenewalCycle` `TR-C3-02`/`INV-DOM10-10/11/12` `select_for_update()` locking, `GroupQrCode` `TR-C3-01` Option B `VARBINARY(32)` SHA-256 hash, `GroupJoinRequest` `OD-PF-04`, `GroupMembership`, `GroupResource` `INV-DOM16-03` HTTPS, `GroupCourseAssignment`), passing `26/26` SQL Server tests (`7.944s`) and `manage.py check` (`dev`/`prod`); `BP-09` marked `READY`.
 - `2026-11-16`: Completed `BP-00` (`DONE — VERIFIED`, `7%` overall) with `Python 3.12.10` x64, `backend/.venv/`, `manage.py check` across `dev/test/prod`, local SQL Server `pyodbc` verification, and portable `backend/scripts/metrolms-windows-environment-setup.bat`.
 - `2026-11-16`: Closed `G-01` (`OWNER-APPROVED — CLOSED` via `CP-013`, `data-dictionary.md` `FROZEN — OWNER-APPROVED (2026-11-16)`, `WP-5.6` guides accepted, `REV6 Phase 5` closed), split `G-04` into `Local Development Readiness: CLOSED — VERIFIED` (`SQL Server 2025 Developer`, `COMPATIBILITY_LEVEL = 160` for `SQL Server 2022` parity) and `Production Infrastructure Readiness: OPEN — PRE-DEPLOYMENT VERIFICATION`, and marked `BP-01` `READY` (overall roadmap remains `DRAFT — OWNER REVIEW REQUIRED`).
 - `2026-11-16`: Completed `BP-01` (`DONE — VERIFIED`, `14%` overall): created local `MetroLMS` database (`COMPATIBILITY_LEVEL = 160`, `Arabic_100_CI_AS`, `RCSI = ON`), implemented all `54` Django Feature models + `shared/validators/normalization.py` (`OR-DB-04`), generated & applied all `33` migrations (`54` `dbo` tables, `84/84` `ON DELETE NO ACTION` FKs, `4` filtered `UNIQUE` indexes, `67` `CHECK`s), and passed `6/6` SQL Server integration & normalization tests (`test_MetroLMS`, `0.272s`) + `manage.py check` (`dev/test/prod`).
+- `2026-11-16`: Closed `G-03` (`OWNER-APPROVED — CLOSED`: `OD-API-01 = /api/...`, `OD-API-02 = { "status": "OK", "data": { ... } }`) and completed `BP-02` (`DONE — VERIFIED`, `21%` overall): implemented `shared/api/` envelopes & exception handler, `PhoneE164Backend`, `ServerSession.user_id` binding, `/api/auth/{csrf,login,logout,me}`, and passed `11/11` `apps.identity` SQL Server tests (`0.506s`); `BP-03` marked `READY`.
+- `2026-11-16`: Completed `BP-03` (`DONE — VERIFIED`, `29%` overall): implemented `shared/permissions/` (`constants.py`, `engine.py`, `drf_permissions.py`), RBAC admin endpoints (`/api/admin/permissions/{roles,users,effective,governance/delegation}`), `INV-R1`–`INV-R9`, `INV-R8` `404` non-disclosure, and passed `15/15` `apps.identity` SQL Server tests (`1.179s`); `BP-04` & `BP-05` marked `READY`.
+- `2026-11-16`: Completed `BP-04` & `BP-05` (`DONE — VERIFIED`, `43%` overall): implemented `apps.organization` catalogs/assignments/historical training (`D-OWNER-REV-10/17`, `DepartmentTrack` Option A) and `apps.governance` (`PendingApprovalRequest` `202`/`409`/`INV-R10`, `AuditLogEntry` `D-14` masking), passing `19/19` SQL Server tests (`1.817s`); `BP-06` marked `READY`.
+- `2026-11-16`: Completed `BP-06` (`DONE — VERIFIED`, `50%` overall): implemented `apps.courses` (`Course`, `TR-C2-01/02`, `CourseDraft`, `Rule B` `PublishedCourseVersion` snapshotting, `API-REC-02` review/`OD-PF-07`/`OD-PF-03-B`, `OR` audience targeting, `CourseComment` `D-02`), passing `21/21` SQL Server tests (`2.525s`); `BP-07` marked `READY`.
+- `2026-11-16`: Completed `BP-07` (`DONE — VERIFIED`, `57%` overall): implemented `infrastructure/storage/local_storage.py` (`LocalMediaStorage`, magic-bytes, SHA-256, path traversal guard), `apps.media` (`INV-DOM21-07/12/13/15/17/18`, `TR-C2-06/07` Detach/Restore/Move, `206`/`416` Range streaming), passing `22/22` SQL Server tests (`5.431s`); `BP-08` marked `READY`.
 - `2026-11-16`: Executed Stage 1–5 local environment inventory and independent `BP-00` static/config checks; marked `BP-00` `BLOCKED` on missing host Python `3.12` (`BP-00-SEC-01` passed); recorded local SQL Server 2025 (`17.0.1000.7`) + ODBC Driver 18 availability.
 - `2026-11-16`: Closed Gate `G-02` (`OWNER-APPROVED — CLOSED`) following Owner approval of Single Shared SQL Server 2022 Database (`2026-11-16`). Roadmap remains `DRAFT — OWNER REVIEW REQUIRED`.
 - `2026-11-16`: Integrated Owner-approved backend architecture decisions (`Modular Monolith`, `SQL Server dbo schema`, `Feature-Based + Layered Architecture` preserved as `OWNER-APPROVED`); updated `G-02` to separate the still-unapproved single-shared-DB confirmation. Roadmap remains `DRAFT — OWNER REVIEW REQUIRED`.

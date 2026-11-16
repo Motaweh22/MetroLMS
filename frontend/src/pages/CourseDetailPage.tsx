@@ -253,7 +253,7 @@ export const CourseDetailPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 pt-1">
               <div className="w-11 h-11 rounded-full bg-primary/10 text-primary-dark font-extrabold flex items-center justify-center text-sm shrink-0 border border-primary/20">
-                {course.lecturerName.slice(0, 2)}
+                {(course.lecturerName || course.lecturer || 'م').slice(0, 2)}
               </div>
               <div>
                 <h4 className="text-sm font-bold text-text-heading">{course.lecturerName}</h4>

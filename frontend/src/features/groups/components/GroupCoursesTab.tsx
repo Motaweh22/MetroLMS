@@ -81,9 +81,12 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
       setAvailableCourses(catalog);
 
       // Select active cycle, or fallback to first
-      const active = fetchedCycles.find((c) => c.status === 'active') || fetchedCycles[0];
+      const active =
+        fetchedCycles.find(
+          (c) => String(c.status || (c as unknown as { cycleStatus?: string }).cycleStatus || '').toLowerCase() === 'active'
+        ) || fetchedCycles[0];
       if (active) {
-        setSelectedCycleId(active.id);
+        setSelectedCycleId(String(active.id));
         setCycleCourses(active.courses || []);
       }
       setIsDirty(false);
@@ -101,11 +104,14 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
 
   // Underlying cycle object for compatibility with domain/store contracts
   const currentCycle = useMemo(() => {
-    return cycles.find((c) => c.id === selectedCycleId) || cycles[0] || null;
+    return cycles.find((c) => String(c.id) === String(selectedCycleId)) || cycles[0] || null;
   }, [cycles, selectedCycleId]);
 
   const isCurrentCycleActive =
-    group.adminStatus !== 'archived' && (currentCycle ? currentCycle.status === 'active' : true);
+    group.adminStatus !== 'archived' &&
+    (currentCycle
+      ? String(currentCycle.status || (currentCycle as unknown as { cycleStatus?: string }).cycleStatus || 'active').toLowerCase() === 'active'
+      : true);
 
   // Handle group-wide post-deadline policy change
   const handlePolicySelect = async (newPolicy: PostDeadlinePolicy) => {
@@ -300,7 +306,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
 
   // Unassigned courses for picker
   const unassignedCourses = availableCourses.filter(
-    (c) => !cycleCourses.some((cc) => cc.courseId.toLowerCase() === c.id.toLowerCase())
+    (c) => !cycleCourses.some((cc) => String(cc.courseId).toLowerCase() === String(c.id).toLowerCase())
   );
 
   if (loading) {
@@ -556,7 +562,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
               <tbody className="divide-y divide-border text-text">
                 {cycleCourses.map((assignment, index) => {
                   const targetCourse = availableCourses.find(
-                    (c) => c.id.toLowerCase() === assignment.courseId.toLowerCase()
+                    (c) => String(c.id).toLowerCase() === String(assignment.courseId).toLowerCase()
                   );
                   const titleText = targetCourse?.title || assignment.courseId;
 
@@ -785,7 +791,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
           courseId={overrideTargetCourse.courseId}
           courseTitle={
             availableCourses.find(
-              (c) => c.id.toLowerCase() === overrideTargetCourse.courseId.toLowerCase()
+              (c) => String(c.id).toLowerCase() === String(overrideTargetCourse.courseId).toLowerCase()
             )?.title || overrideTargetCourse.courseId
           }
           group={group}

@@ -41,6 +41,9 @@ export const LearningPlayerPage: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { course, isLoading: courseLoading, isNotFound } = useCourseDetail(effectiveCourseId);
   const { isEnrolledInCourse, isLoading: enrollmentLoading } = useEnrollment();
+  const isEnrolled = courseId ? isEnrolledInCourse(courseId) : false;
+  const progressCourseId =
+    effectiveCourseId && (user?.role === 'user' || isEnrolled) ? effectiveCourseId : undefined;
   const {
     progress,
     isLoading: progressLoading,
@@ -50,7 +53,7 @@ export const LearningPlayerPage: React.FC = () => {
     completeLesson,
     isSubmitting,
     updateLocalActivity,
-  } = useCourseProgress(effectiveCourseId, {
+  } = useCourseProgress(progressCourseId, {
     attemptId: urlAttemptId,
     groupId: urlGroupId,
     cycleId: urlCycleId,
@@ -59,8 +62,6 @@ export const LearningPlayerPage: React.FC = () => {
   const [celebrationOpen, setCelebrationOpen] = useState<boolean>(false);
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
   const [mediaLoadError, setMediaLoadError] = useState<string | null>(null);
-
-  const isEnrolled = courseId ? isEnrolledInCourse(courseId) : false;
 
   const handleSelectAttempt = useCallback(
     (selectedAttemptId: string) => {
@@ -102,13 +103,24 @@ export const LearningPlayerPage: React.FC = () => {
     },
   });
 
-  // Recreate browser Object URL for persistent IndexedDB media assets
+  // Resolve backend media URLs directly and fall back to IndexedDB only for legacy local mediaId assets
   useEffect(() => {
     let active = true;
     let createdUrl: string | null = null;
     setMediaLoadError(null);
 
-    if (currentItem?.mediaId) {
+    const rawUrl = currentItem?.url?.trim();
+    const isServerOrRemoteUrl = Boolean(
+      rawUrl &&
+        (rawUrl.startsWith('/api/') || rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))
+    );
+    const isBackendAssetId = Boolean(currentItem?.mediaId && /^\d+$/.test(currentItem.mediaId));
+
+    if (isServerOrRemoteUrl && rawUrl) {
+      setResolvedMediaUrl(rawUrl);
+    } else if (isBackendAssetId && currentItem?.mediaId) {
+      setResolvedMediaUrl(`/api/media/assets/${currentItem.mediaId}/stream`);
+    } else if (currentItem?.mediaId) {
       mediaStorageService
         .createMediaObjectUrl(currentItem.mediaId)
         .then((url) => {
@@ -143,7 +155,7 @@ export const LearningPlayerPage: React.FC = () => {
         mediaStorageService.revokeMediaObjectUrl(createdUrl);
       }
     };
-  }, [currentItem?.id, currentItem?.mediaId]);
+  }, [currentItem?.id, currentItem?.mediaId, currentItem?.url]);
 
   // Handle lesson completion and trigger celebration if course hits 100%
   const handleComplete = useCallback(async (completedItemId: string): Promise<boolean> => {

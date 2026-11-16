@@ -275,7 +275,10 @@ export function sortTraineeGroupsForCarousel<T extends {
  * Formats structured GroupTimeInfo into human-readable Arabic presentation text.
  * Strictly adheres to presentation conventions without fabricating dates.
  */
-export function formatGroupTimeInfoAr(timeInfo: GroupTimeInfo, now: Date | string = new Date()): string {
+export function formatGroupTimeInfoAr(timeInfo: GroupTimeInfo | undefined | null, now: Date | string = new Date()): string {
+  if (!timeInfo || !timeInfo.situation) {
+    return 'متاح';
+  }
   const { situation, daysRemaining, hoursRemaining, daysPassed, secondaryDate, primaryTargetDate } = timeInfo;
 
   if (situation === 'active_regular' || situation === 'active_reminder') {

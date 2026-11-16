@@ -33,7 +33,8 @@ export interface AuthSession {
 }
 
 export interface LoginCredentials {
-  email: string;
+  phone_e164?: string;
+  email?: string;
   password: string;
 }
 

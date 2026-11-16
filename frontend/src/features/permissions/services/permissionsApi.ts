@@ -16,10 +16,14 @@ export const permissionsApi = {
    * Fetches baseline permissions for all roles
    */
   async getRolePermissions(options?: RequestOptions): Promise<RolePermissionsConfig[]> {
-    return apiClient<RolePermissionsConfig[]>('/api/admin/permissions/roles', {
-      method: 'GET',
-      ...options,
-    });
+    const res = await apiClient<RolePermissionsConfig[] | { roles: RolePermissionsConfig[] }>(
+      '/api/admin/permissions/roles',
+      {
+        method: 'GET',
+        ...options,
+      }
+    );
+    return Array.isArray(res) ? res : (res?.roles ?? []);
   },
 
   /**
@@ -30,11 +34,15 @@ export const permissionsApi = {
     permissions: PermissionKey[],
     options?: RequestOptions
   ): Promise<RolePermissionsConfig> {
-    return apiClient<RolePermissionsConfig>(`/api/admin/permissions/roles/${encodeURIComponent(role)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ permissions }),
-      ...options,
-    });
+    const res = await apiClient<RolePermissionsConfig | { role: RolePermissionsConfig }>(
+      `/api/admin/permissions/roles/${encodeURIComponent(role)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ permissions }),
+        ...options,
+      }
+    );
+    return 'role' in res ? res.role : res;
   },
 
   /**
@@ -141,10 +149,14 @@ export const permissionsApi = {
    * Gets all governance approval requests
    */
   async getApprovalRequests(options?: RequestOptions): Promise<ApprovalRequest[]> {
-    return apiClient<ApprovalRequest[]>('/api/admin/permissions/governance/approvals', {
-      method: 'GET',
-      ...options,
-    });
+    const res = await apiClient<ApprovalRequest[] | { approvals: ApprovalRequest[] }>(
+      '/api/admin/permissions/governance/approvals',
+      {
+        method: 'GET',
+        ...options,
+      }
+    );
+    return Array.isArray(res) ? res : (res?.approvals ?? []);
   },
 
   /**
@@ -174,14 +186,15 @@ export const permissionsApi = {
     notes?: string,
     options?: RequestOptions
   ): Promise<ApprovalRequest> {
-    return apiClient<ApprovalRequest>(
-      `/api/admin/permissions/governance/approvals/${encodeURIComponent(id)}/approve`,
+    const res = await apiClient<ApprovalRequest | { approval: ApprovalRequest }>(
+      `/api/admin/permissions/governance/approvals/${encodeURIComponent(id)}/decide`,
       {
         method: 'POST',
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ decision: 'approve', reason: notes }),
         ...options,
       }
     );
+    return 'approval' in res ? res.approval : res;
   },
 
   /**
@@ -192,13 +205,14 @@ export const permissionsApi = {
     notes?: string,
     options?: RequestOptions
   ): Promise<ApprovalRequest> {
-    return apiClient<ApprovalRequest>(
-      `/api/admin/permissions/governance/approvals/${encodeURIComponent(id)}/reject`,
+    const res = await apiClient<ApprovalRequest | { approval: ApprovalRequest }>(
+      `/api/admin/permissions/governance/approvals/${encodeURIComponent(id)}/decide`,
       {
         method: 'POST',
-        body: JSON.stringify({ notes }),
+        body: JSON.stringify({ decision: 'reject', reason: notes }),
         ...options,
       }
     );
+    return 'approval' in res ? res.approval : res;
   },
 };

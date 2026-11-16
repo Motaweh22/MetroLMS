@@ -189,7 +189,7 @@ export const GroupDetailPage: React.FC = () => {
       : 'منتهية الصلاحية';
 
   // Find current trainee's specific metrics
-  const myMetrics = metrics?.traineeMetricsList.find(
+  const myMetrics = metrics?.traineeMetricsList?.find(
     (tm) => tm.userId.toLowerCase() === (user?.id || '').toLowerCase()
   );
 
@@ -554,7 +554,7 @@ export const GroupDetailPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-text-heading flex items-center gap-2">
             <Icon name="courses" size="md" className="text-primary" />
-            <span>المقررات التدريبية المخصصة ({group.courses.length})</span>
+            <span>المقررات التدريبية المخصصة ({(group.courses || []).length})</span>
           </h2>
           <span className="text-xs text-text-muted">
             مسارات تدريبية إلزامية ومقرونة بالدورة الميدانية
@@ -562,7 +562,7 @@ export const GroupDetailPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          {metrics?.assignedCoursesMetrics.map((ac) => {
+          {metrics?.assignedCoursesMetrics?.map((ac) => {
             const courseUserProgress = myMetrics?.courseProgressMap?.[ac.courseId];
             const coursePercent = courseUserProgress?.percent ?? 0;
             const completedCount = courseUserProgress?.completedLessons ?? 0;

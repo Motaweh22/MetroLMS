@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { DemoAccountPicker } from './DemoAccountPicker';
+import { DemoAccountPicker, type RoleTestCardAccount } from './DemoAccountPicker';
 import { Modal } from '@/shared/ui/Modal';
+import { Alert } from '@/shared/ui/Alert';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
 import { brandConfig } from '@/shared/config/brand';
 import { buildWhatsAppUrl, usePublicSupportContacts } from '@/features/whatsapp';
-import type { SyntheticMockAccount } from '@/core/auth/demoAccounts';
 
 const SIGNUP_DRAFT_MESSAGE =
   'مرحبًا، أرغب في إنشاء حساب جديد على منصة التدريب الإلكتروني. يرجى إرشادي إلى خطوات التسجيل.';
@@ -32,14 +32,28 @@ export interface LoginFormProps {
   onSuccess?: () => void;
 }
 
+const showRoleTestCards =
+  !import.meta.env.PROD || import.meta.env.VITE_SHOW_TEST_CARDS === 'true';
+
+function normalizeEgyptPhone(raw: string): string {
+  const cleaned = raw.trim().replace(/[\s\-()]/g, '');
+  if (/^01[0125][0-9]{8}$/.test(cleaned)) {
+    return `+2${cleaned}`;
+  }
+  if (/^201[0125][0-9]{8}$/.test(cleaned)) {
+    return `+${cleaned}`;
+  }
+  return cleaned;
+}
+
 export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const { login, error, clearError, logoutStatus, retryLogout } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ phone?: string; password?: string }>({});
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [showSignupModal, setShowSignupModal] = useState(false);
 
@@ -61,12 +75,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   } = usePublicSupportContacts('password_recovery');
 
   const validate = (): boolean => {
-    const errors: { email?: string; password?: string } = {};
+    const errors: { phone?: string; password?: string } = {};
+    const normalizedPhone = normalizeEgyptPhone(phone);
 
-    if (!email.trim()) {
-      errors.email = 'يرجى إدخال البريد الإلكتروني الوظيفي';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errors.email = 'صيغة البريد الإلكتروني غير صحيحة';
+    if (!phone.trim()) {
+      errors.phone = 'يرجى إدخال رقم الموبايل';
+    } else if (!/^\+201[0125][0-9]{8}$/.test(normalizedPhone)) {
+      errors.phone = 'يرجى إدخال رقم موبايل مصري صحيح (مثال: 01012345678)';
     }
 
     if (!password) {
@@ -85,7 +100,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
     setIsSubmitting(true);
     try {
-      await login({ email: email.trim(), password });
+      const normalizedPhone = normalizeEgyptPhone(phone);
+      await login({ phone_e164: normalizedPhone, password });
       onSuccess?.();
     } catch {
       // Error is captured in AuthContext and rendered in .login-error
@@ -94,10 +110,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
     }
   };
 
-  const handleSelectDemoAccount = (account: SyntheticMockAccount) => {
+  const handleSelectDemoAccount = (account: RoleTestCardAccount) => {
     if (isSubmitting) return;
-    setEmail(account.credentials.email);
-    setPassword(account.credentials.password);
+    setPhone(account.phone);
+    setPassword(account.password);
     setFieldErrors({});
     clearError();
   };
@@ -183,24 +199,25 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
           {/* Main Login Form */}
           <form className="login-form" id="login-form" onSubmit={handleSubmit} noValidate>
-            {/* Username / Email Input Group */}
+            {/* Mobile Phone Input Group */}
             <div className="input-group">
-              <label htmlFor="username">رقم المستخدم / البريد الإلكتروني الوظيفي</label>
+              <label htmlFor="phone">رقم الموبايل</label>
               <div className="input-wrapper">
                 <input
-                  type="text"
-                  id="username"
-                  name="username"
-                  placeholder="أدخل اسم المستخدم أو البريد الإلكتروني"
+                  type="tel"
+                  id="phone"
+                  name="phone"
+                  dir="ltr"
+                  placeholder="01XXXXXXXXX"
                   required
-                  autoComplete="username"
-                  value={email}
+                  autoComplete="tel"
+                  value={phone}
                   disabled={isSubmitting}
-                  className={fieldErrors.email ? 'input-has-error' : ''}
+                  className={fieldErrors.phone ? 'input-has-error' : ''}
                   onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (fieldErrors.email) {
-                      setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                    setPhone(e.target.value);
+                    if (fieldErrors.phone) {
+                      setFieldErrors((prev) => ({ ...prev, phone: undefined }));
                     }
                     if (error) clearError();
                   }}
@@ -216,13 +233,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                   </svg>
                 </span>
               </div>
-              {fieldErrors.email && (
-                <div className="input-field-error">{fieldErrors.email}</div>
+              {fieldErrors.phone && (
+                <div className="input-field-error">{fieldErrors.phone}</div>
               )}
             </div>
 
@@ -349,13 +365,15 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
         </div>
       </div>
 
-      {/* ── Demo Accounts Section (Full-Width Responsive Surface beneath Main Card) ── */}
-      <div className="login-demo-container">
-        <DemoAccountPicker
-          onSelectAccount={handleSelectDemoAccount}
-          isLoading={isSubmitting}
-        />
-      </div>
+      {/* ── Role Test Accounts Section (Hidden in Production Builds) ── */}
+      {showRoleTestCards && (
+        <div className="login-demo-container">
+          <DemoAccountPicker
+            onSelectAccount={handleSelectDemoAccount}
+            isLoading={isSubmitting}
+          />
+        </div>
+      )}
 
       {/* Forgot Password Modal */}
       <Modal
@@ -379,36 +397,29 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
           {/* Error State */}
           {!isForgotLoading && forgotError && (
-            <div
-              className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs text-red-800 dark:text-red-200 flex items-center justify-between gap-2"
-              role="alert"
-              data-testid="forgot-wa-error"
-            >
-              <span>{forgotError}</span>
-              <button
-                type="button"
-                onClick={() => refetchForgot()}
-                className="text-xs text-primary font-bold hover:underline cursor-pointer shrink-0"
-              >
-                إعادة المحاولة
-              </button>
-            </div>
+            <Alert variant="danger" data-testid="forgot-wa-error">
+              <div className="flex items-center justify-between gap-2">
+                <span>{forgotError}</span>
+                <button
+                  type="button"
+                  onClick={() => refetchForgot()}
+                  className="text-xs text-primary font-bold hover:underline cursor-pointer shrink-0"
+                >
+                  إعادة المحاولة
+                </button>
+              </div>
+            </Alert>
           )}
 
           {/* Zero Contacts: Unavailable State */}
           {!isForgotLoading && !forgotError && forgotCount === 0 && (
-            <div
-              className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3.5 text-xs text-amber-900 dark:text-amber-200 leading-relaxed"
+            <Alert
+              variant="warning"
+              title="خدمة التواصل عبر واتساب غير متوفرة حالياً"
               data-testid="forgot-wa-unavailable"
             >
-              <div className="font-bold mb-1 flex items-center gap-1.5 text-amber-950 dark:text-amber-100">
-                <span aria-hidden="true">ℹ️</span>
-                <span>خدمة التواصل عبر واتساب غير متوفرة حالياً</span>
-              </div>
-              <p>
-                لا تتوفر جهات اتصال نشطة حالياً لاستقبال طلبات استعادة كلمة المرور عبر واتساب. يرجى مراجعة إدارة التدريب أو التواصل عبر القنوات الداخلية المعتمدة.
-              </p>
-            </div>
+              لا تتوفر جهات اتصال نشطة حالياً لاستقبال طلبات استعادة كلمة المرور عبر واتساب. يرجى مراجعة إدارة التدريب أو التواصل عبر القنوات الداخلية المعتمدة.
+            </Alert>
           )}
 
           {/* Exactly One Contact: Prominent Direct Contact Action */}
@@ -513,36 +524,29 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
           {/* Error State */}
           {!isSignupLoading && signupError && (
-            <div
-              className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3 text-xs text-red-800 dark:text-red-200 flex items-center justify-between gap-2"
-              role="alert"
-              data-testid="signup-wa-error"
-            >
-              <span>{signupError}</span>
-              <button
-                type="button"
-                onClick={() => refetchSignup()}
-                className="text-xs text-primary font-bold hover:underline cursor-pointer shrink-0"
-              >
-                إعادة المحاولة
-              </button>
-            </div>
+            <Alert variant="danger" data-testid="signup-wa-error">
+              <div className="flex items-center justify-between gap-2">
+                <span>{signupError}</span>
+                <button
+                  type="button"
+                  onClick={() => refetchSignup()}
+                  className="text-xs text-primary font-bold hover:underline cursor-pointer shrink-0"
+                >
+                  إعادة المحاولة
+                </button>
+              </div>
+            </Alert>
           )}
 
           {/* Zero Contacts: Unavailable State */}
           {!isSignupLoading && !signupError && signupCount === 0 && (
-            <div
-              className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3.5 text-xs text-amber-900 dark:text-amber-200 leading-relaxed"
+            <Alert
+              variant="warning"
+              title="خدمة التواصل عبر واتساب غير متوفرة حالياً"
               data-testid="signup-wa-unavailable"
             >
-              <div className="font-bold mb-1 flex items-center gap-1.5 text-amber-950 dark:text-amber-100">
-                <span aria-hidden="true">ℹ️</span>
-                <span>خدمة التواصل عبر واتساب غير متوفرة حالياً</span>
-              </div>
-              <p>
-                لا تتوفر جهات اتصال نشطة حالياً لاستقبال طلبات إنشاء الحسابات عبر واتساب. يرجى التوجه إلى منسق التدريب بالقطاع التابع لك أو مراجعة إدارة التدريب المركزية بالشركة.
-              </p>
-            </div>
+              لا تتوفر جهات اتصال نشطة حالياً لاستقبال طلبات إنشاء الحسابات عبر واتساب. يرجى التوجه إلى منسق التدريب بالقطاع التابع لك أو مراجعة إدارة التدريب المركزية بالشركة.
+            </Alert>
           )}
 
           {/* Exactly One Contact: Prominent Direct Contact Action */}

@@ -37,7 +37,7 @@ export const DepartmentTracksPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const isAssistantAdmin = user?.role === 'assistant_admin';
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer';
   const isAuthorized = isAdmin || isAssistantAdmin;
 
   const loadData = useCallback(async () => {

@@ -1,3 +1,114 @@
-"""URL routes for apps.courses (endpoints deferred to Phase 12 implementation)."""
+"""URL routes for apps.courses."""
+from django.urls import path
 
-urlpatterns = []
+from apps.courses.api.views.courses import (
+    AdminCommentDeleteView,
+    AdminCommentModerationView,
+    AdminCommentsReportedView,
+    AdminCommentsSummaryView,
+    AdminCourseCommentsToggleView,
+    AdminCourseReviewActionView,
+    AdminCourseReviewDecideView,
+    AdminCourseReviewSubmitView,
+    AdminCourseStagedEditView,
+    AdminCourseWorkingNotesView,
+    ApprovalsMySubmissionsView,
+    ApprovalsQueueView,
+    CourseCatalogDetailView,
+    CourseCatalogListView,
+    CourseCommentListView,
+    CourseCommentReportView,
+    CourseInstructorsView,
+    CourseReviewDataView,
+    LecturerCourseDetailView,
+    LecturerCourseDraftView,
+    LecturerCourseListView,
+)
+
+urlpatterns = [
+    path("courses", CourseCatalogListView.as_view(), name="courses-catalog"),
+    path("courses/<int:course_id>", CourseCatalogDetailView.as_view(), name="courses-detail"),
+    path("courses/<int:course_id>/instructors", CourseInstructorsView.as_view(), name="course-instructors"),
+    path("courses/<int:course_id>/review-data", CourseReviewDataView.as_view(), name="course-review-data"),
+    path("courses/<int:course_id>/submit", AdminCourseReviewSubmitView.as_view(), name="course-submit"),
+    path("approvals/queue", ApprovalsQueueView.as_view(), name="approvals-queue"),
+    path("approvals/my-submissions", ApprovalsMySubmissionsView.as_view(), name="approvals-my-submissions"),
+    path("lecturer/courses", LecturerCourseListView.as_view(), name="lecturer-courses"),
+    path("lecturer/courses/<int:course_id>", LecturerCourseDetailView.as_view(), name="lecturer-course-detail"),
+    path("lecturer/courses/<int:course_id>/draft", LecturerCourseDraftView.as_view(), name="lecturer-course-draft"),
+    path(
+        "admin/courses/<int:course_id>/review/submit",
+        AdminCourseReviewSubmitView.as_view(),
+        name="admin-course-review-submit",
+    ),
+    path(
+        "admin/courses/<int:course_id>/review/decide",
+        AdminCourseReviewDecideView.as_view(),
+        name="admin-course-review-decide",
+    ),
+    path(
+        "admin/courses/<int:course_id>/approve",
+        AdminCourseReviewActionView.as_view(fixed_decision="Approved"),
+        name="admin-course-approve",
+    ),
+    path(
+        "admin/courses/<int:course_id>/return-with-edits",
+        AdminCourseReviewActionView.as_view(fixed_decision="ReturnedWithEdits"),
+        name="admin-course-return-with-edits",
+    ),
+    path(
+        "admin/courses/<int:course_id>/reject",
+        AdminCourseReviewActionView.as_view(fixed_decision="Rejected"),
+        name="admin-course-reject",
+    ),
+    path(
+        "admin/review/<int:course_id>/decision",
+        AdminCourseReviewActionView.as_view(),
+        name="admin-review-decision",
+    ),
+    path(
+        "admin/courses/<int:course_id>/review/staged-edits",
+        AdminCourseStagedEditView.as_view(),
+        name="admin-course-staged-edits",
+    ),
+    path(
+        "admin/review/<int:course_id>/staged-edits",
+        AdminCourseStagedEditView.as_view(),
+        name="admin-review-staged-edits",
+    ),
+    path(
+        "admin/courses/<int:course_id>/staged-edits",
+        AdminCourseStagedEditView.as_view(),
+        name="admin-courses-staged-edits",
+    ),
+    path(
+        "admin/review/<int:course_id>/working-notes",
+        AdminCourseWorkingNotesView.as_view(),
+        name="admin-review-working-notes",
+    ),
+    path(
+        "admin/courses/<int:course_id>/working-notes/<str:target_type>/<str:target_id>",
+        AdminCourseWorkingNotesView.as_view(),
+        name="admin-course-working-notes-item",
+    ),
+    path(
+        "admin/courses/<int:course_id>/comments-toggle",
+        AdminCourseCommentsToggleView.as_view(),
+        name="admin-course-comments-toggle",
+    ),
+    path("courses/<int:course_id>/comments", CourseCommentListView.as_view(), name="course-comments"),
+    path(
+        "courses/<int:course_id>/comments/<int:comment_id>",
+        AdminCommentDeleteView.as_view(),
+        name="course-comment-delete",
+    ),
+    path("comments/<int:comment_id>/report", CourseCommentReportView.as_view(), name="comment-report"),
+    path("admin/comments/reported", AdminCommentsReportedView.as_view(), name="admin-comments-reported"),
+    path("admin/comments/summary", AdminCommentsSummaryView.as_view(), name="admin-comments-summary"),
+    path("admin/comments/<int:comment_id>", AdminCommentDeleteView.as_view(), name="admin-comment-delete"),
+    path(
+        "admin/comments/<int:comment_id>/ignore-report",
+        AdminCommentModerationView.as_view(),
+        name="admin-comment-ignore-report",
+    ),
+]

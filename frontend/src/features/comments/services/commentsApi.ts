@@ -67,10 +67,14 @@ export const commentsApi = {
     courseId: string,
     options?: RequestOptions
   ): Promise<CourseComment[]> {
-    return apiClient<CourseComment[]>(`/api/courses/${courseId}/comments`, {
-      method: 'GET',
-      ...options,
-    });
+    const res = await apiClient<CourseComment[] | { comments: CourseComment[] }>(
+      `/api/courses/${courseId}/comments`,
+      {
+        method: 'GET',
+        ...options,
+      }
+    );
+    return Array.isArray(res) ? res : res?.comments || [];
   },
 
   /**
@@ -81,11 +85,15 @@ export const commentsApi = {
     text: string,
     options?: RequestOptions
   ): Promise<CourseComment> {
-    return apiClient<CourseComment>(`/api/courses/${courseId}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({ text }),
-      ...options,
-    });
+    const res = await apiClient<CourseComment | { comment: CourseComment }>(
+      `/api/courses/${courseId}/comments`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ text, body: text }),
+        ...options,
+      }
+    );
+    return 'comment' in res ? res.comment : res;
   },
 
   /**

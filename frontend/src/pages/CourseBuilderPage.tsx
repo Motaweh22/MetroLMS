@@ -21,6 +21,7 @@ import {
   CourseDiffViewerModal,
 } from '@/features/course-review';
 import { reviewApi } from '@/features/course-review/api/reviewApi';
+import { apiClient } from '@/core/api/apiClient';
 import {
   saveCourseBuilderDraft,
   getCourseBuilderDraft,
@@ -47,8 +48,7 @@ export const CourseBuilderPage: React.FC = () => {
   // QR Code Modal State
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
 
-  // Local backup restoration banner
-  const [hasRestoredBackup, setHasRestoredBackup] = useState<boolean>(false);
+  // Lab reset state
   const [isResettingLab, setIsResettingLab] = useState<boolean>(false);
 
   // Confirmation dialogs
@@ -95,7 +95,6 @@ export const CourseBuilderPage: React.FC = () => {
       const savedBackup = getCourseBuilderDraft(user?.id, courseId);
       if (savedBackup) {
         courseToUse = savedBackup;
-        setHasRestoredBackup(true);
       }
 
       setCourse(courseToUse);
@@ -145,7 +144,14 @@ export const CourseBuilderPage: React.FC = () => {
 
   useEffect(() => {
     if (previewRole === 'assistant_lecturer') return;
-    if (isAuthenticated && (user?.role === 'lecturer' || user?.role === 'admin' || user?.role === 'developer')) {
+    if (
+      isAuthenticated &&
+      (user?.role === 'lecturer' ||
+        user?.role === 'admin' ||
+        user?.role === 'super_admin' ||
+        user?.role === 'assistant_admin' ||
+        user?.role === 'developer')
+    ) {
       loadCourseData();
     }
   }, [isAuthenticated, user?.role, previewRole, loadCourseData]);
@@ -203,7 +209,6 @@ export const CourseBuilderPage: React.FC = () => {
       setCourse(res.course);
       setInitialSnapshot(JSON.stringify(res.course));
       clearCourseBuilderDraft(user?.id, courseId);
-      setHasRestoredBackup(false);
       const resetText = res.message || 'تمت إعادة ضبط معمل تجربة المحتوى لحالته الافتراضية بنجاح.';
       toast.success(resetText);
     } catch (err: unknown) {
@@ -248,6 +253,38 @@ export const CourseBuilderPage: React.FC = () => {
       (e) => e.action === 'returned_with_admin_edits' || e.action === 'rejected'
     )
   );
+
+  const isDirectPublisher =
+    user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer';
+
+  const handleDirectPublish = async () => {
+    if (!course || !courseId) return;
+    if (isDirty) {
+      toast.warning('يرجى حفظ المسودة أولاً قبل الاعتماد والنشر.');
+      return;
+    }
+    setIsSubmittingReview(true);
+    setErrorMessage(null);
+    try {
+      if (course.status !== 'pending_admin' && course.status !== 'pending_owner') {
+        await reviewApi.submitCourse(courseId);
+      }
+      await apiClient(`/api/admin/courses/${encodeURIComponent(courseId)}/review/decide`, {
+        method: 'POST',
+        body: JSON.stringify({ decision: 'approve' }),
+      });
+      const updated = await builderApi.getCourseForEditing(courseId);
+      setCourse(updated);
+      setInitialSnapshot(JSON.stringify(updated));
+      toast.success('تم اعتماد الدورة ونشرها مباشرة بنجاح!');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'فشل في اعتماد ونشر الدورة';
+      setErrorMessage(msg);
+      toast.error(msg);
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   // Handle Submit / Resubmit for Review (Phase 7)
   const handleSubmitForReview = async () => {
@@ -452,7 +489,7 @@ export const CourseBuilderPage: React.FC = () => {
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleSubmitForReview}
+              onClick={isDirectPublisher ? handleDirectPublish : handleSubmitForReview}
               disabled={isSubmittingReview || isSaving || isDirty}
               className="font-bold text-xs text-primary border-primary/40 hover:bg-primary/10 shadow-2xs gap-1.5"
               data-testid="builder-submit-for-review-btn"
@@ -460,7 +497,11 @@ export const CourseBuilderPage: React.FC = () => {
               <Icon name="checkCircle" size="sm" />
               <span>
                 {isSubmittingReview
-                  ? 'جاري التقديم...'
+                  ? isDirectPublisher
+                    ? 'جاري النشر...'
+                    : 'جاري التقديم...'
+                  : isDirectPublisher
+                  ? 'اعتماد ونشر مباشرة'
                   : isResubmission
                   ? 'إعادة التقديم للاعتماد'
                   : 'تقديم للاعتماد'}
@@ -482,31 +523,6 @@ export const CourseBuilderPage: React.FC = () => {
           </Button>
         </div>
       </div>
-
-      {/* Recovered Local Backup Banner */}
-      {hasRestoredBackup && (
-        <Alert
-          variant="warning"
-          onClose={() => setHasRestoredBackup(false)}
-          data-testid="recovered-backup-banner"
-        >
-          <div className="flex items-center justify-between text-xs">
-            <span>
-              تم استرجاع تعديلات غير محفوظة محفوظة محلياً على هذا الجهاز من جلسة سابقة. يمكنك حفظها أو التراجع عنها.
-            </span>
-            <button
-              onClick={() => {
-                clearCourseBuilderDraft(user?.id, courseId);
-                loadCourseData();
-                setHasRestoredBackup(false);
-              }}
-              className="underline font-bold mr-3"
-            >
-              تجاهل واستعادة الأصل
-            </button>
-          </div>
-        </Alert>
-      )}
 
       {/* Error Message */}
       {errorMessage && (
@@ -609,7 +625,7 @@ export const CourseBuilderPage: React.FC = () => {
             course={course}
             onChange={(updated) => setCourse(updated)}
             availableCourses={availableCourses}
-            isAdmin={user?.role === 'admin'}
+            isAdmin={isDirectPublisher}
           />
         </div>
       ) : (

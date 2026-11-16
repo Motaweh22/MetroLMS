@@ -405,13 +405,42 @@ export async function apiClient<T>(
     );
   }
 
+function normalizeApiPayloadIds(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeApiPayloadIds);
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof v === 'number' && (k === 'id' || k.endsWith('Id'))) {
+        out[k] = String(v);
+      } else if (Array.isArray(v) && k.endsWith('Ids')) {
+        out[k] = v.map((item) => (typeof item === 'number' ? String(item) : normalizeApiPayloadIds(item)));
+      } else {
+        out[k] = normalizeApiPayloadIds(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
   // Safe JSON parsing for valid JSON responses with post-parse epoch validation
   try {
-    const data = (await response.json()) as T;
+    const parsed = (await response.json()) as unknown;
     if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
       throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
     }
-    return data;
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'status' in parsed &&
+      (parsed as { status: unknown }).status === 'OK' &&
+      'data' in parsed
+    ) {
+      return normalizeApiPayloadIds((parsed as { data: T }).data) as T;
+    }
+    return normalizeApiPayloadIds(parsed) as T;
   } catch (parseErr: unknown) {
     if (isStaleEpochError(parseErr)) {
       throw parseErr;

@@ -1,0 +1,4 @@
+# MetroLMS Production Server Dependencies (Windows Server 2022 WSGI)
+-r requirements.txt
+waitress>=3.0,<4.0
+

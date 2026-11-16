@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAuth } from '@/features/auth';
 import { inMemoryStore } from '@/mocks/store/inMemoryStore';
 import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
+import { usePublicSupportContacts } from './usePublicSupportContacts';
 import {
   cleanPhoneNumber,
   buildContextMessage,
@@ -20,13 +21,13 @@ export interface UseWhatsAppContactsResult {
 
 export function useWhatsAppContacts(config: WhatsAppContextConfig): UseWhatsAppContactsResult {
   const { user } = useAuth();
+  const { contacts: publicSupportContacts } = usePublicSupportContacts('technical_support');
 
   const { contacts, contextTitle, unavailableReasonAr } = useMemo(() => {
     switch (config.context) {
       // ── 1. Login Screen Support Context ───────────────────────────────────
       case 'login': {
-        const eligible = inMemoryStore.resolvePublicSupportContacts('technical_support');
-        const resolvedContacts: WhatsAppContact[] = eligible.map((c) => ({
+        const resolvedContacts: WhatsAppContact[] = publicSupportContacts.map((c) => ({
           id: c.userId,
           name: c.name,
           role: c.jobTitle || 'الدعم الفني والتدريب عبر واتساب',
@@ -45,8 +46,7 @@ export function useWhatsAppContacts(config: WhatsAppContextConfig): UseWhatsAppC
       // ── 2. General Platform Support Context ───────────────────────────────
       case 'general':
       case 'technical_support': {
-        const eligible = inMemoryStore.resolvePublicSupportContacts('technical_support');
-        const resolvedContacts: WhatsAppContact[] = eligible.map((c) => ({
+        const resolvedContacts: WhatsAppContact[] = publicSupportContacts.map((c) => ({
           id: c.userId,
           name: c.name,
           role: c.jobTitle || 'الدعم الإداري والتقني',
@@ -254,7 +254,7 @@ export function useWhatsAppContacts(config: WhatsAppContextConfig): UseWhatsAppC
         };
       }
     }
-  }, [config, user]);
+  }, [config, user, publicSupportContacts]);
 
   const message = useMemo(() => {
     if (config.customMessage) return config.customMessage;
