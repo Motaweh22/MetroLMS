@@ -64,3 +64,4 @@
   - `36` Ordinary `UNIQUE` constraints/indexes (`15` C1 + `8` C2 + `13` C3).
   - `5` Non-Unique lookup indexes: `ServerSession(expire_date)`, `ServerSession(user_id)`, `PendingApprovalRequest(target_entity_type, target_entity_id)`, `MediaAsset(sha256_checksum)`, `DelegatedAuthority(user_id, capability_key)`.
 - **Concurrency:** Use Read Committed Snapshot Isolation (`RCSI`) and `select_for_update()` inside `@transaction.atomic()` for critical state transitions (e.g., `INV-DOM10-12` group renewal, `D-01` deletion).
+

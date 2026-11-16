@@ -536,7 +536,7 @@ if "!OPEN_BROWSER!"=="1" (
     set "VITE_ARGS=!VITE_ARGS! --open"
 )
 
-call npm run dev -- !VITE_ARGS!
+call npm run dev:demo -- !VITE_ARGS!
 
 if errorlevel 1 (
     echo.

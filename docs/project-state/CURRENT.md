@@ -5,7 +5,7 @@
 > **Latest Accepted Checkpoint:** [`CP-013-2026-11-16-wp-5-6-and-phase-5-closure.md`](checkpoints/CP-013-2026-11-16-wp-5-6-and-phase-5-closure.md) (`CP-013` — REV6 Phase 5 Closure: Data Dictionary Freeze, WP-5.6 Physical Design & ORM Guidelines, and G-01 Gate Closure; prior: [`CP-012`](checkpoints/CP-012-2026-11-15-wp-5-5-checkpoint-3-closure.md))
 > **Next Sequential Checkpoint:** `CP-014` *(per the sequential per-milestone checkpoint rule in [`checkpoints/README.md`](checkpoints/README.md))*
 > **Living Master Plan:** [`docs/project-state/active-roadmap.md`](active-roadmap.md)
-> **Last Updated:** 2026-11-16 (`REV6` `Phase 5: CLOSED — CP-013 ACCEPTED`; `Data Dictionary: FROZEN — OWNER-APPROVED (2026-11-16)`; `WP-5.6: COMPLETED AND ACCEPTED`; `G-01: OWNER-APPROVED — CLOSED`; `G-04: Local CLOSED — VERIFIED / Prod OPEN`; Backend Track: `BP-01 READY (Local SQL Server 2025 Developer / Compat 160)`; Frontend Track: `Phase 3` / `WP-3.1` / `T-3.1.1` `READY TO START`)
+> **Last Updated:** 2026-11-16 (`REV6` `Phase 5: CLOSED — CP-013 ACCEPTED`; `Data Dictionary: FROZEN — OWNER-APPROVED (2026-11-16)`; `WP-5.6: COMPLETED AND ACCEPTED`; `G-01: OWNER-APPROVED — CLOSED`; `G-04: Local CLOSED — VERIFIED / Prod OPEN`; Backend Track: `BP-00 & BP-01 DONE — VERIFIED`, `BP-02 BLOCKED on G-03 (OD-API-01/02)`; Frontend Track: `Demo/ MSW Isolated + Error Handling Hardened` [`2026-11-16`], `Phase 3` / `WP-3.1` / `T-3.1.1` `READY TO START`)
 
 ---
 

@@ -1,0 +1,8 @@
+# MetroLMS Backend Dependencies (Approved Stack: D-DB-01, D-AUTH-01, WP55-PT-06)
+# External OS Prerequisite: Microsoft ODBC Driver 18 for SQL Server (Windows Server 2022)
+Django>=5.2,<5.3
+djangorestframework>=3.15,<4.0
+mssql-django==2.0.0
+pyodbc>=5.1,<6.0
+mssql-python>=1.15.0
+tzdata>=2024.1

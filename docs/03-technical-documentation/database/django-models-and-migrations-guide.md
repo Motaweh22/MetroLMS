@@ -68,3 +68,4 @@
 1. **Dependency Order:** `identity` (`RolePolicy`, `User`) and `organization` catalogs migrate first, followed by `governance`, `courses`, `groups`, `media`, `learning`, and `communications`.
 2. **Mandatory `sqlmigrate` Inspection:** Every generated migration must be inspected via `python manage.py sqlmigrate <app> <migration>` to verify `dbo` tables, `ON DELETE NO ACTION`, `DATETIMEOFFSET(7)`, `DEFAULT` constraints, `CHECK`/`ISJSON()`, and filtered `UNIQUE` indexes before `migrate`.
 3. **Catalog & Bootstrap Seeds:** Seed `RolePolicy` (6 canonical roles), `MaritalStatusCatalog`, `MilitaryServiceStatusCatalog`, `MetroLine`, `OrganizationalDepartment`, `JobTitle`, `DepartmentTrack`, and `ScheduledJob` (`process_due_group_renewals`), plus `python manage.py bootstrap_developer` (`INV-R1`, `transaction.atomic()` + `select_for_update()`).
+

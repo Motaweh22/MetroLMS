@@ -117,5 +117,6 @@ To prevent race conditions, duplicate enrollments, or infinite retry loops:
 
 ## 7. Known Prototype & Mock Limitations
 
-- **MSW Service Worker**: Under client-side MSW v2, simulated errors are mocked in-memory. Genuine operating-system network disconnects (e.g. physical cable pull) fall back to the browser's native `fetch` failure which triggers `isNetworkError: true`.
-- **Server Rate Limiting (429)**: The frontend apiClient provides full support and Arabic translation for 429, though default mock handlers do not enforce burst request limits.
+- **Isolated Demo Mode (`Demo/` & `npm run dev:demo`):** As of `2026-11-16`, MSW v2 assets (`Demo/mocks/` and `Demo/public/mockServiceWorker.js`) are isolated under root `Demo/`. Default `npm run dev` proxies `/api/*` directly to Django without starting MSW, while `npm run dev:demo` activates MSW with sanitized `503` fallback (`"الخدمة غير متوفرة حالياً. يرجى المحاولة بعد قليل."`) and `isDemoAuthMode()` permanently blocks Demo auth in production builds.
+- **Request Timeouts & Sanitization:** `apiClient` maps `TimeoutError` to `"تعذر الاتصال بالخادم (انتهت مهلة الطلب)"` (per `sup-01-durable-acknowledgement-and-runtime-semantics-audit-v3-4.md`), preserves non-JSON HTTP `200` status codes (`ApiError.status === 200`), and strips technical/infrastructure strings via `sanitizeErrorMessage()`.
+- **Server Rate Limiting (429):** The frontend apiClient provides full support and Arabic translation for 429, though default mock handlers do not enforce burst request limits.

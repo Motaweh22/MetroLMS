@@ -69,8 +69,8 @@ export async function computeOriginSnapshotDigest(
     typeof window !== 'undefined' && window.crypto?.subtle
       ? window.crypto.subtle
       : typeof globalThis !== 'undefined' && globalThis.crypto?.subtle
-      ? globalThis.crypto.subtle
-      : null;
+        ? globalThis.crypto.subtle
+        : null;
 
   if (!subtle || typeof subtle.digest !== 'function') {
     console.warn('Web Crypto API (crypto.subtle.digest) is unavailable. Failing closed.');
@@ -95,7 +95,7 @@ export async function computeOriginSnapshotDigest(
 
   const explicitRuntimeToken =
     typeof (origin as RuntimeDeveloperOriginSession).developerToken === 'string' &&
-    (origin as RuntimeDeveloperOriginSession).developerToken!.trim() !== ''
+      (origin as RuntimeDeveloperOriginSession).developerToken!.trim() !== ''
       ? (origin as RuntimeDeveloperOriginSession).developerToken!.trim()
       : null;
   const runtimeTokenScope =
@@ -179,6 +179,32 @@ export function shouldCommitDigestResult(params: DigestCommitGuardParams): boole
  * is a valid, finite future timestamp, defaulting to 24 hours only when absent.
  * Fails closed immediately if mock credentials are missing or invalid.
  */
+export interface AuthRuntimeEnv {
+  DEV?: boolean;
+  PROD?: boolean;
+  MODE?: string;
+  VITE_DEMO_MODE?: string;
+}
+
+/**
+ * Determines whether Demo/Test mock-session validation is permitted.
+ * Production builds and runtime `production` mode NEVER allow Demo authentication,
+ * even if `VITE_DEMO_MODE=true` is present in the environment.
+ */
+export function isDemoAuthMode(env: AuthRuntimeEnv = import.meta.env): boolean {
+  if (env.PROD === true || env.MODE === 'production') {
+    return false;
+  }
+  if (env.DEV !== true) {
+    return false;
+  }
+  return (
+    env.MODE === 'demo' ||
+    env.MODE === 'test' ||
+    env.VITE_DEMO_MODE === 'true'
+  );
+}
+
 function validateDevMockSession(response: {
   user: User;
   token?: string;
@@ -387,7 +413,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   setError(null);
                 }
               })
-              .catch(() => {});
+              .catch(() => { });
           } else {
             authenticatedSessionEpochRef.current = requestEpoch;
             setUser(response.user);
@@ -778,7 +804,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new StaleEpochError(requestEpoch, currentEpoch, '/api/auth/login');
       }
 
-      if (import.meta.env.DEV) {
+      if (isDemoAuthMode()) {
         // Strict DEV token and expiry validation (T-1.3.1 Targeted Remediation)
         // A DEV/MSW authentication flow that requires a mock token must not establish an authenticated
         // state when that token is missing, empty, whitespace-only, or has an invalid expiry.

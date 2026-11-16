@@ -28,7 +28,7 @@ export default tseslint.config(
         { type: 'core', pattern: 'src/core' },
         { type: 'shared', pattern: 'src/shared' },
         { type: 'styles', pattern: 'src/styles' },
-        { type: 'mocks', pattern: 'src/mocks' },
+        { type: 'mocks', pattern: '../Demo/mocks' },
       ],
     },
     rules: {

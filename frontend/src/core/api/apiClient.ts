@@ -128,7 +128,7 @@ export function sanitizeErrorMessage(
     return fallback;
   }
 
-  // Detect technical error artifacts, HTML snippets, parser exceptions
+  // Detect technical error artifacts, HTML snippets, parser exceptions, and internal/sensitive infrastructure details
   const technicalPatterns = [
     /<[!a-zA-Z]/,
     /Unexpected token/i,
@@ -139,9 +139,25 @@ export function sanitizeErrorMessage(
     /ReferenceError/i,
     /Failed to fetch/i,
     /NetworkError/i,
-    /\bat\b.*\.js/i,
+    /\bat\b.*\.(?:js|ts|tsx|mjs|cjs|py)\b/i,
     /<!doctype/i,
     /<\/?html/i,
+    /\bMSW\b/i,
+    /Mock Service Worker/i,
+    /MSW_NOT_ACTIVE/i,
+    /خدمة محاكاة واجهة البرمجة/,
+    /رمز جلسة المحاكاة/,
+    /\bmock token\b/i,
+    /Traceback \(most recent call last\)/i,
+    /File ".*", line \d+/i,
+    /\b(?:pyodbc|ODBC Driver|SqlException|MSSQLSERVER|SQLEXPRESS)\b/i,
+    /\b(?:ProgrammingError|OperationalError|IntegrityError|SQLExecDirectW|ImproperlyConfigured|TransactionManagementError)\b/i,
+    /\b(?:django|rest_framework)\.[a-z0-9_.]+/i,
+    /(?:DRIVER=\{|Trusted_Connection=|TrustServerCertificate=|Data Source=|PWD=|PASSWORD=)/i,
+    /[A-Za-z]:\\(?:[^\s"'`]+\\)+[^\s"'`]*/,
+    /(?:frontend|backend)[\\/](?:src|apps|config|shared)[\\/]/i,
+    /\b(?:sessionid|csrftoken)=/i,
+    /\bBearer\s+[A-Za-z0-9._-]{8,}/i,
   ];
 
   for (const pattern of technicalPatterns) {
@@ -217,9 +233,16 @@ export async function apiClient<T>(
     'Accept': 'application/json',
   };
 
-  // In development mode only, provide Bearer token fallback for current MSW prototype handlers.
-  // In production builds, authentication is strictly cookie-based and zero Bearer header is injected.
-  if (import.meta.env.DEV && session?.token) {
+  // In Demo/Test mode only, provide Bearer token fallback for current MSW prototype handlers.
+  // In real Django development/production builds, authentication is strictly cookie-based.
+  const allowMockBearer =
+    !import.meta.env.PROD &&
+    import.meta.env.MODE !== 'production' &&
+    import.meta.env.DEV &&
+    (import.meta.env.MODE === 'demo' ||
+      import.meta.env.MODE === 'test' ||
+      import.meta.env.VITE_DEMO_MODE === 'true');
+  if (allowMockBearer && session?.token) {
     defaultHeaders['Authorization'] = `Bearer ${session.token}`;
   }
 
@@ -282,6 +305,9 @@ export async function apiClient<T>(
     if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
       throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
     }
+    if (err instanceof DOMException && err.name === 'TimeoutError') {
+      throw new ApiError('تعذر الاتصال بالخادم (انتهت مهلة الطلب)', 0, null, url, true);
+    }
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new ApiError('تم إلغاء الطلب.', 0, null, url, true);
     }
@@ -334,9 +360,9 @@ export async function apiClient<T>(
           typeof (errorData as { message: unknown }).message === 'string'
         ) {
           const rawServerMessage = (errorData as { message: string }).message.trim();
-          // Only use server message if it doesn't contain technical garbage or HTML
-          if (rawServerMessage && !/<[!a-zA-Z]/.test(rawServerMessage) && !/SyntaxError|Unexpected/i.test(rawServerMessage)) {
-            errorMessage = rawServerMessage;
+          const sanitized = sanitizeErrorMessage(rawServerMessage, '');
+          if (sanitized) {
+            errorMessage = sanitized;
           }
         }
       } catch (err: unknown) {
@@ -368,8 +394,11 @@ export async function apiClient<T>(
     if (!isAuthControlPlane && isStaleEpoch(requestEpoch)) {
       throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
     }
+    if (import.meta.env.DEV) {
+      console.warn('[apiClient] Non-JSON response received for', url, 'content-type:', contentType);
+    }
     throw new ApiError(
-      'استجابة غير متوقعة من الخادم (تم استلام مستند HTML بدلاً من بيانات JSON). يرجى التأكد من تشغيل الخادم.',
+      'حدث خطأ داخلي في الخادم. يرجى المحاولة مرة أخرى لاحقاً.',
       response.status,
       null,
       url

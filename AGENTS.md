@@ -78,3 +78,23 @@ Maintain accurate work-package and task statuses in [`docs/project-state/active-
    - Never modify or delete `legacy-reference/**`.
    - Never delete or rewrite historical reports (`docs/frontend/reports/*.md`), frozen baseline roadmaps (`docs/backend/pre-backend-migration-remediation-roadmap.md`, `docs/frontend/implementation-roadmap*.md`), or published checkpoints (`CP-001`, etc.).
    - Always preserve uncommitted working-tree changes (such as the 18 `frontend/src/` files from Phase 5 Increment 5.4).
+
+---
+
+## 4. Backend Implementation Roadmap Protocol (`Phase 12`)
+
+The authoritative execution checklist for Django + Microsoft SQL Server backend implementation is [`docs/backend/backend-implementation-roadmap.md`](docs/backend/backend-implementation-roadmap.md). Every agent performing or auditing backend work must enforce these 8 rules:
+
+1. **Always Read the Roadmap:** Before performing backend implementation or deciding what remains, read [`docs/backend/backend-implementation-roadmap.md`](docs/backend/backend-implementation-roadmap.md) and its linked architecture/API/Data Dictionary sources.
+2. **Resume from Verified Progress:** When asked to continue or execute remaining backend tasks, inspect the checklist, verify actual repository and test evidence, and select the earliest eligible incomplete task (`READY`) in dependency order.
+3. **Never Skip Dependencies:** Never jump to a later Feature while upstream gates (`G-01`–`G-04`) or prerequisites (Custom User Model, Migrations, Auth, RBAC, or cross-Feature dependencies) remain `BLOCKED` or incomplete.
+4. **Update the Checklist with Evidence:** After completing a task, run its required checks, record file paths, commands, test results, and commit hashes (when applicable), and update the roadmap status. Never mark a task `DONE — VERIFIED` without passing evidence.
+5. **Respect Owner Decisions:** If a task requires explicit Owner approval, mark it `NEEDS OWNER DECISION`, explain the exact decision, and stop at the gate without inferring approval.
+6. **Execute Incrementally:** Execute the next eligible Work Package (or an explicitly authorized bounded group) without altering unrelated Features, repeating completed work, or skipping tests/documentation.
+7. **Preserve Architecture and Governance:** Preserve `D-AUTH-01`, `D-DB-01`, `D-SEC-01`, `D-MEDIA-01`, `data-dictionary.md`, `openapi-specification.yaml`, and all accepted checkpoints (`CP-001`–`CP-012`+). Specifically enforce the Owner-approved (`2026-11-16`) backend architecture:
+   - Follow the **Modular Monolith** architecture (`OWNER-APPROVED`).
+   - Organize backend code by **Feature** (`apps/<feature>/`) with **Layered Architecture** inside each Feature (`OWNER-APPROVED`), preserving strict Feature ownership and application/code boundaries (a shared database never authorizes unrestricted cross-Feature access).
+   - Use **one shared SQL Server 2022 database** and the **`dbo`** schema for all MetroLMS tables (`OWNER-APPROVED`).
+   - **Never** introduce per-Feature SQL Server schemas, separate per-Feature databases, or Microservices without explicit Owner authorization.
+   - Always consult [`docs/backend/backend-implementation-roadmap.md`](docs/backend/backend-implementation-roadmap.md) before starting or resuming any Backend Work Package.
+8. **Roadmap Is the Execution Checklist:** Treat `backend-implementation-roadmap.md` as the authoritative backend progress record, but never allow it to override a newer explicit Owner decision or canonical contract.

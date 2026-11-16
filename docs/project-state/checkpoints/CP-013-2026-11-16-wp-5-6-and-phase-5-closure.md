@@ -55,3 +55,4 @@
     - [`docs/03-technical-documentation/database/schema-design-guidelines.md`](../../03-technical-documentation/database/schema-design-guidelines.md)
     - [`docs/03-technical-documentation/database/django-models-and-migrations-guide.md`](../../03-technical-documentation/database/django-models-and-migrations-guide.md)
     - [`docs/project-state/CURRENT.md`](../CURRENT.md)
+

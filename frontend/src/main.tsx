@@ -4,7 +4,13 @@ import App from './App';
 import './styles/globals.css';
 
 async function prepareApp() {
-  if (import.meta.env.DEV) {
+  const isDemoMode =
+    !import.meta.env.PROD &&
+    import.meta.env.MODE !== 'production' &&
+    import.meta.env.DEV &&
+    (import.meta.env.MODE === 'demo' || import.meta.env.VITE_DEMO_MODE === 'true');
+
+  if (isDemoMode) {
     try {
       // Seed development-only mock CSRF cookie on window/main thread before initial requests
       if (typeof document !== 'undefined' && !/(?:^|;\s*)csrftoken=([^;]+)/.test(document.cookie)) {
@@ -19,7 +25,7 @@ async function prepareApp() {
         },
       });
     } catch (err) {
-      console.warn('MSW worker failed to start in development environment:', err);
+      console.warn('MSW worker failed to start in demo environment:', err);
     }
   }
 }

@@ -12,9 +12,16 @@ import type { IncomingMessage, ServerResponse } from 'http';
  * without copying them to public/ or bundling them into production builds.
  */
 function devTestMediaPlugin(): Plugin {
+  let isDemoMode = false;
   return {
     name: 'dev-test-media-server',
     apply: 'serve', // Strictly development server only
+    configResolved(config) {
+      isDemoMode =
+        config.mode !== 'production' &&
+        !config.isProduction &&
+        (config.mode === 'demo' || process.env.VITE_DEMO_MODE === 'true');
+    },
     configureServer(server) {
       const videoFilename = 'test.mp4';
       const pdfFilename = 'cairo-metro-network-map.pdf';
@@ -107,19 +114,31 @@ function devTestMediaPlugin(): Plugin {
       server.middlewares.use('/dev-media/test-document-data', handlePdfRequest);
 
       // API Fallback Guard:
-      // If MSW Service Worker is bypassed, delayed, or fails to intercept /api/*,
-      // prevent Vite's default SPA HTML-fallback from returning index.html (HTTP 200 text/html)
-      // which would cause JSON parser syntax errors.
-      server.middlewares.use('/api', (_req, res) => {
-        res.statusCode = 503;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(
-          JSON.stringify({
-            message: 'خدمة محاكاة واجهة البرمجة (MSW) غير متوفرة أو لم تبدأ بعد. يرجى إعادة تحميل الصفحة.',
-            code: 'MSW_NOT_ACTIVE',
-          })
-        );
-      });
+      if (isDemoMode) {
+        const demoWorkerPath = path.resolve(__dirname, '../Demo/public/mockServiceWorker.js');
+        server.middlewares.use('/mockServiceWorker.js', (_req, res) => {
+          if (!fs.existsSync(demoWorkerPath)) {
+            res.statusCode = 404;
+            res.end('Demo mockServiceWorker.js not found');
+            return;
+          }
+          res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+          fs.createReadStream(demoWorkerPath).pipe(res);
+        });
+
+        // In Demo mode, prevent Vite's SPA HTML-fallback from returning index.html for /api/*
+        server.middlewares.use('/api', (req, res) => {
+          console.warn(`[Demo MSW] Unhandled /api request (${req.method ?? 'GET'} ${req.url ?? ''}): MSW worker is inactive.`);
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(
+            JSON.stringify({
+              message: 'الخدمة غير متوفرة حالياً. يرجى المحاولة بعد قليل.',
+              code: 'SERVICE_UNAVAILABLE',
+            })
+          );
+        });
+      }
     },
   };
 }
@@ -147,21 +166,49 @@ function excludeMswWorkerInBuildPlugin(): Plugin {
   };
 }
 
+function resolveDemoMswPlugin(): Plugin {
+  const frontendPkgAnchor = path.resolve(__dirname, 'package.json');
+  return {
+    name: 'resolve-demo-msw-from-frontend',
+    resolveId(source, importer) {
+      if (
+        importer &&
+        importer.replace(/\\/g, '/').includes('/Demo/') &&
+        (source === 'msw' || source.startsWith('msw/'))
+      ) {
+        return this.resolve(source, frontendPkgAnchor, { skipSelf: true });
+      }
+      return null;
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    resolveDemoMswPlugin(),
     devTestMediaPlugin(),
     excludeMswWorkerInBuildPlugin(),
   ],
   resolve: {
     alias: {
+      '@/mocks': path.resolve(__dirname, '../Demo/mocks'),
       '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
     port: 5173,
     strictPort: true,
+    proxy:
+      process.env.VITE_DEMO_MODE === 'true' || process.argv.includes('demo')
+        ? undefined
+        : {
+          '/api': {
+            target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8000',
+            changeOrigin: true,
+          },
+        },
   },
   test: {
     globals: true,
