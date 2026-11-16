@@ -276,6 +276,14 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
                     "traineesCompletedCount": 0,
                     "averageProgressPercent": 0,
                     "completedCount": 0,
+                    "timeRemainingText": "منتهية الصلاحية" if obj.is_archived else "متاحة",
+                    "effective": {
+                        "hasDeadlineOverride": False,
+                        "isExpired": bool(obj.is_archived),
+                        "effectivePostDeadlinePolicy": "keep_no_cert",
+                        "postDeadlinePolicy": "keep_no_cert",
+                        "deadlineDateTime": obj.deadline_datetime.isoformat() if obj.deadline_datetime else None,
+                    },
                 }
                 for idx, c in enumerate(courses)
             ],

@@ -590,18 +590,18 @@ export const GroupDetailPage: React.FC = () => {
                         {coursePercent > 0 ? 'قيد التدريب' : 'لم يبدأ بعد'}
                       </Badge>
                     )}
-                    {ac.effective.hasDeadlineOverride && (
+                    {ac.effective?.hasDeadlineOverride && (
                       <Badge variant="warning" className="text-[11px]">
                         موعد مخصص
                       </Badge>
                     )}
-                    {ac.effective.isExpired && (
+                    {ac.effective?.isExpired && (
                       <Badge
-                        variant={ac.effective.effectivePostDeadlinePolicy === 'hide' || ac.effective.postDeadlinePolicy === 'hide' ? 'danger' : 'neutral'}
+                        variant={ac.effective?.effectivePostDeadlinePolicy === 'hide' || ac.effective?.postDeadlinePolicy === 'hide' ? 'danger' : 'neutral'}
                         className="text-[11px] font-bold"
                         data-testid={`course-access-badge-${ac.courseId}`}
                       >
-                        {ac.effective.effectivePostDeadlinePolicy === 'hide' || ac.effective.postDeadlinePolicy === 'hide'
+                        {ac.effective?.effectivePostDeadlinePolicy === 'hide' || ac.effective?.postDeadlinePolicy === 'hide'
                           ? 'منتهية الصلاحية — مغلق'
                           : 'للمطالعة فقط (بدون شهادة)'}
                       </Badge>
@@ -614,10 +614,13 @@ export const GroupDetailPage: React.FC = () => {
 
                   <div className="flex items-center gap-4 text-xs text-text-muted">
                     <span>
-                      المهلة: {new Date(ac.effective.deadlineDateTime).toLocaleDateString('ar-EG')}
+                      المهلة:{' '}
+                      {ac.effective?.deadlineDateTime
+                        ? new Date(ac.effective.deadlineDateTime).toLocaleDateString('ar-EG')
+                        : 'غير محدد'}
                     </span>
                     <span>•</span>
-                    <span>المتبقي: {ac.timeRemainingText}</span>
+                    <span>المتبقي: {ac.timeRemainingText || 'متاحة'}</span>
                   </div>
                 </div>
 
@@ -648,7 +651,7 @@ export const GroupDetailPage: React.FC = () => {
                         استعراض تفاصيل المقرر
                       </Button>
                     </Link>
-                  ) : ac.effective.isExpired && (ac.effective.effectivePostDeadlinePolicy === 'hide' || ac.effective.postDeadlinePolicy === 'hide') ? (
+                  ) : ac.effective?.isExpired && (ac.effective?.effectivePostDeadlinePolicy === 'hide' || ac.effective?.postDeadlinePolicy === 'hide') ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -662,7 +665,7 @@ export const GroupDetailPage: React.FC = () => {
                   ) : (
                     <Link to={`/courses/${ac.courseId}/learn?groupId=${group.id}`} className="block w-full">
                       <Button
-                        variant={isCompleted ? 'outline' : ac.effective.isExpired ? 'outline' : 'primary'}
+                        variant={isCompleted ? 'outline' : ac.effective?.isExpired ? 'outline' : 'primary'}
                         size="sm"
                         className="w-full font-bold text-xs"
                         rightIcon={isCompleted ? 'courses' : ac.effective.isExpired ? 'eye' : 'arrowLeft'}
