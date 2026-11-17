@@ -23,11 +23,11 @@ class Migration(migrations.Migration):
             ALTER TABLE dbo.identity_user
             ADD CONSTRAINT ck_identity_user_address_nonempty CHECK (LTRIM(RTRIM(address)) <> N'');
             ALTER TABLE dbo.identity_rolepolicy
-            ADD CONSTRAINT ck_rolepolicy_caps_isjson CHECK (ISJSON(default_capabilities_json, ARRAY) = 1);
+            ADD CONSTRAINT ck_rolepolicy_caps_isjson CHECK (ISJSON(default_capabilities_json) = 1 AND LEFT(LTRIM(default_capabilities_json), 1) = N'[');
             ALTER TABLE dbo.identity_userpermissionoverride
-            ADD CONSTRAINT ck_permoverride_granted_isjson CHECK (ISJSON(granted_capabilities_json, ARRAY) = 1);
+            ADD CONSTRAINT ck_permoverride_granted_isjson CHECK (ISJSON(granted_capabilities_json) = 1 AND LEFT(LTRIM(granted_capabilities_json), 1) = N'[');
             ALTER TABLE dbo.identity_userpermissionoverride
-            ADD CONSTRAINT ck_permoverride_denied_isjson CHECK (ISJSON(denied_capabilities_json, ARRAY) = 1);
+            ADD CONSTRAINT ck_permoverride_denied_isjson CHECK (ISJSON(denied_capabilities_json) = 1 AND LEFT(LTRIM(denied_capabilities_json), 1) = N'[');
             """,
             reverse_sql="""
             ALTER TABLE dbo.identity_user DROP CONSTRAINT IF EXISTS ck_identity_user_phone_e164_fmt;

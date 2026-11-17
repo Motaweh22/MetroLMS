@@ -23,10 +23,10 @@ class Migration(migrations.Migration):
             ADD CONSTRAINT ck_commentreport_reason_nonempty CHECK (LTRIM(RTRIM(reason)) <> N'');
 
             ALTER TABLE dbo.courses_quizdefinition
-            ADD CONSTRAINT ck_quiz_questions_isjson CHECK (ISJSON(questions_json, ARRAY) = 1);
+            ADD CONSTRAINT ck_quiz_questions_isjson CHECK (ISJSON(questions_json) = 1 AND LEFT(LTRIM(questions_json), 1) = N'[');
 
             ALTER TABLE dbo.courses_stagedadminedit
-            ADD CONSTRAINT ck_stagededit_payload_isjson CHECK (ISJSON(edit_payload_json, OBJECT) = 1);
+            ADD CONSTRAINT ck_stagededit_payload_isjson CHECK (ISJSON(edit_payload_json) = 1 AND LEFT(LTRIM(edit_payload_json), 1) = N'{');
             """,
             reverse_sql="""
             ALTER TABLE dbo.courses_course DROP CONSTRAINT IF EXISTS ck_course_title_nonempty;

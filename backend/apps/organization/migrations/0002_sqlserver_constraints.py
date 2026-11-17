@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
             ADD CONSTRAINT ck_histtrain_org_nonempty CHECK (LTRIM(RTRIM(providing_organization)) <> N'');
 
             ALTER TABLE dbo.organization_departmenttrack
-            ADD CONSTRAINT ck_depttrack_allowed_isjson CHECK (ISJSON(allowed_tracks_json, ARRAY) = 1);
+            ADD CONSTRAINT ck_depttrack_allowed_isjson CHECK (ISJSON(allowed_tracks_json) = 1 AND LEFT(LTRIM(allowed_tracks_json), 1) = N'[');
             """,
             reverse_sql="""
             ALTER TABLE dbo.organization_userjobtitle DROP CONSTRAINT IF EXISTS fk_userjobtitle_user_dept;

@@ -11,10 +11,10 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
             ALTER TABLE dbo.governance_pendingapprovalrequest
-            ADD CONSTRAINT ck_pending_payload_isjson CHECK (ISJSON(payload_snapshot_json, OBJECT) = 1);
+            ADD CONSTRAINT ck_pending_payload_isjson CHECK (ISJSON(payload_snapshot_json) = 1 AND LEFT(LTRIM(payload_snapshot_json), 1) = N'{');
 
             ALTER TABLE dbo.governance_auditlogentry
-            ADD CONSTRAINT ck_audit_details_isjson CHECK (details_snapshot_json IS NULL OR ISJSON(details_snapshot_json, OBJECT) = 1);
+            ADD CONSTRAINT ck_audit_details_isjson CHECK (details_snapshot_json IS NULL OR (ISJSON(details_snapshot_json) = 1 AND LEFT(LTRIM(details_snapshot_json), 1) = N'{'));
             """,
             reverse_sql="""
             ALTER TABLE dbo.governance_pendingapprovalrequest DROP CONSTRAINT IF EXISTS ck_pending_payload_isjson;
