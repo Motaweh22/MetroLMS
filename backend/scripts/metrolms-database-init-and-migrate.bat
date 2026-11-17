@@ -199,12 +199,18 @@ set "TMP_PY=%TEMP%\metrolms_db_check_%RANDOM%_%RANDOM%.py"
     echo         conn.close(^)
     echo         sys.exit(0^)
     echo     safe_db = db_name.replace("]", "]]"^)
+    echo     major_raw = str(cur.execute("SELECT SERVERPROPERTY('ProductMajorVersion')"^).fetchone(^)[0] or "15"^).split("."^)[0]
+    echo     compat = min(160, max(130, int(major_raw^) * 10^)^)
     echo     cur.execute(f"CREATE DATABASE [{safe_db}] COLLATE Arabic_100_CI_AS"^)
-    echo     cur.execute(f"ALTER DATABASE [{safe_db}] SET COMPATIBILITY_LEVEL = 160"^)
+    echo     cur.execute(f"ALTER DATABASE [{safe_db}] SET COMPATIBILITY_LEVEL = {compat}"^)
     echo     cur.execute(f"ALTER DATABASE [{safe_db}] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE"^)
-    echo     print(f"[OK] Created database '{db_name}' (Arabic_100_CI_AS, COMPATIBILITY_LEVEL=160, RCSI=ON^)."^)
+    echo     print(f"[OK] Created database '{db_name}' (Arabic_100_CI_AS, COMPATIBILITY_LEVEL={compat}, RCSI=ON^)."^)
     echo else:
     echo     row = cur.execute("SELECT name, compatibility_level, collation_name, is_read_committed_snapshot_on FROM sys.databases WHERE name = ?", db_name^).fetchone(^)
+    echo     if row and not row[3] and mode != "CHECKONLY":
+    echo         safe_db = db_name.replace("]", "]]"^)
+    echo         cur.execute(f"ALTER DATABASE [{safe_db}] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE"^)
+    echo         print(f"[OK] Enabled RCSI on existing database '{db_name}'."^)
     echo     print(f"[OK] Database '{db_name}' already exists: compat={row[1]}, collation={row[2]}, RCSI={row[3]}"^)
     echo conn.close(^)
 )
