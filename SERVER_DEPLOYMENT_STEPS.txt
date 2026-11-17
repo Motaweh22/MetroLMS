@@ -19,7 +19,9 @@ STEP 1: Full Server Bootstrap & Build (Run First, Once per Fresh Server/Pull)
 - How to Run    : scripts\metrolms-windows-server-deploy.bat
 - Optional Flags: /CHECKONLY (read-only check), /NOPAUSE, /HELP
 - What it does  :
-  1. Verifies Python 3.12+, Node.js/npm, and ODBC Driver 18.
+  1. Verifies Python 3.12+, Node.js/npm, and ODBC Driver 18 (and auto-installs missing
+     Python 3.12 / ODBC via backend\scripts\metrolms-windows-environment-setup.bat /INSTALL
+     and Node.js LTS via winget when available).
   2. Creates/updates backend\.venv and installs packages from backend\requirements.txt.
   3. Interactively creates backend\.env if missing (never overwrites an existing .env).
   4. Installs frontend\node_modules (npm ci) and builds production frontend\dist (npx vite build).

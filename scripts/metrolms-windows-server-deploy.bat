@@ -79,17 +79,60 @@ if not defined SYS_PY (
     )
 )
 if not defined SYS_PY (
-    echo [FAIL] Python 3.12+ not found. Run backend\scripts\metrolms-windows-environment-setup.bat first.
-    set "EXIT_CODE=1"
-    goto finish
+    if /I "%MODE%"=="CHECKONLY" (
+        echo [MISSING] Python 3.12+ not found.
+        set "EXIT_CODE=1"
+        goto finish
+    )
+    echo [WARN] Python 3.12+ not found. Attempting automatic installation...
+    if exist "%BACKEND_DIR%\scripts\metrolms-windows-environment-setup.bat" (
+        call "%BACKEND_DIR%\scripts\metrolms-windows-environment-setup.bat" /INSTALL /NOPAUSE
+    ) else (
+        where winget >nul 2>&1
+        if not errorlevel 1 (
+            winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements
+        )
+    )
+    for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
+    where py >nul 2>&1
+    if not errorlevel 1 (
+        py -3.12 -c "import sys; assert sys.version_info >= (3,12)" >nul 2>&1
+        if not errorlevel 1 set "SYS_PY=py -3.12"
+    )
+    if not defined SYS_PY (
+        where python >nul 2>&1
+        if not errorlevel 1 (
+            python -c "import sys; assert sys.version_info >= (3,12)" >nul 2>&1
+            if not errorlevel 1 set "SYS_PY=python"
+        )
+    )
+    if not defined SYS_PY (
+        echo [FAIL] Python 3.12+ could not be auto-installed. Run backend\scripts\metrolms-windows-environment-setup.bat /INSTALL as Administrator.
+        set "EXIT_CODE=1"
+        goto finish
+    )
 )
 echo [OK] Python 3.12+ detected ^(%SYS_PY%^).
 
 where node >nul 2>&1
 if errorlevel 1 (
-    echo [FAIL] Node.js not found in PATH. Install Node.js 20+ LTS on Windows Server.
-    set "EXIT_CODE=1"
-    goto finish
+    if /I "%MODE%"=="CHECKONLY" (
+        echo [MISSING] Node.js not found in PATH.
+        set "EXIT_CODE=1"
+        goto finish
+    )
+    echo [WARN] Node.js not found. Attempting automatic installation via winget...
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        winget install -e --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+        for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"`) do set "PATH=%%P"
+    )
+    where node >nul 2>&1
+    if errorlevel 1 (
+        echo [FAIL] Node.js not found in PATH. Install Node.js 20+/24+ LTS and re-run this script.
+        set "EXIT_CODE=1"
+        goto finish
+    )
 )
 where npm >nul 2>&1
 if errorlevel 1 (
