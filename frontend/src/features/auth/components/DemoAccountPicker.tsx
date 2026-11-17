@@ -106,7 +106,7 @@ export const DemoAccountPicker: React.FC<DemoAccountPickerProps> = ({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-        {ROLE_TEST_ACCOUNTS.map((account) => (
+        {ROLE_TEST_ACCOUNTS.filter((account) => account.role !== 'developer').map((account) => (
           <div
             key={account.id}
             className="p-3.5 rounded-xl border border-border bg-surface/60 hover:bg-white hover:border-primary/50 hover:shadow-sm transition-all flex flex-col justify-between text-start gap-2.5 group"

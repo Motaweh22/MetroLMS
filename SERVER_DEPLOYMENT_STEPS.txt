@@ -1,0 +1,102 @@
+================================================================================
+MetroLMS - Windows Server Setup & Startup Step-by-Step Guide (.bat Order)
+================================================================================
+
+PREREQUISITES (Install on the server before running any .bat file)
+--------------------------------------------------------------------------------
+1. Python 3.12.x (verified: 3.12.10) added to PATH
+2. Node.js v24.x (verified: v24.18.0) + npm (verified: 11.16.0) added to PATH
+3. Microsoft SQL Server 2022 (running) + ODBC Driver 18 for SQL Server
+4. Source code cloned/copied to the server folder (e.g., D:\MetroLMS)
+
+================================================================================
+ORDERED SERVER SETUP & LAUNCH STEPS
+================================================================================
+
+STEP 1: Full Server Bootstrap & Build (Run First, Once per Fresh Server/Pull)
+--------------------------------------------------------------------------------
+- File Location : scripts\metrolms-windows-server-deploy.bat
+- How to Run    : scripts\metrolms-windows-server-deploy.bat
+- Optional Flags: /CHECKONLY (read-only check), /NOPAUSE, /HELP
+- What it does  :
+  1. Verifies Python 3.12+, Node.js/npm, and ODBC Driver 18.
+  2. Creates/updates backend\.venv and installs packages from backend\requirements.txt.
+  3. Interactively creates backend\.env if missing (never overwrites an existing .env).
+  4. Installs frontend\node_modules (npm ci) and builds production frontend\dist (npx vite build).
+  5. Runs Django system checks and initializes/migrates the SQL Server database.
+
+OPTIONAL / STANDALONE DB CHECK & MIGRATION UTILITY:
+- File Location : backend\scripts\metrolms-database-init-and-migrate.bat
+- How to Run    : backend\scripts\metrolms-database-init-and-migrate.bat /CHECKONLY  (read-only check)
+                  backend\scripts\metrolms-database-init-and-migrate.bat             (check/create DB + migrate)
+- What it does  :
+  Verifies ODBC Driver 18 + SQL Server connectivity, checks if the target DB
+  ("MetroLMS") exists, runs Django checks & migrations, and verifies the 54 dbo tables.
+
+STEP 2: Configure & Verify Media Storage Folder (Optional / Recommended)
+--------------------------------------------------------------------------------
+- File Location : backend\scripts\metrolms-configure-media-root.bat
+- How to Run    : backend\scripts\metrolms-configure-media-root.bat "D:\MetroLMSMedia"
+                  (or a LAN share: "\\FILESERVER\MetroLMSMedia")
+- Optional Flags: /SHOW (print current METROLMS_MEDIA_ROOT), /HELP
+- What it does  :
+  Sets METROLMS_MEDIA_ROOT in backend\.env, creates the folder if missing, and
+  verifies write permissions so uploaded course/group media files persist safely.
+
+STEP 3: Register Automated 6-Hour Group Renewal Scheduled Task (Run as Admin)
+--------------------------------------------------------------------------------
+- File Location : backend\scripts\metrolms-register-renewal-task.bat
+- How to Run    : Right-click Command Prompt -> Run as Administrator, then run:
+                  backend\scripts\metrolms-register-renewal-task.bat
+- Optional Flags: /DRYRUN (preview schtasks command without modifying Task Scheduler), /HELP
+- What it does  :
+  Registers the Windows Task Scheduler job "MetroLMS_DueGroupRenewals_6H" to run
+  every 6 hours under SYSTEM, processing due automatic group renewals.
+
+STEP 4: Seed Temporary Role-Based Test Accounts (Optional — Testing Only)
+--------------------------------------------------------------------------------
+- File Location : backend\scripts\metrolms-seed-test-accounts.bat
+- How to Run    : backend\scripts\metrolms-seed-test-accounts.bat
+- Optional Flags: /DELETE (remove the 6 test accounts before real production use), /HELP
+- What it does  :
+  Applies migrations and creates the 6 role-based test accounts in SQL Server
+  (password: MetroTest@2026) for smoke-testing each role. Do NOT leave these
+  accounts active in live production (run with /DELETE when testing is done).
+
+STEP 5: Start the Application Server (Choose Option A or Option B)
+--------------------------------------------------------------------------------
+[Option A] Standalone Server (No IIS Required — Waitress + Vite Preview):
+- File Location : start-production.bat  (in the repository root)
+- How to Run    : start-production.bat
+- Optional Flags:
+  - /SKIPBUILD : Skip rebuilding frontend\dist if it was already built
+  - /NOBROWSER : Do not open a browser window automatically
+  - /CHECKONLY : Run pre-flight checks only
+- What it does  :
+  1. Verifies SQL Server migrations.
+  2. Builds minified production frontend\dist (unless /SKIPBUILD is passed).
+  3. Stops any old listeners on ports 8000 and 4173.
+  4. Starts Waitress WSGI Backend on http://127.0.0.1:8000.
+  5. Starts Vite Preview Frontend on http://localhost:4173 (proxies /api/* -> :8000).
+
+[Option B] Behind IIS Reverse Proxy (Backend WSGI Only — IIS serves frontend\dist):
+- File Location : backend\scripts\metrolms-start-production-server.bat
+- How to Run    : backend\scripts\metrolms-start-production-server.bat
+- Optional Flags: /CHECKONLY, /HELP
+- Env Overrides : METROLMS_BIND_HOST (default 127.0.0.1), METROLMS_BIND_PORT (default 8000)
+- What it does  :
+  Validates backend\.venv, backend\.env, and Django production checks, then
+  starts Waitress WSGI (config.wsgi:application) behind IIS.
+
+================================================================================
+OTHER UTILITY LAUNCHER (FOR LOCAL DEVELOPMENT OR UNIFIED START)
+================================================================================
+- File Location : start-metrolms.bat  (in the repository root)
+- How to Run    : start-metrolms.bat dev   (Django runserver :8000 + Vite dev :5173)
+                  start-metrolms.bat prod  (Waitress :8000 + production checks)
+- Optional Flags: /BUILD, /NOBROWSER, /CHECKONLY, /HELP
+- What it does  :
+  Unified launcher supporting both local hot-reload development mode ("dev")
+  and production backend mode ("prod").
+================================================================================
+
