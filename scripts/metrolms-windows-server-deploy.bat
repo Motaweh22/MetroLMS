@@ -175,7 +175,10 @@ if /I "%MODE%"=="CHECKONLY" (
 echo.
 echo [Step 3/5] Checking / preparing backend\.env...
 if exist "%BACKEND_DIR%\.env" (
-    echo [OK] backend\.env already exists ^(preserved untouched^).
+    echo [OK] backend\.env already exists.
+    if /I not "%MODE%"=="CHECKONLY" if exist "%VENV_PY%" (
+        "%VENV_PY%" -c "import pathlib, secrets; p = pathlib.Path(r'%BACKEND_DIR%\.env'); lines = p.read_text(encoding='utf-8').splitlines(); out = []; has_key = False; has_csrf = False; changed = False; [ (has_key := True) or (out.append('DJANGO_SECRET_KEY=' + secrets.token_urlsafe(48)) or (changed := True) if (l.split('=',1)[1].strip() in ('', 'replace-with-secure-random-secret-key')) else out.append(l)) if l.startswith('DJANGO_SECRET_KEY=') else ( (has_csrf := True) or (out.append(l + (',' if l.split('=',1)[1].strip() else '') + 'http://localhost:4173,http://127.0.0.1:4173') or (changed := True) if '4173' not in l else out.append(l)) if l.startswith('CSRF_TRUSTED_ORIGINS=') else out.append(l) ) for l in lines ]; (not has_key) and (out.append('DJANGO_SECRET_KEY=' + secrets.token_urlsafe(48)) or (changed := True)); (not has_csrf) and (out.append('CSRF_TRUSTED_ORIGINS=http://localhost:4173,http://127.0.0.1:4173') or (changed := True)); changed and p.write_text('\n'.join(out) + '\n', encoding='utf-8'); print('[OK] Auto-repaired missing/empty DJANGO_SECRET_KEY or :4173 CSRF_TRUSTED_ORIGINS in backend\\.env.' if changed else '[OK] backend\\.env SECRET_KEY and CSRF_TRUSTED_ORIGINS verified.')"
+    )
 ) else (
     if /I "%MODE%"=="CHECKONLY" (
         echo [MISSING] backend\.env does not exist yet.
@@ -188,7 +191,7 @@ if exist "%BACKEND_DIR%\.env" (
         set "ENV_PWD="
         set "ENV_TRUST=False"
         set "ENV_HOSTS=localhost,127.0.0.1"
-        set "ENV_ORIGINS=https://localhost"
+        set "ENV_ORIGINS=http://localhost:4173,http://127.0.0.1:4173,https://localhost"
         set "ENV_MEDIA=D:\MetroLMSMedia"
 
         set /p "IN_HOST=SQL Server Host [default: localhost]: "
@@ -209,7 +212,7 @@ if exist "%BACKEND_DIR%\.env" (
         if not "!IN_TRUST!"=="" set "ENV_TRUST=!IN_TRUST!"
         set /p "IN_HOSTS=DJANGO_ALLOWED_HOSTS [default: localhost,127.0.0.1]: "
         if not "!IN_HOSTS!"=="" set "ENV_HOSTS=!IN_HOSTS!"
-        set /p "IN_ORIGINS=CSRF_TRUSTED_ORIGINS [default: https://localhost]: "
+        set /p "IN_ORIGINS=CSRF_TRUSTED_ORIGINS [default: http://localhost:4173,http://127.0.0.1:4173,https://localhost]: "
         if not "!IN_ORIGINS!"=="" set "ENV_ORIGINS=!IN_ORIGINS!"
         set /p "IN_MEDIA=METROLMS_MEDIA_ROOT [default: D:\MetroLMSMedia]: "
         if not "!IN_MEDIA!"=="" set "ENV_MEDIA=!IN_MEDIA!"
