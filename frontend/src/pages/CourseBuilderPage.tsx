@@ -266,13 +266,17 @@ export const CourseBuilderPage: React.FC = () => {
     setIsSubmittingReview(true);
     setErrorMessage(null);
     try {
+      let alreadyPublished = false;
       if (course.status !== 'pending_admin' && course.status !== 'pending_owner') {
-        await reviewApi.submitCourse(courseId);
+        const submitRes = await reviewApi.submitCourse(courseId);
+        alreadyPublished = submitRes?.course?.status === 'published';
       }
-      await apiClient(`/api/admin/courses/${encodeURIComponent(courseId)}/review/decide`, {
-        method: 'POST',
-        body: JSON.stringify({ decision: 'approve' }),
-      });
+      if (!alreadyPublished) {
+        await apiClient(`/api/admin/courses/${encodeURIComponent(courseId)}/review/decide`, {
+          method: 'POST',
+          body: JSON.stringify({ decision: 'approve' }),
+        });
+      }
       const updated = await builderApi.getCourseForEditing(courseId);
       setCourse(updated);
       setInitialSnapshot(JSON.stringify(updated));
