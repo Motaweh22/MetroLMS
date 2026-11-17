@@ -10,6 +10,10 @@ REM ============================================================================
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..") do set "BACKEND_DIR=%%~fI"
 set "VENV_PY=%BACKEND_DIR%\.venv\Scripts\python.exe"
+set "NO_PAUSE=0"
+set "EXIT_CODE=0"
+if /I "%~1"=="/NOPAUSE" set "NO_PAUSE=1"
+if /I "%~2"=="/NOPAUSE" set "NO_PAUSE=1"
 
 if /I "%~1"=="/HELP" (
     echo MetroLMS Temporary Test Accounts Seeder
@@ -30,27 +34,45 @@ if /I "%~1"=="/HELP" (
 
 if not exist "%VENV_PY%" (
     echo [ERROR] Python venv not found: "%VENV_PY%"
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 
-pushd "%BACKEND_DIR%" || exit /b 1
+pushd "%BACKEND_DIR%" || (
+    set "EXIT_CODE=1"
+    goto finish
+)
 
 if /I "%~1"=="/DELETE" (
     "%VENV_PY%" manage.py seed_demo_roles --delete
     set "EXIT_CODE=%ERRORLEVEL%"
     popd
-    exit /b %EXIT_CODE%
+    goto finish
 )
 
 "%VENV_PY%" manage.py migrate --noinput
 if errorlevel 1 (
     popd
     echo [ERROR] Migration failed. Ensure SQL Server is running.
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 
 "%VENV_PY%" manage.py seed_demo_roles
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
+
+:finish
+echo.
+if "%EXIT_CODE%"=="0" (
+    echo ============================================================================
+    echo   RESULT: SUCCESS - Test accounts operation completed.
+    echo ============================================================================
+) else (
+    echo ============================================================================
+    echo   RESULT: FAILURE ^(Exit Code: %EXIT_CODE%^)
+    echo ============================================================================
+)
+if "%NO_PAUSE%"=="0" pause
 exit /b %EXIT_CODE%
 

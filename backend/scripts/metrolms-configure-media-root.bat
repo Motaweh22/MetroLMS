@@ -14,13 +14,18 @@ set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..") do set "BACKEND_DIR=%%~fI"
 set "ENV_FILE=%BACKEND_DIR%\.env"
 set "VENV_PY=%BACKEND_DIR%\.venv\Scripts\python.exe"
+set "NO_PAUSE=0"
+set "EXIT_CODE=0"
+if /I "%~2"=="/NOPAUSE" set "NO_PAUSE=1"
+if /I "%~1"=="/NOPAUSE" set "NO_PAUSE=1"
 
 if /I "%~1"=="/HELP" goto show_help
 if /I "%~1"=="-h" goto show_help
 
 if not exist "%ENV_FILE%" (
     echo [ERROR] Environment file not found: "%ENV_FILE%"
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 
 if /I "%~1"=="/SHOW" (
@@ -77,17 +82,33 @@ if exist "%VENV_PY%" (
     "%VENV_PY%" -c "from pathlib import Path; p=Path(r'%ENV_FILE%'); new_val=r'%NEW_MEDIA_ROOT%'; lines=p.read_text(encoding='utf-8').splitlines(); out=[]; found=False; [out.append(f'METROLMS_MEDIA_ROOT={new_val}') or (found:=True) if l.startswith('METROLMS_MEDIA_ROOT=') else out.append(l) for l in lines]; found or out.append(f'METROLMS_MEDIA_ROOT={new_val}'); p.write_text('\n'.join(out)+'\n', encoding='utf-8')"
 ) else (
     echo [ERROR] Python venv not found: "%VENV_PY%"
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 
 if errorlevel 1 (
     echo [ERROR] Failed to update "%ENV_FILE%".
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 
 echo [OK] METROLMS_MEDIA_ROOT updated to: "%NEW_MEDIA_ROOT%"
 echo      Restart the MetroLMS backend server for changes to take effect.
-exit /b 0
+set "EXIT_CODE=0"
+
+:finish
+echo.
+if "%EXIT_CODE%"=="0" (
+    echo ============================================================================
+    echo   RESULT: SUCCESS - Media storage root configured.
+    echo ============================================================================
+) else (
+    echo ============================================================================
+    echo   RESULT: FAILURE ^(Exit Code: %EXIT_CODE%^)
+    echo ============================================================================
+)
+if "%NO_PAUSE%"=="0" pause
+exit /b %EXIT_CODE%
 
 :show_help
 echo ============================================================================

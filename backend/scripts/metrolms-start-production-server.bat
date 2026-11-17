@@ -48,12 +48,22 @@ echo [INFO] Running Django production checks...
 if errorlevel 1 (
     popd
     echo [ERROR] Django production check failed.
+    echo.
+    echo ============================================================================
+    echo   RESULT: FAILURE ^(Django production check failed^)
+    echo ============================================================================
+    pause
     exit /b 1
 )
 
 if /I "%~1"=="/CHECKONLY" (
     popd
     echo [OK] Production pre-flight checks passed.
+    echo.
+    echo ============================================================================
+    echo   RESULT: SUCCESS - Production pre-flight checks passed.
+    echo ============================================================================
+    pause
     exit /b 0
 )
 
@@ -61,6 +71,7 @@ if not exist "%WAITRESS_EXE%" (
     popd
     echo [ERROR] waitress-serve.exe not found in .venv.
     echo Install production dependencies: "%VENV_PY%" -m pip install -r "%BACKEND_DIR%\requirements-prod.txt"
+    pause
     exit /b 1
 )
 
