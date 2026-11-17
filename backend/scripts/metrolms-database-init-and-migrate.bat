@@ -207,7 +207,7 @@ set "TMP_PY=%TEMP%\metrolms_db_check_%RANDOM%_%RANDOM%.py"
     echo     print(f"[OK] Created database '{db_name}' (Arabic_100_CI_AS, COMPATIBILITY_LEVEL={compat}, RCSI=ON^)."^)
     echo else:
     echo     row = cur.execute("SELECT name, compatibility_level, collation_name, is_read_committed_snapshot_on FROM sys.databases WHERE name = ?", db_name^).fetchone(^)
-    echo     if row and not row[3] and mode != "CHECKONLY":
+    echo     if row and not row[3] and not (mode == "CHECKONLY"^):
     echo         safe_db = db_name.replace("]", "]]"^)
     echo         cur.execute(f"ALTER DATABASE [{safe_db}] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE"^)
     echo         print(f"[OK] Enabled RCSI on existing database '{db_name}'."^)
