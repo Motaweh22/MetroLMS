@@ -13,6 +13,7 @@ dist/
 
 # Local environment configs
 .env*.local
+backend/.env.docker
 
 # Obsidian workspace layout
 docs/.obsidian/workspace.json
