@@ -19,6 +19,8 @@ set "WAITRESS_EXE=%BACKEND_DIR%\.venv\Scripts\waitress-serve.exe"
 set "NO_BROWSER=0"
 set "SKIP_BUILD=0"
 set "CHECK_ONLY=0"
+set "NO_PAUSE=0"
+set "EXIT_CODE=0"
 
 :parse_args
 if "%~1"=="" goto after_args
@@ -27,6 +29,7 @@ if /I "%~1"=="-h" goto show_help
 if /I "%~1"=="/CHECKONLY" set "CHECK_ONLY=1"
 if /I "%~1"=="/NOBROWSER" set "NO_BROWSER=1"
 if /I "%~1"=="/SKIPBUILD" set "SKIP_BUILD=1"
+if /I "%~1"=="/NOPAUSE" set "NO_PAUSE=1"
 shift
 goto parse_args
 
@@ -51,61 +54,67 @@ echo ===========================================================================
 
 if not exist "%VENV_PY%" (
     echo [ERROR] Python venv not found: "%VENV_PY%"
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 if not exist "%WAITRESS_EXE%" (
     echo [ERROR] waitress-serve.exe not found. Run:
     echo   "%VENV_PY%" -m pip install -r "%BACKEND_DIR%\requirements-prod.txt"
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 if not exist "%BACKEND_DIR%\.env" (
     echo [ERROR] Missing "%BACKEND_DIR%\.env"
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 
 if "%CHECK_ONLY%"=="1" (
-    pushd "%BACKEND_DIR%" || exit /b 1
+    pushd "%BACKEND_DIR%" || (set "EXIT_CODE=1" & goto finish)
     "%VENV_PY%" manage.py check --settings=config.settings.development
     if errorlevel 1 (
         popd
-        exit /b 1
+        set "EXIT_CODE=1"
+        goto finish
     )
     popd
     echo [OK] Internal production-build pre-flight checks passed.
-    exit /b 0
+    goto finish
 )
 
 echo [1/4] Verifying SQL Server migrations...
-pushd "%BACKEND_DIR%" || exit /b 1
+pushd "%BACKEND_DIR%" || (set "EXIT_CODE=1" & goto finish)
 "%VENV_PY%" manage.py migrate --noinput --settings=config.settings.development
 if errorlevel 1 (
     popd
     echo [ERROR] Database migration failed. Ensure SQL Server is running.
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 popd
+
+echo [2/4] Stopping any old processes on ports 8000 and 4173...
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8000 " ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":4173 " ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
 
 if "%SKIP_BUILD%"=="1" if exist "%FRONTEND_DIR%\dist\index.html" goto after_build
 
 :do_build
-echo [2/4] Building minified production frontend ^(no source maps^)...
-pushd "%FRONTEND_DIR%" || exit /b 1
+echo [3/4] Building minified production frontend ^(no source maps^)...
+pushd "%FRONTEND_DIR%" || (set "EXIT_CODE=1" & goto finish)
 if not exist "%FRONTEND_DIR%\node_modules" call npm install
 set "VITE_SHOW_TEST_CARDS=true"
 call npx vite build
 if errorlevel 1 (
     popd
     echo [ERROR] Frontend build failed.
-    exit /b 1
+    set "EXIT_CODE=1"
+    goto finish
 )
 popd
 
 :after_build
-echo [3/4] Stopping any old processes on ports 8000 and 4173...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000 " ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":4173 " ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
-
-echo [3/4] Launching Waitress WSGI Backend on http://127.0.0.1:8000 ...
+echo [4/4] Launching Waitress WSGI Backend on http://127.0.0.1:8000 ...
 start "MetroLMS Backend - Waitress" cmd /k "cd /d "%BACKEND_DIR%" && set "DJANGO_SETTINGS_MODULE=config.settings.development" && "%WAITRESS_EXE%" --host=127.0.0.1 --port=8000 --threads=8 config.wsgi:application"
 
 echo [4/4] Launching Built Frontend Preview on http://localhost:4173 ...
@@ -120,5 +129,16 @@ echo.
 echo [OK] MetroLMS Internal Production-Build is running!
 echo      Frontend ^(Minified/Hashed^): http://localhost:4173
 echo      Backend  ^(Waitress WSGI^):   http://127.0.0.1:8000/api/
-exit /b 0
+
+:finish
+echo.
+echo ============================================================================
+if "%EXIT_CODE%"=="0" (
+    echo   RESULT: SUCCESS
+) else (
+    echo   RESULT: FAILURE - Review the error messages above.
+)
+echo ============================================================================
+if "%NO_PAUSE%"=="0" pause
+exit /b %EXIT_CODE%
 
