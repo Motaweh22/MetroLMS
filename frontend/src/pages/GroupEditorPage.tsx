@@ -692,19 +692,6 @@ export const GroupEditorPage: React.FC = () => {
 
         {/* Action Buttons Group */}
         <div className="flex items-center flex-wrap gap-2.5 shrink-0 self-start lg:self-center">
-          {!isCreateMode && loadedGroup && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              leftIcon="activity"
-              onClick={() => safeNavigate(`/admin/groups/${encodeURIComponent(loadedGroup.id)}/monitoring`)}
-              data-testid="go-to-monitoring-btn"
-              className="font-bold text-xs"
-            >
-              متابعة المجموعة
-            </Button>
-          )}
           <Button
             type="button"
             variant="outline"
@@ -855,20 +842,6 @@ export const GroupEditorPage: React.FC = () => {
             />
             <span>اللقاءات التفاعلية والمواد المرفقة</span>
           </button>
-
-          {!isCreateMode && loadedGroup && (
-            <button
-              type="button"
-              onClick={() =>
-                safeNavigate(`/admin/groups/${encodeURIComponent(loadedGroup.id)}/monitoring`)
-              }
-              className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 border-b-2 rounded-t-lg select-none text-text-muted hover:text-primary hover:bg-primary/5 border-transparent"
-              data-testid="tab-monitoring-link"
-            >
-              <Icon name="activity" size="sm" className="text-primary" />
-              <span>متابعة المجموعة</span>
-            </button>
-          )}
         </nav>
         {hasTabOverflow && (
           <button
