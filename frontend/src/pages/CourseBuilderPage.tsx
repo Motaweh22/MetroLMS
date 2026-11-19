@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
@@ -40,6 +40,24 @@ export const CourseBuilderPage: React.FC = () => {
   const [initialSnapshot, setInitialSnapshot] = useState<string>('');
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [activeTab, setActiveTab] = useState<'metadata' | 'requirements' | 'team' | 'access' | 'curriculum' | 'downloads' | 'refresher' | 'history'>('metadata');
+  const tabsScrollRef = useRef<HTMLDivElement | null>(null);
+  const [hasTabOverflow, setHasTabOverflow] = useState(false);
+
+  const updateTabOverflow = useCallback(() => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    setHasTabOverflow(el.scrollWidth > el.clientWidth + 4);
+  }, []);
+
+  useEffect(() => {
+    updateTabOverflow();
+    window.addEventListener('resize', updateTabOverflow);
+    return () => window.removeEventListener('resize', updateTabOverflow);
+  }, [updateTabOverflow, course?.id]);
+
+  const scrollTabs = (deltaX: number) => {
+    tabsScrollRef.current?.scrollBy({ left: deltaX, behavior: 'smooth' });
+  };
 
   const [loading, setLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -592,38 +610,67 @@ export const CourseBuilderPage: React.FC = () => {
       )}
 
       {/* Tab Navigation Controls */}
-      <div className="border-b border-border flex items-center gap-2 overflow-x-auto">
-        {(
-          [
-            { id: 'metadata', label: 'البيانات الأساسية', icon: 'courses' },
-            { id: 'requirements', label: 'المتطلبات والمصادر', icon: 'bookOpen' },
-            { id: 'team', label: 'المحاضرون والتواصل', icon: 'users' },
-            { id: 'access', label: 'التسجيل والوصول', icon: 'shield' },
-            { id: 'curriculum', label: 'هيكل المنهج والمحتوى', icon: 'courses' },
-            { id: 'downloads', label: 'سياسات التنزيل والملفات', icon: 'download' },
-            { id: 'refresher', label: 'النسخة التذكيرية', icon: 'refreshCw' },
-            {
-              id: 'history',
-              label: `سجل النشاط والقرارات (${course.auditLog?.length || 0})`,
-              icon: 'clock',
-            },
-          ] as const
-        ).map((tab) => (
+      <div className="border-b border-border flex items-center gap-1">
+        {hasTabOverflow && (
           <button
-            key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
-              activeTab === tab.id
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-text-muted hover:text-text hover:bg-neutral-light/50'
-            }`}
-            data-testid={`builder-tab-${tab.id}`}
+            onClick={() => scrollTabs(220)}
+            aria-label="التمرير لليمين"
+            data-testid="builder-tabs-scroll-right"
+            className="p-2 rounded-lg border border-border bg-white text-text-muted hover:text-primary hover:border-primary/40 transition-colors shrink-0 shadow-2xs"
           >
-            <Icon name={tab.icon} size="sm" />
-            <span>{tab.label}</span>
+            <Icon name="chevronRight" size="sm" />
           </button>
-        ))}
+        )}
+
+        <div
+          ref={tabsScrollRef}
+          className="flex items-center gap-2 overflow-x-auto flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {(
+            [
+              { id: 'metadata', label: 'البيانات الأساسية', icon: 'courses' },
+              { id: 'requirements', label: 'المتطلبات والمصادر', icon: 'bookOpen' },
+              { id: 'team', label: 'المحاضرون والتواصل', icon: 'users' },
+              { id: 'access', label: 'التسجيل والوصول', icon: 'shield' },
+              { id: 'curriculum', label: 'هيكل المنهج والمحتوى', icon: 'courses' },
+              { id: 'downloads', label: 'سياسات التنزيل والملفات', icon: 'download' },
+              { id: 'refresher', label: 'النسخة التذكيرية', icon: 'refreshCw' },
+              {
+                id: 'history',
+                label: `سجل النشاط والقرارات (${course.auditLog?.length || 0})`,
+                icon: 'clock',
+              },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                activeTab === tab.id
+                  ? 'border-primary text-primary bg-primary/5'
+                  : 'border-transparent text-text-muted hover:text-text hover:bg-neutral-light/50'
+              }`}
+              data-testid={`builder-tab-${tab.id}`}
+            >
+              <Icon name={tab.icon} size="sm" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {hasTabOverflow && (
+          <button
+            type="button"
+            onClick={() => scrollTabs(-220)}
+            aria-label="التمرير لليسار"
+            data-testid="builder-tabs-scroll-left"
+            className="p-2 rounded-lg border border-border bg-white text-text-muted hover:text-primary hover:border-primary/40 transition-colors shrink-0 shadow-2xs"
+          >
+            <Icon name="chevronLeft" size="sm" />
+          </button>
+        )}
       </div>
 
       {/* Tab Content Panels */}
