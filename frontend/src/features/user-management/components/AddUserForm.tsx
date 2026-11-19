@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { apiClient } from '@/core/api/apiClient';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { canActorManageTargetAccount } from '@/core/permissions/policy';
@@ -121,6 +121,25 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
   const [militaryStatuses, setMilitaryStatuses] = useState<CatalogItem[]>([]);
   const [metroLines, setMetroLines] = useState<CatalogItem[]>([]);
   const [hasEdited, setHasEdited] = useState(false);
+  const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
+  const jobDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (jobDropdownRef.current && !jobDropdownRef.current.contains(event.target as Node)) {
+        setIsJobDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredJobTitles = useMemo(() => {
+    const query = formData.jobTitle.trim();
+    if (!query || METRO_JOB_TITLES.includes(query)) return METRO_JOB_TITLES;
+    const matches = METRO_JOB_TITLES.filter((t) => t.includes(query));
+    return matches.length > 0 ? matches : METRO_JOB_TITLES;
+  }, [formData.jobTitle]);
 
   const availableRoleOptions = useMemo<UserRole[]>(() => {
     const candidateRoles: UserRole[] = ['super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'];
@@ -492,27 +511,78 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
         iconName="calendar"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 relative" ref={jobDropdownRef}>
             <label htmlFor="add-user-job" className="text-xs font-semibold text-text">
               المسمى الوظيفي <span className="text-danger" aria-hidden="true">*</span>
             </label>
-            <input
-              id="add-user-job"
-              data-testid="add-user-job-input"
-              type="text"
-              list="metro-job-titles-list"
-              required
-              disabled={isSubmitting}
-              placeholder="اختر أو اكتب المسمى الوظيفي"
-              value={formData.jobTitle}
-              onChange={(e) => updateField('jobTitle', e.target.value)}
-              className={inputClass(errors.jobTitle)}
-            />
-            <datalist id="metro-job-titles-list">
-              {METRO_JOB_TITLES.map((title) => (
-                <option key={title} value={title} />
-              ))}
-            </datalist>
+            <div className="relative">
+              <input
+                id="add-user-job"
+                data-testid="add-user-job-input"
+                type="text"
+                role="combobox"
+                aria-expanded={isJobDropdownOpen}
+                aria-controls="metro-job-titles-listbox"
+                autoComplete="off"
+                required
+                disabled={isSubmitting}
+                placeholder="اختر أو اكتب المسمى الوظيفي"
+                value={formData.jobTitle}
+                onFocus={() => setIsJobDropdownOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setIsJobDropdownOpen(false);
+                }}
+                onChange={(e) => {
+                  updateField('jobTitle', e.target.value);
+                  setIsJobDropdownOpen(true);
+                }}
+                className={inputClass(errors.jobTitle, 'pl-9')}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                disabled={isSubmitting}
+                onClick={() => setIsJobDropdownOpen((prev) => !prev)}
+                aria-label="عرض قائمة المسميات الوظيفية"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors p-0.5"
+              >
+                <Icon
+                  name="chevronDown"
+                  size="sm"
+                  className={`transition-transform duration-150 ${isJobDropdownOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+            </div>
+            {isJobDropdownOpen && (
+              <ul
+                id="metro-job-titles-listbox"
+                role="listbox"
+                className="absolute top-full left-0 right-0 z-30 mt-1 max-h-52 overflow-y-auto rounded-lg border border-border bg-surface shadow-lg py-1 text-sm"
+              >
+                {filteredJobTitles.map((title) => {
+                  const isSelected = formData.jobTitle === title;
+                  return (
+                    <li key={title} role="option" aria-selected={isSelected}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateField('jobTitle', title);
+                          setIsJobDropdownOpen(false);
+                        }}
+                        className={`w-full text-right px-3 py-2 flex items-center justify-between transition-colors ${
+                          isSelected
+                            ? 'bg-primary/10 text-primary font-semibold'
+                            : 'text-text hover:bg-bg'
+                        }`}
+                      >
+                        <span>{title}</span>
+                        {isSelected && <Icon name="check" size="sm" className="text-primary" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             {errors.jobTitle && <span className="text-[11px] text-danger">{errors.jobTitle}</span>}
           </div>
 
