@@ -16,6 +16,7 @@ import {
   type UserStatus,
 } from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
+import { StyledSelect } from './StyledSelect';
 
 interface CatalogItem {
   id: number | string;
@@ -511,24 +512,19 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
             <label htmlFor="add-user-marital" className="text-xs font-semibold text-text">
               الحالة الاجتماعية <span className="text-danger" aria-hidden="true">*</span>
             </label>
-            <select
+            <StyledSelect
               id="add-user-marital"
-              data-testid="add-user-marital-input"
+              dataTestId="add-user-marital-input"
               disabled={isSubmitting}
               value={formData.maritalStatusId}
-              onChange={(e) => updateField('maritalStatusId', e.target.value)}
-              className={inputClass()}
-            >
-              {maritalStatuses.length === 0 ? (
-                <option value="">الافتراضي</option>
-              ) : (
-                maritalStatuses.map((item) => (
-                  <option key={String(item.id)} value={String(item.id)}>
-                    {item.nameAr || item.name || item.label || item.code || String(item.id)}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={(val) => updateField('maritalStatusId', val)}
+              placeholder="الافتراضي"
+              emptyMessage="لا توجد حالات اجتماعية مسجلة"
+              options={maritalStatuses.map((item) => ({
+                value: String(item.id),
+                label: item.nameAr || item.name || item.label || item.code || String(item.id),
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5 md:col-span-2">
@@ -562,14 +558,15 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
             <label htmlFor="add-user-dept" className="text-xs font-semibold text-text">
               القطاع / الإدارة <span className="text-danger" aria-hidden="true">*</span>
             </label>
-            <select
+            <StyledSelect
               id="add-user-dept"
-              data-testid="add-user-dept-input"
-              required
+              dataTestId="add-user-dept-input"
               disabled={isSubmitting}
+              hasError={Boolean(errors.department)}
               value={formData.department}
-              onChange={(e) => {
-                const nextDept = e.target.value;
+              placeholder="اختر القطاع / الإدارة"
+              emptyMessage="لا توجد إدارات مسجلة"
+              onChange={(nextDept) => {
                 updateField('department', nextDept);
                 if (jobTitleRecords.length > 0) {
                   const matchedDept = departmentRecords.find(
@@ -591,18 +588,8 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
                   }
                 }
               }}
-              className={inputClass(errors.department)}
-            >
-              {departmentOptions.length === 0 ? (
-                <option value="">لا توجد إدارات مسجلة</option>
-              ) : (
-                departmentOptions.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))
-              )}
-            </select>
+              options={departmentOptions.map((dept) => ({ value: dept, label: dept }))}
+            />
             {errors.department && (
               <span className="text-[11px] text-danger">{errors.department}</span>
             )}
@@ -693,48 +680,38 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
             <label htmlFor="add-user-metro-line" className="text-xs font-semibold text-text">
               خط المترو <span className="text-danger" aria-hidden="true">*</span>
             </label>
-            <select
+            <StyledSelect
               id="add-user-metro-line"
-              data-testid="add-user-metro-line-input"
+              dataTestId="add-user-metro-line-input"
               disabled={isSubmitting}
               value={formData.metroLineId}
-              onChange={(e) => updateField('metroLineId', e.target.value)}
-              className={inputClass()}
-            >
-              {metroLines.length === 0 ? (
-                <option value="">الافتراضي</option>
-              ) : (
-                metroLines.map((item) => (
-                  <option key={String(item.id)} value={String(item.id)}>
-                    {item.nameAr || item.name || item.label || item.code || String(item.id)}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={(val) => updateField('metroLineId', val)}
+              placeholder="الافتراضي"
+              emptyMessage="لا توجد خطوط مترو مسجلة"
+              options={metroLines.map((item) => ({
+                value: String(item.id),
+                label: item.nameAr || item.name || item.label || item.code || String(item.id),
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-military" className="text-xs font-semibold text-text">
               الموقف من التجنيد <span className="text-danger" aria-hidden="true">*</span>
             </label>
-            <select
+            <StyledSelect
               id="add-user-military"
-              data-testid="add-user-military-input"
+              dataTestId="add-user-military-input"
               disabled={isSubmitting}
               value={formData.militaryServiceStatusId}
-              onChange={(e) => updateField('militaryServiceStatusId', e.target.value)}
-              className={inputClass()}
-            >
-              {militaryStatuses.length === 0 ? (
-                <option value="">الافتراضي</option>
-              ) : (
-                militaryStatuses.map((item) => (
-                  <option key={String(item.id)} value={String(item.id)}>
-                    {item.nameAr || item.name || item.label || item.code || String(item.id)}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={(val) => updateField('militaryServiceStatusId', val)}
+              placeholder="الافتراضي"
+              emptyMessage="لا توجد حالات تجنيد مسجلة"
+              options={militaryStatuses.map((item) => ({
+                value: String(item.id),
+                label: item.nameAr || item.name || item.label || item.code || String(item.id),
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -813,19 +790,16 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
             <label htmlFor="add-user-role" className="text-xs font-semibold text-text">
               الدور الوظيفي <span className="text-danger" aria-hidden="true">*</span>
             </label>
-            <select
+            <StyledSelect
               id="add-user-role"
-              data-testid="add-user-role-input"
-              required
+              dataTestId="add-user-role-input"
               disabled={isSubmitting}
               value={formData.role}
-              onChange={(e) => updateField('role', e.target.value as UserRole)}
-              className={inputClass()}
-            >
-              {availableRoleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {USER_ROLE_LABELS_AR[role]} (
-                  {role === 'user'
+              onChange={(val) => updateField('role', val as UserRole)}
+              options={availableRoleOptions.map((role) => ({
+                value: role,
+                label: `${USER_ROLE_LABELS_AR[role]} (${
+                  role === 'user'
                     ? 'متدرب'
                     : role === 'lecturer'
                     ? 'محاضر'
@@ -833,28 +807,27 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
                     ? 'مساعد مدير'
                     : role === 'admin'
                     ? 'مدير النظام'
-                    : 'المسؤول الأعلى'}
-                  )
-                </option>
-              ))}
-            </select>
+                    : 'المسؤول الأعلى'
+                })`,
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-status" className="text-xs font-semibold text-text">
               حالة الحساب الأولية
             </label>
-            <select
+            <StyledSelect
               id="add-user-status"
-              data-testid="add-user-status-input"
+              dataTestId="add-user-status-input"
               disabled={isSubmitting}
               value={formData.status}
-              onChange={(e) => updateField('status', e.target.value as UserStatus)}
-              className={inputClass()}
-            >
-              <option value="active">{USER_STATUS_LABELS_AR.active} (متاح للدخول والترشيح)</option>
-              <option value="suspended">{USER_STATUS_LABELS_AR.suspended} (معطل)</option>
-            </select>
+              onChange={(val) => updateField('status', val as UserStatus)}
+              options={[
+                { value: 'active', label: `${USER_STATUS_LABELS_AR.active} (متاح للدخول والترشيح)` },
+                { value: 'suspended', label: `${USER_STATUS_LABELS_AR.suspended} (معطل)` },
+              ]}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5 md:col-span-2">
