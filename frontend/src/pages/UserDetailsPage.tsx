@@ -6,6 +6,7 @@ import { userManagementApi } from '@/features/user-management/services/userManag
 import { UserTranscriptCard } from '@/features/user-management/components/UserTranscriptCard';
 import { UserCoursesHistoryList } from '@/features/user-management/components/UserCoursesHistoryList';
 import { SuspendUserModal } from '@/features/user-management/components/SuspendUserModal';
+import { EditUserModal } from '@/features/user-management/components/EditUserModal';
 import { Badge, type BadgeVariant } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
@@ -60,6 +61,7 @@ export const UserDetailsPage: React.FC = () => {
   // Quick Account-Status Action state
   const [statusModalUser, setStatusModalUser] = useState<ManagedUserDTO | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<UserStatus>('suspended');
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
   const fetchTranscript = useCallback(async () => {
     if (!userId) {
@@ -232,6 +234,18 @@ export const UserDetailsPage: React.FC = () => {
               {USER_STATUS_LABELS_AR[user.status] || user.status}
             </Badge>
 
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditModalOpen(true)}
+              data-testid="header-edit-user-btn"
+              className="text-xs"
+            >
+              <Icon name="edit" size="sm" className="ml-1" />
+              تعديل البيانات
+            </Button>
+
             {/* Quick Status Toggle Button (reusing Phase 2 SuspendUserModal) */}
             {isSuspended ? (
               <Button
@@ -353,6 +367,14 @@ export const UserDetailsPage: React.FC = () => {
         targetStatus={statusModalTarget}
         onClose={() => setStatusModalUser(null)}
         onSuccess={handleStatusSuccess}
+      />
+
+      {/* Edit User HR & Organizational Data Modal */}
+      <EditUserModal
+        isOpen={isEditModalOpen}
+        user={user}
+        onClose={() => setIsEditModalOpen(false)}
+        onSuccess={fetchTranscript}
       />
     </div>
   );

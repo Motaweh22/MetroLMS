@@ -59,6 +59,21 @@ export const userManagementApi = {
   },
 
   /**
+   * Update a user's personal, HR, and organizational profile fields
+   */
+  async updateUser(
+    userId: string,
+    dto: Partial<CreateUserRequestDTO>,
+    options?: RequestOptions
+  ): Promise<ManagedUserDTO> {
+    return apiClient<ManagedUserDTO>(`/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(dto),
+      ...options,
+    });
+  },
+
+  /**
    * Update a user's role in the centralized user directory (Phase 2)
    */
   async updateUserRole(

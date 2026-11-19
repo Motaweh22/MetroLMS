@@ -289,9 +289,165 @@ class AdminUserListView(APIView):
 
 
 class AdminUserDeleteView(APIView):
-    """DELETE /api/admin/users/<user_id> — D-01 atomic deletion cascade."""
+    """PUT / PATCH / DELETE /api/admin/users/<user_id> — User profile update & D-01 deletion cascade."""
 
     permission_classes = [IsAuthenticated]
+
+    def _update_user(self, request: Request, user_id: int):
+        if request.user.role_id not in {"developer", "super_admin", "admin"}:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعديل بيانات المستخدمين.", status.HTTP_403_FORBIDDEN)
+        target = get_visible_user_or_none(request.user, user_id)
+        if target is None:
+            return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
+
+        if request.user.role_id == "admin" and target.role_id in {"admin", "super_admin", "developer"}:
+            return error_response("PERMISSION_DENIED", "لا يمكنك تعديل حسابات المدراء أو المسؤول الأعلى.", status.HTTP_403_FORBIDDEN)
+        if request.user.role_id == "super_admin" and target.role_id in {"super_admin", "developer"} and target.pk != request.user.pk:
+            return error_response("PERMISSION_DENIED", "لا يمكنك تعديل حساب مسؤول أعلى آخر.", status.HTTP_403_FORBIDDEN)
+
+        data = request.data if isinstance(request.data, dict) else {}
+
+        if "name" in data or "fullName" in data:
+            new_name = str(data.get("name") or data.get("fullName") or "").strip()
+            if not new_name:
+                return error_response("VALIDATION_ERROR", "الاسم الكامل مطلوب.", status.HTTP_400_BAD_REQUEST)
+            target.full_name = new_name
+
+        if "phone" in data or "phoneE164" in data:
+            raw_phone = str(data.get("phoneE164") or data.get("phone") or "").strip()
+            if not raw_phone:
+                return error_response("VALIDATION_ERROR", "رقم الهاتف مطلوب.", status.HTTP_400_BAD_REQUEST)
+            phone = normalize_phone_e164(raw_phone)
+            if phone.startswith("01") and len(phone) == 11 and phone.isdigit():
+                phone = f"+2{phone}"
+            if User.objects.filter(phone_e164=phone).exclude(pk=target.pk).exists():
+                return error_response("CONFLICT", "رقم الهاتف مسجل بالفعل.", status.HTTP_409_CONFLICT)
+            target.phone_e164 = phone
+
+        if "email" in data:
+            raw_email = str(data.get("email") or "").strip()
+            target.email = raw_email or None
+
+        if "nationalId" in data or "national_id" in data:
+            raw_nid = str(data.get("nationalId") or data.get("national_id") or "").strip()
+            nid = normalize_national_id(raw_nid)
+            if len(nid) != 14 or not nid.isdigit():
+                return error_response("VALIDATION_ERROR", "الرقم القومي يجب أن يتكون من 14 رقماً.", status.HTTP_400_BAD_REQUEST)
+            if User.objects.filter(national_id=nid).exclude(pk=target.pk).exists():
+                return error_response("CONFLICT", "الرقم القومي مسجل بالفعل.", status.HTTP_409_CONFLICT)
+            target.national_id = nid
+
+        if "dateOfBirth" in data or "date_of_birth" in data:
+            dob = parse_date(str(data.get("dateOfBirth") or data.get("date_of_birth") or "").strip())
+            if dob is None or dob >= date.today():
+                return error_response("VALIDATION_ERROR", "تاريخ الميلاد يجب أن يكون تاريخاً صحيحاً في الماضي.", status.HTTP_400_BAD_REQUEST)
+            target.date_of_birth = dob
+
+        if "appointmentDate" in data or "appointment_date" in data:
+            app_date = parse_date(str(data.get("appointmentDate") or data.get("appointment_date") or "").strip())
+            if app_date is None:
+                return error_response("VALIDATION_ERROR", "تاريخ التعيين غير صالح.", status.HTTP_400_BAD_REQUEST)
+            target.appointment_date = app_date
+
+        if "serviceEndDate" in data or "service_end_date" in data:
+            raw_end = str(data.get("serviceEndDate") or data.get("service_end_date") or "").strip()
+            target.service_end_date = parse_date(raw_end) if raw_end else None
+
+        if "address" in data:
+            addr = str(data.get("address") or "").strip()
+            if not addr:
+                return error_response("VALIDATION_ERROR", "العنوان مطلوب.", status.HTTP_400_BAD_REQUEST)
+            target.address = addr
+
+        if "educationalQualification" in data or "educational_qualification" in data:
+            qual = str(data.get("educationalQualification") or data.get("educational_qualification") or "").strip()
+            if not qual:
+                return error_response("VALIDATION_ERROR", "المؤهل الدراسي مطلوب.", status.HTTP_400_BAD_REQUEST)
+            target.educational_qualification = qual
+
+        if "maritalStatusId" in data or "marital_status_id" in data:
+            mid = data.get("maritalStatusId") or data.get("marital_status_id")
+            if mid:
+                m_obj = MaritalStatusCatalog.objects.filter(pk=mid).first()
+                if m_obj is None:
+                    return error_response("VALIDATION_ERROR", "الحالة الاجتماعية غير صالحة.", status.HTTP_400_BAD_REQUEST)
+                target.marital_status = m_obj
+
+        if "militaryServiceStatusId" in data or "military_service_status_id" in data:
+            mil_id = data.get("militaryServiceStatusId") or data.get("military_service_status_id")
+            if mil_id:
+                mil_obj = MilitaryServiceStatusCatalog.objects.filter(pk=mil_id).first()
+                if mil_obj is None:
+                    return error_response("VALIDATION_ERROR", "الموقف من التجنيد غير صالح.", status.HTTP_400_BAD_REQUEST)
+                target.military_service_status = mil_obj
+
+        if "metroLineId" in data or "metro_line_id" in data:
+            line_id = data.get("metroLineId") or data.get("metro_line_id")
+            if line_id:
+                line_obj = MetroLine.objects.filter(pk=line_id).first()
+                if line_obj is None:
+                    return error_response("VALIDATION_ERROR", "خط المترو غير صالح.", status.HTTP_400_BAD_REQUEST)
+                target.metro_line = line_obj
+
+        try:
+            target.full_clean()
+            target.save()
+        except ValidationError as exc:
+            return error_response("VALIDATION_ERROR", "; ".join(exc.messages), status.HTTP_400_BAD_REQUEST)
+
+        if "department" in data or "jobTitle" in data:
+            dept_name = str(data.get("department") or "").strip()
+            job_name = str(data.get("jobTitle") or "").strip()
+            if dept_name:
+                dept_obj, _ = OrganizationalDepartment.objects.get_or_create(name_ar=dept_name)
+                UserOrganizationalDepartment.objects.filter(user=target).exclude(department=dept_obj).delete()
+                UserOrganizationalDepartment.objects.get_or_create(user=target, department=dept_obj)
+                if job_name:
+                    job_obj, _ = JobTitle.objects.get_or_create(name_ar=job_name)
+                    UserJobTitle.objects.filter(user=target).delete()
+                    UserJobTitle.objects.create(user=target, department=dept_obj, job_title=job_obj)
+
+        dept_link = UserOrganizationalDepartment.objects.filter(user=target).select_related("department").first()
+        job_link = UserJobTitle.objects.filter(user=target).select_related("job_title", "department").first()
+        dept_out = (
+            job_link.department.name_ar
+            if job_link and job_link.department
+            else (dept_link.department.name_ar if dept_link and dept_link.department else "")
+        )
+        job_out = job_link.job_title.name_ar if job_link and job_link.job_title else ""
+
+        return success_response(
+            {
+                "id": str(target.id),
+                "name": target.full_name,
+                "username": target.phone_e164,
+                "phoneE164": target.phone_e164,
+                "phone": target.phone_e164,
+                "email": target.email or target.phone_e164,
+                "role": "user" if target.role_id == "trainee" else target.role_id,
+                "status": target.status.lower(),
+                "department": dept_out,
+                "jobTitle": job_out,
+                "nationalId": target.national_id,
+                "dateOfBirth": target.date_of_birth.isoformat() if target.date_of_birth else None,
+                "appointmentDate": target.appointment_date.isoformat() if target.appointment_date else None,
+                "serviceEndDate": target.service_end_date.isoformat() if target.service_end_date else None,
+                "address": target.address or "",
+                "educationalQualification": target.educational_qualification or "",
+                "maritalStatus": target.marital_status.name_ar if target.marital_status else "",
+                "militaryServiceStatus": (
+                    target.military_service_status.name_ar if target.military_service_status else ""
+                ),
+                "metroLine": target.metro_line.name_ar if target.metro_line else "",
+                "initials": target.full_name[:2] if target.full_name else "م",
+            }
+        )
+
+    def put(self, request: Request, user_id: int):
+        return self._update_user(request, user_id)
+
+    def patch(self, request: Request, user_id: int):
+        return self._update_user(request, user_id)
 
     def delete(self, request: Request, user_id: int):
         if request.user.role_id not in {"developer", "super_admin", "admin"}:
