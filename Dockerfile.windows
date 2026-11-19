@@ -24,6 +24,8 @@ COPY frontend\package.json frontend\package-lock.json .\
 RUN npm ci
 
 COPY frontend\ .\
+ARG VITE_SHOW_TEST_CARDS=true
+ENV VITE_SHOW_TEST_CARDS=${VITE_SHOW_TEST_CARDS}
 RUN npx vite build
 
 # ------------------------------------------------------------------------------
