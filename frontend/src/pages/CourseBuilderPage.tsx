@@ -55,6 +55,36 @@ export const CourseBuilderPage: React.FC = () => {
     return () => window.removeEventListener('resize', updateTabOverflow);
   }, [updateTabOverflow, course?.id]);
 
+  const builderTabs = useMemo(
+    () =>
+      [
+        { id: 'metadata', label: 'البيانات الأساسية', icon: 'courses' },
+        { id: 'requirements', label: 'المتطلبات والمصادر', icon: 'bookOpen' },
+        { id: 'team', label: 'المحاضرون والتواصل', icon: 'users' },
+        { id: 'access', label: 'التسجيل والوصول', icon: 'shield' },
+        { id: 'curriculum', label: 'هيكل المنهج والمحتوى', icon: 'courses' },
+        { id: 'downloads', label: 'سياسات التنزيل والملفات', icon: 'download' },
+        { id: 'refresher', label: 'النسخة التذكيرية', icon: 'refreshCw' },
+        {
+          id: 'history',
+          label: `سجل النشاط والقرارات (${course?.auditLog?.length || 0})`,
+          icon: 'clock',
+        },
+      ] as const,
+    [course?.auditLog?.length]
+  );
+
+  const activeTabIndex = builderTabs.findIndex((t) => t.id === activeTab);
+  const prevTab = activeTabIndex > 0 ? builderTabs[activeTabIndex - 1] : null;
+  const nextTab = activeTabIndex >= 0 && activeTabIndex < builderTabs.length - 1 ? builderTabs[activeTabIndex + 1] : null;
+
+  const goToTab = (tabId: (typeof builderTabs)[number]['id']) => {
+    setActiveTab(tabId);
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   const scrollTabs = (deltaX: number) => {
     tabsScrollRef.current?.scrollBy({ left: deltaX, behavior: 'smooth' });
   };
@@ -627,22 +657,7 @@ export const CourseBuilderPage: React.FC = () => {
           ref={tabsScrollRef}
           className="flex items-center gap-2 overflow-x-auto flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
-          {(
-            [
-              { id: 'metadata', label: 'البيانات الأساسية', icon: 'courses' },
-              { id: 'requirements', label: 'المتطلبات والمصادر', icon: 'bookOpen' },
-              { id: 'team', label: 'المحاضرون والتواصل', icon: 'users' },
-              { id: 'access', label: 'التسجيل والوصول', icon: 'shield' },
-              { id: 'curriculum', label: 'هيكل المنهج والمحتوى', icon: 'courses' },
-              { id: 'downloads', label: 'سياسات التنزيل والملفات', icon: 'download' },
-              { id: 'refresher', label: 'النسخة التذكيرية', icon: 'refreshCw' },
-              {
-                id: 'history',
-                label: `سجل النشاط والقرارات (${course.auditLog?.length || 0})`,
-                icon: 'clock',
-              },
-            ] as const
-          ).map((tab) => (
+          {builderTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -849,6 +864,46 @@ export const CourseBuilderPage: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Bottom Next / Previous Step Navigation */}
+      <div
+        className="flex items-center justify-between gap-3 pt-4 border-t border-border"
+        data-testid="builder-bottom-nav"
+      >
+        <div>
+          {prevTab && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon="chevronRight"
+              onClick={() => goToTab(prevTab.id)}
+              data-testid="builder-prev-tab-btn"
+            >
+              السابق: {prevTab.label}
+            </Button>
+          )}
+        </div>
+
+        <span className="text-xs text-text-muted font-semibold hidden sm:inline">
+          الخطوة {activeTabIndex + 1} من {builderTabs.length}
+        </span>
+
+        <div>
+          {nextTab && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              rightIcon="chevronLeft"
+              onClick={() => goToTab(nextTab.id)}
+              data-testid="builder-next-tab-btn"
+            >
+              التالي: {nextTab.label}
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Course QR Code Modal */}
       {isQrModalOpen && (
