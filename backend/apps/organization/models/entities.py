@@ -22,11 +22,19 @@ class OrganizationalDepartment(models.Model):
 
 
 class JobTitle(models.Model):
-    """Admin-managed Job Title catalog."""
+    """Admin-managed Job Title catalog (optionally scoped to an OrganizationalDepartment)."""
 
     id = models.BigAutoField(primary_key=True)
     name_ar = models.CharField(max_length=150, unique=True)
     name_en = models.CharField(max_length=150, null=True, blank=True)
+    department = models.ForeignKey(
+        OrganizationalDepartment,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column="department_id",
+        related_name="job_titles",
+    )
 
     class Meta:
         db_table = "organization_jobtitle"

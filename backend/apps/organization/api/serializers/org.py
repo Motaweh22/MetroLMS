@@ -41,6 +41,17 @@ class CodedCatalogSerializer(BilingualCatalogSerializer):
     code = serializers.CharField(max_length=32)
 
 
+class JobTitleCatalogSerializer(BilingualCatalogSerializer):
+    """Serializer for JobTitle with optional OrganizationalDepartment link."""
+
+    departmentId = serializers.IntegerField(source="department_id", required=False, allow_null=True)
+    departmentNameAr = serializers.SerializerMethodField()
+
+    def get_departmentNameAr(self, obj) -> str | None:
+        dept = getattr(obj, "department", None)
+        return dept.name_ar if dept is not None else None
+
+
 class DepartmentTrackSerializer(serializers.ModelSerializer):
     """Serializer for DepartmentTrack (Option A single PK)."""
 

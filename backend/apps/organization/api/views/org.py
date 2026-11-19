@@ -12,6 +12,7 @@ from apps.organization.api.serializers.org import (
     CodedCatalogSerializer,
     DepartmentTrackSerializer,
     HistoricalServiceTrainingSerializer,
+    JobTitleCatalogSerializer,
 )
 from apps.organization.models import (
     DepartmentTrack,
@@ -244,11 +245,22 @@ class DepartmentDetailView(_BaseCatalogDetailView):
 
 class JobTitleListView(_BaseCatalogListView):
     model = JobTitle
+    serializer_class = JobTitleCatalogSerializer
     key_name = "jobTitles"
+
+    def get(self, request: Request):
+        qs = self.model.objects.select_related("department").all().order_by("id")
+        dept_id = request.query_params.get("departmentId")
+        if dept_id and str(dept_id).isdigit():
+            from django.db.models import Q
+
+            qs = qs.filter(Q(department_id=int(dept_id)) | Q(department__isnull=True))
+        return success_response({self.key_name: self.serializer_class(qs, many=True).data})
 
 
 class JobTitleDetailView(_BaseCatalogDetailView):
     model = JobTitle
+    serializer_class = JobTitleCatalogSerializer
 
 
 class MetroLineListView(_BaseCatalogListView):

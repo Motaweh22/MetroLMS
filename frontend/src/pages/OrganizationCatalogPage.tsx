@@ -14,6 +14,8 @@ interface CatalogRecord {
   id: number;
   nameAr: string;
   nameEn?: string | null;
+  departmentId?: number | null;
+  departmentNameAr?: string | null;
 }
 
 interface TabConfig {
@@ -66,12 +68,17 @@ export const OrganizationCatalogPage: React.FC = () => {
   // Add form state
   const [newNameAr, setNewNameAr] = useState('');
   const [newNameEn, setNewNameEn] = useState('');
+  const [newDepartmentId, setNewDepartmentId] = useState<string>('');
   const [isAdding, setIsAdding] = useState(false);
+
+  // Departments list for linking Job Titles
+  const [departmentsList, setDepartmentsList] = useState<CatalogRecord[]>([]);
 
   // Inline edit state
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editNameAr, setEditNameAr] = useState('');
   const [editNameEn, setEditNameEn] = useState('');
+  const [editDepartmentId, setEditDepartmentId] = useState<string>('');
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
@@ -82,8 +89,18 @@ export const OrganizationCatalogPage: React.FC = () => {
     setError(null);
     setEditingId(null);
     try {
-      const data = await apiClient<Record<string, CatalogRecord[]>>(currentTab.endpoint);
+      const [data, deptsData] = await Promise.all([
+        apiClient<Record<string, CatalogRecord[]>>(currentTab.endpoint),
+        currentTab.key === 'job-titles'
+          ? apiClient<{ departments?: CatalogRecord[] }>('/api/admin/organization/departments')
+          : Promise.resolve(null),
+      ]);
       setItems(data[currentTab.responseKey] || []);
+      if (deptsData?.departments) {
+        setDepartmentsList(deptsData.departments);
+      } else if (currentTab.key === 'departments') {
+        setDepartmentsList(data[currentTab.responseKey] || []);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'تعذر تحميل البيانات الوظيفية.');
     } finally {
@@ -109,6 +126,9 @@ export const OrganizationCatalogPage: React.FC = () => {
         body: JSON.stringify({
           nameAr: trimmedAr,
           nameEn: newNameEn.trim() || null,
+          ...(currentTab.key === 'job-titles'
+            ? { departmentId: newDepartmentId ? Number(newDepartmentId) : null }
+            : {}),
         }),
       });
       setNewNameAr('');
@@ -126,6 +146,7 @@ export const OrganizationCatalogPage: React.FC = () => {
     setEditingId(item.id);
     setEditNameAr(item.nameAr);
     setEditNameEn(item.nameEn || '');
+    setEditDepartmentId(item.departmentId ? String(item.departmentId) : '');
   };
 
   const handleSaveEdit = async (id: number) => {
@@ -141,6 +162,9 @@ export const OrganizationCatalogPage: React.FC = () => {
         body: JSON.stringify({
           nameAr: trimmedAr,
           nameEn: editNameEn.trim() || null,
+          ...(currentTab.key === 'job-titles'
+            ? { departmentId: editDepartmentId ? Number(editDepartmentId) : null }
+            : {}),
         }),
       });
       setEditingId(null);
@@ -262,7 +286,7 @@ export const OrganizationCatalogPage: React.FC = () => {
           إضافة {currentTab.singularLabel} جديد
         </h2>
         <form onSubmit={handleAdd} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-          <div className="sm:col-span-5 flex flex-col gap-1.5">
+          <div className={`${currentTab.key === 'job-titles' ? 'sm:col-span-4' : 'sm:col-span-5'} flex flex-col gap-1.5`}>
             <label htmlFor="org-new-name-ar" className="text-xs font-semibold text-text">
               الاسم بالعربية <span className="text-danger">*</span>
             </label>
@@ -279,7 +303,7 @@ export const OrganizationCatalogPage: React.FC = () => {
             />
           </div>
 
-          <div className="sm:col-span-4 flex flex-col gap-1.5">
+          <div className={`${currentTab.key === 'job-titles' ? 'sm:col-span-3' : 'sm:col-span-4'} flex flex-col gap-1.5`}>
             <label htmlFor="org-new-name-en" className="text-xs font-semibold text-text">
               الاسم بالإنجليزية <span className="text-text-muted text-[11px]">(اختياري)</span>
             </label>
@@ -296,7 +320,30 @@ export const OrganizationCatalogPage: React.FC = () => {
             />
           </div>
 
-          <div className="sm:col-span-3">
+          {currentTab.key === 'job-titles' && (
+            <div className="sm:col-span-3 flex flex-col gap-1.5">
+              <label htmlFor="org-new-dept" className="text-xs font-semibold text-text">
+                القطاع / الإدارة المرتبطة
+              </label>
+              <select
+                id="org-new-dept"
+                data-testid="org-new-dept-select"
+                disabled={isAdding}
+                value={newDepartmentId}
+                onChange={(e) => setNewDepartmentId(e.target.value)}
+                className="w-full bg-bg text-text text-sm rounded-lg border border-border focus:border-primary py-2 px-3 outline-none"
+              >
+                <option value="">عام (لكل الإدارات)</option>
+                {departmentsList.map((dept) => (
+                  <option key={dept.id} value={String(dept.id)}>
+                    {dept.nameAr}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className={`${currentTab.key === 'job-titles' ? 'sm:col-span-2' : 'sm:col-span-3'}`}>
             <Button
               type="submit"
               variant="primary"
@@ -332,7 +379,7 @@ export const OrganizationCatalogPage: React.FC = () => {
                   className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-bg/50 transition-colors"
                 >
                   {isEditing ? (
-                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className={`flex-1 grid grid-cols-1 ${currentTab.key === 'job-titles' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                       <input
                         type="text"
                         value={editNameAr}
@@ -351,10 +398,33 @@ export const OrganizationCatalogPage: React.FC = () => {
                         aria-label="الاسم بالإنجليزية"
                         className="w-full bg-bg text-text text-sm rounded-lg border border-border focus:border-primary py-1.5 px-3 outline-none text-left"
                       />
+                      {currentTab.key === 'job-titles' && (
+                        <select
+                          value={editDepartmentId}
+                          onChange={(e) => setEditDepartmentId(e.target.value)}
+                          disabled={savingId === item.id}
+                          aria-label="القطاع / الإدارة المرتبطة"
+                          className="w-full bg-bg text-text text-sm rounded-lg border border-border focus:border-primary py-1.5 px-3 outline-none"
+                        >
+                          <option value="">عام (لكل الإدارات)</option>
+                          {departmentsList.map((dept) => (
+                            <option key={dept.id} value={String(dept.id)}>
+                              {dept.nameAr}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   ) : (
-                    <div className="space-y-0.5">
-                      <p className="text-sm font-semibold text-text-heading">{item.nameAr}</p>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-text-heading">{item.nameAr}</p>
+                        {currentTab.key === 'job-titles' && (
+                          <Badge variant={item.departmentNameAr ? 'primary' : 'neutral'} size="sm">
+                            {item.departmentNameAr || 'عام (لكل الإدارات)'}
+                          </Badge>
+                        )}
+                      </div>
                       {item.nameEn && (
                         <p className="text-xs text-text-muted" dir="ltr">
                           {item.nameEn}

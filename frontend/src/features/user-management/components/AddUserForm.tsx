@@ -25,6 +25,7 @@ interface CatalogItem {
   nameAr?: string;
   label?: string;
   code?: string;
+  departmentId?: number | null;
 }
 
 interface FormState {
@@ -120,8 +121,8 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
   const [maritalStatuses, setMaritalStatuses] = useState<CatalogItem[]>([]);
   const [militaryStatuses, setMilitaryStatuses] = useState<CatalogItem[]>([]);
   const [metroLines, setMetroLines] = useState<CatalogItem[]>([]);
-  const [departmentOptions, setDepartmentOptions] = useState<string[]>(METRO_DEPARTMENTS);
-  const [jobTitleOptions, setJobTitleOptions] = useState<string[]>(METRO_JOB_TITLES);
+  const [departmentRecords, setDepartmentRecords] = useState<CatalogItem[]>([]);
+  const [jobTitleRecords, setJobTitleRecords] = useState<CatalogItem[]>([]);
   const [hasEdited, setHasEdited] = useState(false);
   const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
   const jobDropdownRef = useRef<HTMLDivElement>(null);
@@ -136,12 +137,35 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const departmentOptions = useMemo(() => {
+    const apiDepts = departmentRecords.map((d) => d.nameAr || d.name || '').filter(Boolean);
+    return apiDepts.length > 0 ? apiDepts : METRO_DEPARTMENTS;
+  }, [departmentRecords]);
+
+  const jobTitleOptionsForSelectedDept = useMemo(() => {
+    if (jobTitleRecords.length === 0) return METRO_JOB_TITLES;
+    const matchedDept = departmentRecords.find(
+      (d) => (d.nameAr || d.name || '') === formData.department
+    );
+    if (!matchedDept) {
+      return jobTitleRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
+    }
+    const scoped = jobTitleRecords
+      .filter((j) => j.departmentId == null || String(j.departmentId) === String(matchedDept.id))
+      .map((j) => j.nameAr || j.name || '')
+      .filter(Boolean);
+    if (scoped.length > 0) return scoped;
+    return jobTitleRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
+  }, [jobTitleRecords, departmentRecords, formData.department]);
+
   const filteredJobTitles = useMemo(() => {
     const query = formData.jobTitle.trim();
-    if (!query || jobTitleOptions.includes(query)) return jobTitleOptions;
-    const matches = jobTitleOptions.filter((t) => t.includes(query));
-    return matches.length > 0 ? matches : jobTitleOptions;
-  }, [formData.jobTitle, jobTitleOptions]);
+    if (!query || jobTitleOptionsForSelectedDept.includes(query)) {
+      return jobTitleOptionsForSelectedDept;
+    }
+    const matches = jobTitleOptionsForSelectedDept.filter((t) => t.includes(query));
+    return matches.length > 0 ? matches : jobTitleOptionsForSelectedDept;
+  }, [formData.jobTitle, jobTitleOptionsForSelectedDept]);
 
   const availableRoleOptions = useMemo<UserRole[]>(() => {
     const candidateRoles: UserRole[] = ['super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'];
@@ -165,28 +189,40 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
       const mList = maritalRes.status === 'fulfilled' ? maritalRes.value.maritalStatuses || [] : [];
       const milList = militaryRes.status === 'fulfilled' ? militaryRes.value.militaryStatuses || [] : [];
       const lList = lineRes.status === 'fulfilled' ? lineRes.value.metroLines || [] : [];
-      const dList =
-        deptRes.status === 'fulfilled'
-          ? (deptRes.value.departments || []).map((d) => d.nameAr || d.name || '').filter(Boolean)
-          : [];
-      const jList =
-        jobRes.status === 'fulfilled'
-          ? (jobRes.value.jobTitles || []).map((j) => j.nameAr || j.name || '').filter(Boolean)
-          : [];
+      const dRecords = deptRes.status === 'fulfilled' ? deptRes.value.departments || [] : [];
+      const jRecords = jobRes.status === 'fulfilled' ? jobRes.value.jobTitles || [] : [];
+      const dList = dRecords.map((d) => d.nameAr || d.name || '').filter(Boolean);
+      const jList = jRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
       setMaritalStatuses(mList);
       setMilitaryStatuses(milList);
       setMetroLines(lList);
-      if (dList.length > 0) setDepartmentOptions(dList);
-      if (jList.length > 0) setJobTitleOptions(jList);
-      setFormData((prev) => ({
-        ...prev,
-        maritalStatusId: prev.maritalStatusId || (mList[0] ? String(mList[0].id) : ''),
-        militaryServiceStatusId:
-          prev.militaryServiceStatusId || (milList[0] ? String(milList[0].id) : ''),
-        metroLineId: prev.metroLineId || (lList[0] ? String(lList[0].id) : ''),
-        department: dList.length > 0 && !dList.includes(prev.department) ? dList[0] : prev.department,
-        jobTitle: jList.length > 0 && !jList.includes(prev.jobTitle) ? jList[0] : prev.jobTitle,
-      }));
+      setDepartmentRecords(dRecords);
+      setJobTitleRecords(jRecords);
+      setFormData((prev) => {
+        const nextDept =
+          dList.length > 0 && !dList.includes(prev.department) ? dList[0] : prev.department;
+        const matchedDept = dRecords.find((d) => (d.nameAr || d.name || '') === nextDept);
+        const scopedJobs = matchedDept
+          ? jRecords
+              .filter(
+                (j) => j.departmentId == null || String(j.departmentId) === String(matchedDept.id)
+              )
+              .map((j) => j.nameAr || j.name || '')
+              .filter(Boolean)
+          : jList;
+        const validJobs = scopedJobs.length > 0 ? scopedJobs : jList;
+        const nextJob =
+          validJobs.length > 0 && !validJobs.includes(prev.jobTitle) ? validJobs[0] : prev.jobTitle;
+        return {
+          ...prev,
+          maritalStatusId: prev.maritalStatusId || (mList[0] ? String(mList[0].id) : ''),
+          militaryServiceStatusId:
+            prev.militaryServiceStatusId || (milList[0] ? String(milList[0].id) : ''),
+          metroLineId: prev.metroLineId || (lList[0] ? String(lList[0].id) : ''),
+          department: nextDept,
+          jobTitle: nextJob,
+        };
+      });
     });
     return () => {
       active = false;
@@ -612,7 +648,27 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               required
               disabled={isSubmitting}
               value={formData.department}
-              onChange={(e) => updateField('department', e.target.value)}
+              onChange={(e) => {
+                const nextDept = e.target.value;
+                updateField('department', nextDept);
+                if (jobTitleRecords.length > 0) {
+                  const matchedDept = departmentRecords.find(
+                    (d) => (d.nameAr || d.name || '') === nextDept
+                  );
+                  if (matchedDept) {
+                    const scopedJobs = jobTitleRecords
+                      .filter(
+                        (j) =>
+                          j.departmentId == null || String(j.departmentId) === String(matchedDept.id)
+                      )
+                      .map((j) => j.nameAr || j.name || '')
+                      .filter(Boolean);
+                    if (scopedJobs.length > 0 && !scopedJobs.includes(formData.jobTitle)) {
+                      updateField('jobTitle', scopedJobs[0]);
+                    }
+                  }
+                }
+              }}
               className={inputClass(errors.department)}
             >
               {departmentOptions.map((dept) => (
