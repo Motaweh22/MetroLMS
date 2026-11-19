@@ -8,8 +8,6 @@ import { Card } from '@/shared/ui/Card';
 import { Icon } from '@/shared/ui/Icon';
 import { useToast } from '@/shared/ui/Toast';
 import {
-  METRO_DEPARTMENTS,
-  METRO_JOB_TITLES,
   USER_ROLE_LABELS_AR,
   USER_STATUS_LABELS_AR,
   type CreateUserRequestDTO,
@@ -77,8 +75,8 @@ const INITIAL_FORM_STATE: FormState = {
   appointmentDate: '',
   serviceEndDate: '',
   metroLineId: '',
-  jobTitle: METRO_JOB_TITLES[4] || 'مهندس تشغيل',
-  department: METRO_DEPARTMENTS[4] || 'قطاع التشغيل',
+  jobTitle: '',
+  department: '',
   role: 'user',
   status: 'active',
   password: '',
@@ -138,24 +136,21 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
   }, []);
 
   const departmentOptions = useMemo(() => {
-    const apiDepts = departmentRecords.map((d) => d.nameAr || d.name || '').filter(Boolean);
-    return apiDepts.length > 0 ? apiDepts : METRO_DEPARTMENTS;
+    return departmentRecords.map((d) => d.nameAr || d.name || '').filter(Boolean);
   }, [departmentRecords]);
 
   const jobTitleOptionsForSelectedDept = useMemo(() => {
-    if (jobTitleRecords.length === 0) return METRO_JOB_TITLES;
+    if (jobTitleRecords.length === 0) return [];
     const matchedDept = departmentRecords.find(
       (d) => (d.nameAr || d.name || '') === formData.department
     );
     if (!matchedDept) {
       return jobTitleRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
     }
-    const scoped = jobTitleRecords
+    return jobTitleRecords
       .filter((j) => j.departmentId == null || String(j.departmentId) === String(matchedDept.id))
       .map((j) => j.nameAr || j.name || '')
       .filter(Boolean);
-    if (scoped.length > 0) return scoped;
-    return jobTitleRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
   }, [jobTitleRecords, departmentRecords, formData.department]);
 
   const filteredJobTitles = useMemo(() => {
@@ -611,28 +606,34 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
                 role="listbox"
                 className="absolute top-full left-0 right-0 z-30 mt-1 max-h-52 overflow-y-auto rounded-lg border border-border bg-surface shadow-lg py-1 text-sm"
               >
-                {filteredJobTitles.map((title) => {
-                  const isSelected = formData.jobTitle === title;
-                  return (
-                    <li key={title} role="option" aria-selected={isSelected}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          updateField('jobTitle', title);
-                          setIsJobDropdownOpen(false);
-                        }}
-                        className={`w-full text-right px-3 py-2 flex items-center justify-between transition-colors ${
-                          isSelected
-                            ? 'bg-primary/10 text-primary font-semibold'
-                            : 'text-text hover:bg-bg'
-                        }`}
-                      >
-                        <span>{title}</span>
-                        {isSelected && <Icon name="check" size="sm" className="text-primary" />}
-                      </button>
-                    </li>
-                  );
-                })}
+                {filteredJobTitles.length === 0 ? (
+                  <li className="px-3 py-2 text-xs text-text-muted text-center">
+                    لا توجد مسميات وظيفية مسجلة لهذه الإدارة
+                  </li>
+                ) : (
+                  filteredJobTitles.map((title) => {
+                    const isSelected = formData.jobTitle === title;
+                    return (
+                      <li key={title} role="option" aria-selected={isSelected}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateField('jobTitle', title);
+                            setIsJobDropdownOpen(false);
+                          }}
+                          className={`w-full text-right px-3 py-2 flex items-center justify-between transition-colors ${
+                            isSelected
+                              ? 'bg-primary/10 text-primary font-semibold'
+                              : 'text-text hover:bg-bg'
+                          }`}
+                        >
+                          <span>{title}</span>
+                          {isSelected && <Icon name="check" size="sm" className="text-primary" />}
+                        </button>
+                      </li>
+                    );
+                  })
+                )}
               </ul>
             )}
             {errors.jobTitle && <span className="text-[11px] text-danger">{errors.jobTitle}</span>}
@@ -671,11 +672,15 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               }}
               className={inputClass(errors.department)}
             >
-              {departmentOptions.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
+              {departmentOptions.length === 0 ? (
+                <option value="">لا توجد إدارات مسجلة</option>
+              ) : (
+                departmentOptions.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))
+              )}
             </select>
             {errors.department && (
               <span className="text-[11px] text-danger">{errors.department}</span>

@@ -5,11 +5,7 @@ import { Button } from '@/shared/ui/Button';
 import { Alert } from '@/shared/ui/Alert';
 import { Icon } from '@/shared/ui/Icon';
 import { useToast } from '@/shared/ui/Toast';
-import {
-  METRO_DEPARTMENTS,
-  METRO_JOB_TITLES,
-  type ManagedUserDTO,
-} from '@/core/user-management/types';
+import { type ManagedUserDTO } from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
 
 interface CatalogItem {
@@ -84,7 +80,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     setDateOfBirth(user.dateOfBirth || '');
     setAddress(user.address || '');
     setEducationalQualification(user.educationalQualification || '');
-    setDepartment(user.department || METRO_DEPARTMENTS[0] || '');
+    setDepartment(user.department || '');
     setJobTitle(user.jobTitle || '');
     setAppointmentDate(user.appointmentDate || '');
     setServiceEndDate(user.serviceEndDate || '');
@@ -131,22 +127,18 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   const departmentOptions = useMemo(() => {
     const apiDepts = departmentRecords.map((d) => d.nameAr || d.name || '').filter(Boolean);
-    const base = apiDepts.length > 0 ? apiDepts : METRO_DEPARTMENTS;
-    if (department && !base.includes(department)) return [department, ...base];
-    return base;
+    if (department && !apiDepts.includes(department)) return [department, ...apiDepts];
+    return apiDepts;
   }, [departmentRecords, department]);
 
   const jobTitleOptionsForDept = useMemo(() => {
-    if (jobTitleRecords.length === 0) return METRO_JOB_TITLES;
+    if (jobTitleRecords.length === 0) return [];
     const matchedDept = departmentRecords.find((d) => (d.nameAr || d.name || '') === department);
     if (!matchedDept) return jobTitleRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
-    const scoped = jobTitleRecords
+    return jobTitleRecords
       .filter((j) => j.departmentId == null || String(j.departmentId) === String(matchedDept.id))
       .map((j) => j.nameAr || j.name || '')
       .filter(Boolean);
-    return scoped.length > 0
-      ? scoped
-      : jobTitleRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
   }, [jobTitleRecords, departmentRecords, department]);
 
   const filteredJobTitles = useMemo(() => {
