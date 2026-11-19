@@ -15,6 +15,7 @@ export interface MetadataEditorProps {
   availableCourses?: Course[];
   availableLecturers?: Array<{ id: string; name: string; email?: string; phone?: string; department?: string }>;
   isAdmin?: boolean;
+  sectionFilter?: 'all' | 'basic' | 'requirements' | 'team';
 }
 
 const BRAND_COVER_COLORS = [
@@ -65,7 +66,12 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
   availableCourses = [],
   availableLecturers,
   isAdmin,
+  sectionFilter = 'all',
 }) => {
+  const showBasic = sectionFilter === 'all' || sectionFilter === 'basic';
+  const showRequirements = sectionFilter === 'all' || sectionFilter === 'requirements';
+  const showTeam = sectionFilter === 'all' || sectionFilter === 'team';
+
   const { user } = useAuth();
   const effectiveIsAdmin =
     isAdmin !== undefined
@@ -410,6 +416,7 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
       {/* ======================================================== */}
       {/* Instructor Assignment & Governance Section               */}
       {/* ======================================================== */}
+      {showTeam && (
       <section
         className="bg-surface rounded-2xl border border-border p-6 shadow-xs space-y-5"
         data-testid="section-instructor-assignment"
@@ -560,10 +567,13 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
           </div>
         )}
       </section>
+      )}
 
       {/* ======================================================== */}
       {/* Section A — Basic Course Information                     */}
       {/* ======================================================== */}
+      {showBasic && (
+      <>
       <section
         className="bg-surface rounded-2xl border border-border p-6 shadow-xs space-y-5"
         data-testid="section-basic-info"
@@ -815,10 +825,13 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
           />
         </div>
       </section>
+      </>
+      )}
 
       {/* ======================================================== */}
       {/* Section C — Prerequisites (Single Card with 2 Subsections)*/}
       {/* ======================================================== */}
+      {showRequirements && (
       <section
         className="bg-surface rounded-2xl border border-border p-6 shadow-xs space-y-6"
         data-testid="prerequisites-section"
@@ -1011,10 +1024,12 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
           </div>
         </div>
       </section>
+      )}
 
       {/* ======================================================== */}
       {/* Section D — Course Cover and Visual Identity             */}
       {/* ======================================================== */}
+      {showBasic && (
       <section
         className="bg-surface rounded-2xl border border-border p-6 shadow-xs space-y-5"
         data-testid="cover-settings-section"
@@ -1197,10 +1212,12 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
           </div>
         </div>
       </section>
+      )}
 
       {/* ======================================================== */}
       {/* Section E — Course-Level External Resources Section       */}
       {/* ======================================================== */}
+      {showRequirements && (
       <section
         className="bg-surface rounded-2xl border border-border p-6 shadow-xs space-y-5"
         data-testid="course-resources-section"
@@ -1220,10 +1237,12 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
           />
         </div>
       </section>
+      )}
 
       {/* ======================================================== */}
       {/* Section F — Course WhatsApp Contacts & Override Section   */}
       {/* ======================================================== */}
+      {showTeam && (
       <section
         className="bg-surface rounded-2xl border border-border p-6 shadow-xs space-y-5"
         data-testid="course-whatsapp-contacts-section"
@@ -1379,6 +1398,7 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
           )}
         </div>
       </section>
+      )}
     </div>
   );
 };

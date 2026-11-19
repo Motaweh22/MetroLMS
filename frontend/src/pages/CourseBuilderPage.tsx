@@ -38,7 +38,7 @@ export const CourseBuilderPage: React.FC = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<string>('');
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
-  const [activeTab, setActiveTab] = useState<'metadata' | 'curriculum' | 'downloads' | 'refresher' | 'history'>('metadata');
+  const [activeTab, setActiveTab] = useState<'metadata' | 'requirements' | 'team' | 'curriculum' | 'downloads' | 'refresher' | 'history'>('metadata');
 
   const [loading, setLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -591,10 +591,12 @@ export const CourseBuilderPage: React.FC = () => {
       )}
 
       {/* Tab Navigation Controls */}
-      <div className="border-b border-border flex items-center gap-2">
+      <div className="border-b border-border flex items-center gap-2 overflow-x-auto">
         {(
           [
             { id: 'metadata', label: 'البيانات الأساسية', icon: 'courses' },
+            { id: 'requirements', label: 'المتطلبات والمصادر', icon: 'bookOpen' },
+            { id: 'team', label: 'المحاضرون والتواصل', icon: 'users' },
             { id: 'curriculum', label: 'هيكل المنهج والمحتوى', icon: 'courses' },
             { id: 'downloads', label: 'سياسات التنزيل والملفات', icon: 'download' },
             { id: 'refresher', label: 'النسخة التذكيرية', icon: 'refreshCw' },
@@ -609,7 +611,7 @@ export const CourseBuilderPage: React.FC = () => {
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+            className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
               activeTab === tab.id
                 ? 'border-primary text-primary bg-primary/5'
                 : 'border-transparent text-text-muted hover:text-text hover:bg-neutral-light/50'
@@ -623,13 +625,16 @@ export const CourseBuilderPage: React.FC = () => {
       </div>
 
       {/* Tab Content Panels */}
-      {activeTab === 'metadata' ? (
+      {activeTab === 'metadata' || activeTab === 'requirements' || activeTab === 'team' ? (
         <div className="space-y-6" data-testid="metadata-tab-container">
           <MetadataEditor
             course={course}
             onChange={(updated) => setCourse(updated)}
             availableCourses={availableCourses}
             isAdmin={isDirectPublisher}
+            sectionFilter={
+              activeTab === 'requirements' ? 'requirements' : activeTab === 'team' ? 'team' : 'basic'
+            }
           />
         </div>
       ) : (
