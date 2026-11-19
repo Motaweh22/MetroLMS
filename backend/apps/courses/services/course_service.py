@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import secrets
 from typing import Any
 
 from django.db import transaction
@@ -17,6 +18,7 @@ from apps.courses.models import (
     CourseComment,
     CourseCommentReport,
     CourseDraft,
+    CourseQrCode,
     CourseReviewSubmission,
     LessonItem,
     Module,
@@ -337,18 +339,24 @@ def decide_course_review(
 
 
 def is_course_visible_to_trainee(user: User, course: Course) -> bool:
-    """OR audience targeting across Dept, JobTitle, MetroLine; allow enrolled/group trainees."""
+    """Visibility across access_mode (all_trainees / targeted / hidden), enrollments & groups."""
     if course.lifecycle_status != "Published":
         return False
     from apps.groups.models import GroupCourseAssignment
     from apps.learning.models import Enrollment
 
-    if Enrollment.objects.filter(user=user, course=course).exists():
+    if Enrollment.objects.filter(user=user, course=course, source_grants__isnull=False).exists():
         return True
     if GroupCourseAssignment.objects.filter(
         course=course,
         group_renewal_cycle__training_group__memberships__user=user,
     ).exists():
+        return True
+
+    access_mode = getattr(course, "access_mode", "targeted") or "targeted"
+    if access_mode == "hidden":
+        return False
+    if access_mode == "all_trainees":
         return True
 
     dept_ids = set(CourseAudienceDepartment.objects.filter(course=course).values_list("department_id", flat=True))
@@ -391,6 +399,57 @@ def report_course_comment(*, reporter: User, comment: CourseComment, reason: str
         status="Pending",
         created_at=timezone.now(),
     )
+
+
+def get_or_create_course_qr(course: Course) -> CourseQrCode:
+    """Return or lazily initialize a CourseQrCode configuration for a course."""
+    qr = CourseQrCode.objects.filter(course=course).first()
+    if qr is not None:
+        return qr
+    return CourseQrCode.objects.create(
+        course=course,
+        token=secrets.token_urlsafe(18),
+        is_enabled=True,
+        qr_mode="view_only",
+        expires_at=None,
+        updated_at=timezone.now(),
+    )
+
+
+def rotate_course_qr(course: Course) -> CourseQrCode:
+    """Generate a new QR token for the course, invalidating prior links."""
+    qr = get_or_create_course_qr(course)
+    qr.token = secrets.token_urlsafe(18)
+    qr.updated_at = timezone.now()
+    qr.save(update_fields=["token", "updated_at"])
+    return qr
+
+
+def update_course_qr_settings(
+    course: Course,
+    *,
+    is_enabled: bool | None = None,
+    qr_mode: str | None = None,
+    expires_at: Any = ...,
+) -> CourseQrCode:
+    """Update CourseQrCode settings."""
+    qr = get_or_create_course_qr(course)
+    update_fields = ["updated_at"]
+    if is_enabled is not None:
+        qr.is_enabled = bool(is_enabled)
+        update_fields.append("is_enabled")
+    if qr_mode is not None:
+        if qr_mode not in {"view_only", "auto_enroll"}:
+            raise CourseDomainError("VALIDATION_ERROR", "نمط رمز QR غير صالح.", 400)
+        qr.qr_mode = qr_mode
+        update_fields.append("qr_mode")
+    if expires_at is not ...:
+        qr.expires_at = expires_at
+        update_fields.append("expires_at")
+    qr.updated_at = timezone.now()
+    qr.save(update_fields=update_fields)
+    return qr
+
 
 
 def anonymize_user_comments(user: User) -> int:

@@ -161,6 +161,39 @@ export interface CourseChapter {
   items: ChapterItem[];
 }
 
+export type CourseAccessMode = 'all_trainees' | 'targeted' | 'hidden';
+export type CourseQrMode = 'view_only' | 'auto_enroll';
+
+export interface CourseQrSettings {
+  token: string | null;
+  isEnabled: boolean;
+  qrMode: CourseQrMode;
+  expiresAt: string | null;
+  updatedAt?: string | null;
+}
+
+export interface CourseLinkedGroupSummary {
+  id: string;
+  name: string;
+  status: string;
+  memberCount: number;
+}
+
+export interface CourseEnrollmentMember {
+  id: number;
+  userId: number;
+  userName?: string;
+  userEmail?: string;
+  courseId: number;
+  enrolledAt: string;
+  hasActiveAccess: boolean;
+  sourceGrants: Array<{
+    id: number;
+    sourceType: 'direct' | 'group' | 'self:continued' | 'qr_code';
+    trainingGroupId: number | null;
+  }>;
+}
+
 export interface Course {
   id: string;
   title: string;
@@ -176,6 +209,8 @@ export interface Course {
   targetDepartmentIds?: number[];
   targetJobTitleIds?: number[];
   targetMetroLineIds?: number[];
+  accessMode?: CourseAccessMode;
+  qrSettings?: CourseQrSettings;
   level: CourseLevel;
   estimatedHours: number;
   rating: number;
@@ -402,6 +437,8 @@ export interface CourseBaselineSnapshot {
   targetDepartmentIds?: number[];
   targetJobTitleIds?: number[];
   targetMetroLineIds?: number[];
+  accessMode?: CourseAccessMode;
+  qrSettings?: CourseQrSettings;
   prerequisiteCourseId?: string | null;
   courseZipPolicy?: CourseZipPolicy;
   externalResources?: ExternalResource[];

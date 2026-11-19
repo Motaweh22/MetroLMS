@@ -33,6 +33,8 @@ class CourseAttemptSerializer(serializers.ModelSerializer):
 
 class EnrollmentSerializer(serializers.ModelSerializer):
     userId = serializers.IntegerField(source="user_id")
+    userName = serializers.CharField(source="user.full_name", read_only=True)
+    userEmail = serializers.CharField(source="user.email", read_only=True)
     courseId = serializers.IntegerField(source="course_id")
     enrolledAt = serializers.DateTimeField(source="enrolled_at")
     sourceGrants = EnrollmentSourceGrantSerializer(source="source_grants", many=True, read_only=True)
@@ -40,7 +42,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Enrollment
-        fields = ["id", "userId", "courseId", "enrolledAt", "hasActiveAccess", "sourceGrants"]
+        fields = ["id", "userId", "userName", "userEmail", "courseId", "enrolledAt", "hasActiveAccess", "sourceGrants"]
 
     def get_hasActiveAccess(self, obj: Enrollment) -> bool:
         return obj.source_grants.exists()

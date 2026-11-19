@@ -83,7 +83,7 @@ def enroll_user_in_course(
     group_renewal_cycle: GroupRenewalCycle | None = None,
 ) -> tuple[Enrollment, EnrollmentSourceGrant, CourseAttempt]:
     """Create or extend multi-source Enrollment + SourceGrant + active CourseAttempt."""
-    if source_type not in {"direct", "group", "self:continued"}:
+    if source_type not in {"direct", "group", "self:continued", "qr_code"}:
         raise LearningDomainError("INVALID_SOURCE_TYPE", "مصدر التسجيل غير صالح.")
     if source_type == "group" and training_group is None:
         raise LearningDomainError("GROUP_REQUIRED", "يجب تحديد المجموعة التدريبية لمصدر التسجيل الجماعي.")

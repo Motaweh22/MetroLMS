@@ -19,10 +19,15 @@ from apps.courses.api.views.courses import (
     CourseCommentListView,
     CourseCommentReportView,
     CourseInstructorsView,
+    CourseQrJoinInfoView,
+    CourseQrJoinView,
     CourseReviewDataView,
     LecturerCourseDetailView,
     LecturerCourseDraftView,
+    LecturerCourseGroupsView,
     LecturerCourseListView,
+    LecturerCourseQrRotateView,
+    LecturerCourseQrSettingsView,
 )
 
 urlpatterns = [
@@ -36,6 +41,11 @@ urlpatterns = [
     path("lecturer/courses", LecturerCourseListView.as_view(), name="lecturer-courses"),
     path("lecturer/courses/<int:course_id>", LecturerCourseDetailView.as_view(), name="lecturer-course-detail"),
     path("lecturer/courses/<int:course_id>/draft", LecturerCourseDraftView.as_view(), name="lecturer-course-draft"),
+    path("lecturer/courses/<int:course_id>/groups", LecturerCourseGroupsView.as_view(), name="lecturer-course-groups"),
+    path("lecturer/courses/<int:course_id>/qr-settings", LecturerCourseQrSettingsView.as_view(), name="lecturer-course-qr-settings"),
+    path("lecturer/courses/<int:course_id>/qr-settings/rotate", LecturerCourseQrRotateView.as_view(), name="lecturer-course-qr-rotate"),
+    path("courses/join/<str:token>/info", CourseQrJoinInfoView.as_view(), name="course-qr-join-info"),
+    path("courses/join-by-qr", CourseQrJoinView.as_view(), name="course-qr-join"),
     path(
         "admin/courses/<int:course_id>/review/submit",
         AdminCourseReviewSubmitView.as_view(),

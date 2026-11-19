@@ -93,7 +93,13 @@ class CourseEnrollmentsView(APIView):
         )
         if not is_course_staff:
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية عرض المسجلين في هذه الدورة.", status.HTTP_403_FORBIDDEN)
-        rows = Enrollment.objects.filter(course=course).prefetch_related("source_grants").order_by("id")
+        rows = (
+            Enrollment.objects.filter(course=course, source_grants__isnull=False)
+            .select_related("user")
+            .prefetch_related("source_grants")
+            .distinct()
+            .order_by("id")
+        )
         return success_response({"enrollments": EnrollmentSerializer(rows, many=True).data})
 
     def post(self, request: Request, course_id: int):
@@ -105,7 +111,12 @@ class CourseEnrollmentsView(APIView):
         target_user_id = int(raw_user_id) if raw_user_id is not None else request.user.id
         if target_user_id != request.user.id:
             decision = evaluate_permission(request.user, "users.manage_enrollments")
-            if not decision.granted and request.user.role_id not in {"developer", "super_admin", "admin"}:
+            is_course_staff = (
+                request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
+                or course.primary_lecturer_id == request.user.id
+                or course.assistant_lecturers.filter(user=request.user).exists()
+            )
+            if not decision.granted and not is_course_staff:
                 return error_response("PERMISSION_DENIED", decision.reason_ar, status.HTTP_403_FORBIDDEN)
         target_user = get_visible_user_or_none(request.user, target_user_id)
         if target_user is None:
@@ -140,6 +151,91 @@ class CourseEnrollmentsView(APIView):
             },
             status_code=status.HTTP_201_CREATED,
         )
+
+
+class CourseEnrollmentsBulkAddView(APIView):
+    """POST /api/courses/<course_id>/enrollments/bulk-add — Direct member enrollment."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_course_staff = (
+            request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
+            or course.primary_lecturer_id == request.user.id
+            or course.assistant_lecturers.filter(user=request.user).exists()
+        )
+        if not is_course_staff:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إضافة أعضاء لهذه الدورة.", status.HTTP_403_FORBIDDEN)
+
+        raw_ids = request.data.get("userIds", [])
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return error_response("VALIDATION_ERROR", "يرجى تحديد عضو واحد على الأقل.", status.HTTP_400_BAD_REQUEST)
+
+        added_count = 0
+        for raw_uid in raw_ids:
+            try:
+                uid = int(raw_uid)
+            except (TypeError, ValueError):
+                continue
+            target_user = get_visible_user_or_none(request.user, uid)
+            if target_user is None:
+                continue
+            enroll_user_in_course(
+                actor=request.user,
+                user=target_user,
+                course=course,
+                source_type="direct",
+            )
+            added_count += 1
+
+        rows = (
+            Enrollment.objects.filter(course=course, source_grants__isnull=False)
+            .select_related("user")
+            .prefetch_related("source_grants")
+            .distinct()
+            .order_by("id")
+        )
+        return success_response(
+            {
+                "addedCount": added_count,
+                "enrollments": EnrollmentSerializer(rows, many=True).data,
+            },
+            status_code=status.HTTP_201_CREATED,
+        )
+
+
+class CourseEnrollmentDirectGrantRevokeView(APIView):
+    """DELETE /api/courses/<course_id>/enrollments/<user_id>/direct-grant."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request: Request, course_id: int, user_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_course_staff = (
+            request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
+            or course.primary_lecturer_id == request.user.id
+            or course.assistant_lecturers.filter(user=request.user).exists()
+        )
+        if not is_course_staff:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعديل المسجلين في هذه الدورة.", status.HTTP_403_FORBIDDEN)
+
+        from apps.learning.models import EnrollmentSourceGrant
+
+        enrollment = Enrollment.objects.filter(user_id=user_id, course=course).first()
+        if enrollment is None:
+            return error_response("RESOURCE_NOT_FOUND", "التسجيل غير موجود.", status.HTTP_404_NOT_FOUND)
+
+        EnrollmentSourceGrant.objects.filter(
+            enrollment=enrollment,
+            source_type__in=["direct", "qr_code", "self:continued"],
+        ).delete()
+        remaining = enrollment.source_grants.exists()
+        return success_response({"revoked": True, "hasActiveAccess": remaining})
 
 
 class CourseEnrollmentGroupGrantRevokeView(APIView):

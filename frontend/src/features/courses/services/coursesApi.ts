@@ -115,4 +115,108 @@ export const coursesApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  async getCourseEnrollments(
+    courseId: string
+  ): Promise<import('@/core/courses/types').CourseEnrollmentMember[]> {
+    const res = await apiClient<{ enrollments: import('@/core/courses/types').CourseEnrollmentMember[] }>(
+      `/api/courses/${encodeURIComponent(courseId)}/enrollments`,
+      { method: 'GET' }
+    );
+    return res?.enrollments ?? [];
+  },
+
+  async bulkAddCourseEnrollments(
+    courseId: string,
+    userIds: number[]
+  ): Promise<{ addedCount: number; enrollments: import('@/core/courses/types').CourseEnrollmentMember[] }> {
+    return apiClient(`/api/courses/${encodeURIComponent(courseId)}/enrollments/bulk-add`, {
+      method: 'POST',
+      body: JSON.stringify({ userIds }),
+    });
+  },
+
+  async revokeDirectCourseEnrollment(
+    courseId: string,
+    userId: number | string
+  ): Promise<{ revoked: boolean; hasActiveAccess: boolean }> {
+    return apiClient(
+      `/api/courses/${encodeURIComponent(courseId)}/enrollments/${encodeURIComponent(String(userId))}/direct-grant`,
+      { method: 'DELETE' }
+    );
+  },
+
+  async getCourseLinkedGroups(
+    courseId: string
+  ): Promise<import('@/core/courses/types').CourseLinkedGroupSummary[]> {
+    const res = await apiClient<{ groups: import('@/core/courses/types').CourseLinkedGroupSummary[] }>(
+      `/api/lecturer/courses/${encodeURIComponent(courseId)}/groups`,
+      { method: 'GET' }
+    );
+    return res?.groups ?? [];
+  },
+
+  async getCourseQrSettings(
+    courseId: string
+  ): Promise<import('@/core/courses/types').CourseQrSettings> {
+    const res = await apiClient<{ qrSettings: import('@/core/courses/types').CourseQrSettings }>(
+      `/api/lecturer/courses/${encodeURIComponent(courseId)}/qr-settings`,
+      { method: 'GET' }
+    );
+    return res.qrSettings;
+  },
+
+  async updateCourseQrSettings(
+    courseId: string,
+    payload: { isEnabled?: boolean; qrMode?: 'view_only' | 'auto_enroll'; expiresAt?: string | null }
+  ): Promise<import('@/core/courses/types').CourseQrSettings> {
+    const res = await apiClient<{ qrSettings: import('@/core/courses/types').CourseQrSettings }>(
+      `/api/lecturer/courses/${encodeURIComponent(courseId)}/qr-settings`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }
+    );
+    return res.qrSettings;
+  },
+
+  async rotateCourseQrToken(
+    courseId: string
+  ): Promise<import('@/core/courses/types').CourseQrSettings> {
+    const res = await apiClient<{ qrSettings: import('@/core/courses/types').CourseQrSettings }>(
+      `/api/lecturer/courses/${encodeURIComponent(courseId)}/qr-settings/rotate`,
+      { method: 'POST' }
+    );
+    return res.qrSettings;
+  },
+
+  async getCourseQrJoinInfo(token: string): Promise<{
+    course: {
+      id: string;
+      title: string;
+      description?: string;
+      lecturerName: string;
+      lifecycleStatus: string;
+      accessMode: import('@/core/courses/types').CourseAccessMode;
+    };
+    qrSettings: {
+      isEnabled: boolean;
+      qrMode: import('@/core/courses/types').CourseQrMode;
+      expiresAt: string | null;
+      isExpired: boolean;
+    };
+  }> {
+    return apiClient(`/api/courses/join/${encodeURIComponent(token)}/info`, { method: 'GET' });
+  },
+
+  async joinCourseByQr(token: string): Promise<{
+    courseId: string;
+    qrMode: import('@/core/courses/types').CourseQrMode;
+    enrolled: boolean;
+  }> {
+    return apiClient('/api/courses/join-by-qr', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
 };

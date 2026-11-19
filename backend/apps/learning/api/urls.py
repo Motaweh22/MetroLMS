@@ -10,8 +10,10 @@ from apps.learning.api.views.assessments import (
 )
 from apps.learning.api.views.dashboard import DashboardView
 from apps.learning.api.views.learning import (
+    CourseEnrollmentDirectGrantRevokeView,
     CourseEnrollmentGroupGrantRevokeView,
     CourseEnrollmentStatusView,
+    CourseEnrollmentsBulkAddView,
     CourseEnrollmentsView,
     CourseProgressView,
     LessonActivityView,
@@ -24,7 +26,13 @@ urlpatterns = [
     path("dashboard", DashboardView.as_view(), name="dashboard"),
     path("enrollments/my", MyEnrollmentsView.as_view(), name="enrollments-my"),
     path("courses/<int:course_id>/enrollments", CourseEnrollmentsView.as_view(), name="course-enrollments"),
+    path("courses/<int:course_id>/enrollments/bulk-add", CourseEnrollmentsBulkAddView.as_view(), name="course-enrollments-bulk-add"),
     path("courses/<int:course_id>/enrollment", CourseEnrollmentStatusView.as_view(), name="course-enrollment-status"),
+    path(
+        "courses/<int:course_id>/enrollments/<int:user_id>/direct-grant",
+        CourseEnrollmentDirectGrantRevokeView.as_view(),
+        name="course-enrollment-direct-grant",
+    ),
     path(
         "courses/<int:course_id>/enrollments/<int:user_id>/group-grant",
         CourseEnrollmentGroupGrantRevokeView.as_view(),

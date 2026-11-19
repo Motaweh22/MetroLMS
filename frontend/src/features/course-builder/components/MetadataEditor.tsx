@@ -692,6 +692,17 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
               </span>
             </div>
 
+            {(course.accessMode === 'all_trainees' || course.accessMode === 'hidden') && (
+              <div
+                className="p-3 rounded-xl border border-primary/30 bg-primary/5 text-xs text-text-heading"
+                data-testid="audience-access-mode-notice"
+              >
+                {course.accessMode === 'all_trainees'
+                  ? 'ملاحظة: نمط الوصول مضبوط حالياً على «متاح لكل الملتحقين بالمترو» من تبويب «التسجيل والوصول»، لذا يظهر المقرر للجميع بغض النظر عن هذا التحديد.'
+                  : 'ملاحظة: نمط الوصول مضبوط حالياً على «مخفي — عبر المجموعات والأعضاء المسجلين فقط» من تبويب «التسجيل والوصول»، ولن يظهر المقرر في الكتالوج العام.'}
+              </div>
+            )}
+
             {/* B. Target Departments / Sectors */}
             <AudienceSectionCard
               title="القطاعات والإدارات المستهدفة"

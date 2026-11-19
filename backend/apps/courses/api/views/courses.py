@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -21,6 +22,7 @@ from apps.courses.models import (
     CourseAudienceMetroLine,
     CourseComment,
     CourseCommentReport,
+    CourseQrCode,
     CourseReviewSubmission,
     StagedAdminEdit,
 )
@@ -30,10 +32,13 @@ from apps.courses.services.course_service import (
     add_course_comment,
     create_course,
     decide_course_review,
+    get_or_create_course_qr,
     is_course_visible_to_trainee,
     report_course_comment,
+    rotate_course_qr,
     save_course_draft,
     submit_course_for_review,
+    update_course_qr_settings,
 )
 from apps.identity.models import User
 from shared.api import error_response, success_response
@@ -41,9 +46,14 @@ from shared.permissions import has_capability
 
 
 def _sync_course_audience(course: Course, data: dict) -> None:
-    """Sync CourseAudienceDepartment, CourseAudienceJobTitle, CourseAudienceMetroLine."""
+    """Sync Course access_mode, CourseAudienceDepartment, CourseAudienceJobTitle, CourseAudienceMetroLine."""
     if not isinstance(data, dict):
         return
+    raw_access_mode = data.get("accessMode")
+    if isinstance(raw_access_mode, str) and raw_access_mode in {"all_trainees", "targeted", "hidden"}:
+        if course.access_mode != raw_access_mode:
+            course.access_mode = raw_access_mode
+            course.save(update_fields=["access_mode", "updated_at"])
     if "targetDepartmentIds" in data and isinstance(data.get("targetDepartmentIds"), list):
         dept_ids = [int(x) for x in data["targetDepartmentIds"] if str(x).isdigit()]
         valid_dept_ids = list(OrganizationalDepartment.objects.filter(pk__in=dept_ids).values_list("id", flat=True))
@@ -96,8 +106,15 @@ class CourseCatalogDetailView(APIView):
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
-            if course.primary_lecturer_id != request.user.id and course.lifecycle_status != "Published":
-                return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+            if course.primary_lecturer_id != request.user.id and not course.assistant_lecturers.filter(user=request.user).exists():
+                if course.lifecycle_status != "Published":
+                    return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+                if not is_course_visible_to_trainee(request.user, course):
+                    return error_response(
+                        "PERMISSION_DENIED",
+                        "هذا المقرر مخفي أو مخصص لمجموعات محددة ولا تملك صلاحية الوصول إليه.",
+                        status.HTTP_403_FORBIDDEN,
+                    )
         return success_response({"course": CourseSerializer(course).data})
 
 
@@ -592,4 +609,186 @@ class AdminCourseWorkingNotesView(APIView):
 
     def delete(self, request: Request, course_id: int, target_type: str = "", target_id: str = ""):
         return success_response({"deleted": True})
+
+
+def _is_course_staff(user: User, course: Course) -> bool:
+    return (
+        user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
+        or course.primary_lecturer_id == user.id
+        or course.assistant_lecturers.filter(user=user).exists()
+    )
+
+
+def _serialize_course_qr(qr: CourseQrCode) -> dict:
+    return {
+        "token": qr.token,
+        "isEnabled": qr.is_enabled,
+        "qrMode": qr.qr_mode,
+        "expiresAt": qr.expires_at.isoformat() if qr.expires_at else None,
+        "updatedAt": qr.updated_at.isoformat() if qr.updated_at else None,
+    }
+
+
+class LecturerCourseGroupsView(APIView):
+    """GET /api/lecturer/courses/<course_id>/groups — TrainingGroups linked to this course."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _is_course_staff(request.user, course):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية عرض مجموعات هذه الدورة.", status.HTTP_403_FORBIDDEN)
+        from apps.groups.models import TrainingGroup
+
+        groups = (
+            TrainingGroup.objects.filter(renewal_cycles__course_assignments__course=course)
+            .distinct()
+            .order_by("id")
+        )
+        items = [
+            {
+                "id": str(g.id),
+                "name": g.name,
+                "status": g.status,
+                "memberCount": g.memberships.count(),
+            }
+            for g in groups
+        ]
+        return success_response({"groups": items})
+
+
+class LecturerCourseQrSettingsView(APIView):
+    """GET / PATCH /api/lecturer/courses/<course_id>/qr-settings."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _is_course_staff(request.user, course):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إدارة رمز QR لهذه الدورة.", status.HTTP_403_FORBIDDEN)
+        qr = get_or_create_course_qr(course)
+        return success_response({"qrSettings": _serialize_course_qr(qr)})
+
+    def patch(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _is_course_staff(request.user, course):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعديل إعدادات رمز QR لهذه الدورة.", status.HTTP_403_FORBIDDEN)
+
+        is_enabled = request.data.get("isEnabled")
+        qr_mode = request.data.get("qrMode")
+        expires_at = ...
+        if "expiresAt" in request.data:
+            raw_exp = request.data.get("expiresAt")
+            if raw_exp in (None, ""):
+                expires_at = None
+            else:
+                parsed = parse_datetime(str(raw_exp))
+                if parsed is None:
+                    return error_response("VALIDATION_ERROR", "صيغة تاريخ انتهاء الصلاحية غير صالحة.", status.HTTP_400_BAD_REQUEST)
+                if timezone.is_naive(parsed):
+                    parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+                expires_at = parsed
+        try:
+            qr = update_course_qr_settings(
+                course,
+                is_enabled=is_enabled,
+                qr_mode=qr_mode,
+                expires_at=expires_at,
+            )
+        except CourseDomainError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+        return success_response({"qrSettings": _serialize_course_qr(qr)})
+
+
+class LecturerCourseQrRotateView(APIView):
+    """POST /api/lecturer/courses/<course_id>/qr-settings/rotate."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _is_course_staff(request.user, course):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إعادة توليد رمز QR لهذه الدورة.", status.HTTP_403_FORBIDDEN)
+        qr = rotate_course_qr(course)
+        return success_response({"qrSettings": _serialize_course_qr(qr)})
+
+
+class CourseQrJoinInfoView(APIView):
+    """GET /api/courses/join/<token>/info — Preview course before QR join."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, token: str):
+        qr = CourseQrCode.objects.select_related("course", "course__primary_lecturer").filter(token=token).first()
+        if qr is None:
+            return error_response("RESOURCE_NOT_FOUND", "رمز QR غير صالح أو تم استبداله.", status.HTTP_404_NOT_FOUND)
+        is_expired = bool(qr.expires_at and qr.expires_at <= timezone.now())
+        return success_response(
+            {
+                "course": {
+                    "id": str(qr.course.id),
+                    "title": qr.course.title,
+                    "description": qr.course.description,
+                    "lecturerName": qr.course.primary_lecturer.full_name if qr.course.primary_lecturer else "",
+                    "lifecycleStatus": qr.course.lifecycle_status,
+                    "accessMode": qr.course.access_mode,
+                },
+                "qrSettings": {
+                    "isEnabled": qr.is_enabled,
+                    "qrMode": qr.qr_mode,
+                    "expiresAt": qr.expires_at.isoformat() if qr.expires_at else None,
+                    "isExpired": is_expired,
+                },
+            }
+        )
+
+
+class CourseQrJoinView(APIView):
+    """POST /api/courses/join-by-qr — Access or auto-enroll via Course QR token."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request):
+        token = str(request.data.get("token", "")).strip()
+        if not token:
+            return error_response("VALIDATION_ERROR", "رمز QR مطلوب.", status.HTTP_400_BAD_REQUEST)
+        qr = CourseQrCode.objects.select_related("course").filter(token=token).first()
+        if qr is None:
+            return error_response("RESOURCE_NOT_FOUND", "رمز QR غير صالح أو تم استبداله.", status.HTTP_404_NOT_FOUND)
+        if not qr.is_enabled:
+            return error_response("QR_DISABLED", "تم إيقاف الدخول عبر رمز QR لهذا المقرر.", status.HTTP_403_FORBIDDEN)
+        if qr.expires_at and qr.expires_at <= timezone.now():
+            return error_response("QR_EXPIRED", "انتهت صلاحية رمز QR لهذا المقرر.", status.HTTP_403_FORBIDDEN)
+        course = qr.course
+        if course.lifecycle_status != "Published" and not _is_course_staff(request.user, course):
+            return error_response("COURSE_NOT_PUBLISHED", "المقرر غير منشور حالياً.", status.HTTP_403_FORBIDDEN)
+
+        enrolled = False
+        if qr.qr_mode == "auto_enroll":
+            from apps.learning.services.learning_service import enroll_user_in_course
+
+            enroll_user_in_course(
+                actor=request.user,
+                user=request.user,
+                course=course,
+                source_type="qr_code",
+            )
+            enrolled = True
+
+        return success_response(
+            {
+                "courseId": str(course.id),
+                "qrMode": qr.qr_mode,
+                "enrolled": enrolled,
+            }
+        )
+
 

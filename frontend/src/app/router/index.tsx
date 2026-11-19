@@ -19,6 +19,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { CoursesCatalogPage } from '@/pages/CoursesCatalogPage';
 import { CourseDetailPage } from '@/pages/CourseDetailPage';
+import { CourseQrJoinPage } from '@/pages/CourseQrJoinPage';
 import { DesignSystemPreviewPage } from '@/pages/DesignSystemPreviewPage';
 import { LearningPlayerPage } from '@/pages/LearningPlayerPage';
 import { MyCoursesPage } from '@/pages/MyCoursesPage';
@@ -168,6 +169,7 @@ export const appRouteElements = (
       <Route index element={<Navigate to="/dashboard" replace />} />
       <Route path="dashboard" element={<DashboardPage />} />
       <Route path="courses" element={<CoursesCatalogPage />} />
+      <Route path="courses/join/:token" element={<CourseQrJoinPage />} />
       <Route path="courses/:courseId" element={<CourseDetailPage />} />
       <Route path="courses/:courseId/learn" element={<LearningPlayerPage />} />
       <Route path="courses/:courseId/learn/:itemId" element={<LearningPlayerPage />} />

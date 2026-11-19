@@ -8,6 +8,7 @@ ENROLLMENT_SOURCE_CHOICES = [
     ("direct", "Direct"),
     ("group", "Group"),
     ("self:continued", "Self Continued"),
+    ("qr_code", "QR Code"),
 ]
 
 
@@ -60,7 +61,7 @@ class EnrollmentSourceGrant(models.Model):
         db_table = "learning_enrollmentsourcegrant"
         constraints = [
             models.CheckConstraint(
-                condition=Q(source_type__in=["direct", "group", "self:continued"]),
+                condition=Q(source_type__in=["direct", "group", "self:continued", "qr_code"]),
                 name="ck_enrollgrant_sourcetype_valid",
             ),
         ]

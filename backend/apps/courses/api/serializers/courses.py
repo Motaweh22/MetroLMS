@@ -26,6 +26,8 @@ class CourseSerializer(serializers.ModelSerializer):
     mainCourseId = serializers.IntegerField(source="main_course_id", read_only=True)
     primaryLecturerId = serializers.IntegerField(source="primary_lecturer_id", read_only=True)
     lifecycleStatus = serializers.CharField(source="lifecycle_status", read_only=True)
+    accessMode = serializers.CharField(source="access_mode", read_only=True)
+    qrSettings = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     level = serializers.SerializerMethodField()
     lecturer = serializers.SerializerMethodField()
@@ -57,6 +59,8 @@ class CourseSerializer(serializers.ModelSerializer):
             "mainCourseId",
             "primaryLecturerId",
             "lifecycleStatus",
+            "accessMode",
+            "qrSettings",
             "status",
             "level",
             "lecturer",
@@ -138,7 +142,25 @@ class CourseSerializer(serializers.ModelSerializer):
         return 0
 
     def get_enrollmentCount(self, obj: Course) -> int:
-        return 0
+        return obj.enrollments.filter(source_grants__isnull=False).distinct().count()
+
+    def get_qrSettings(self, obj: Course) -> dict:
+        qr = getattr(obj, "qr_code", None)
+        if qr is None:
+            return {
+                "token": None,
+                "isEnabled": True,
+                "qrMode": "view_only",
+                "expiresAt": None,
+                "updatedAt": None,
+            }
+        return {
+            "token": qr.token,
+            "isEnabled": qr.is_enabled,
+            "qrMode": qr.qr_mode,
+            "expiresAt": qr.expires_at.isoformat() if qr.expires_at else None,
+            "updatedAt": qr.updated_at.isoformat() if qr.updated_at else None,
+        }
 
     def get_estimatedHours(self, obj: Course) -> int:
         return 0

@@ -18,6 +18,17 @@ COURSE_LIFECYCLE_CHOICES = [
     ("Archived", "Archived"),
 ]
 
+COURSE_ACCESS_MODE_CHOICES = [
+    ("all_trainees", "All Trainees"),
+    ("targeted", "Targeted Audience"),
+    ("hidden", "Hidden (Groups & Direct Only)"),
+]
+
+COURSE_QR_MODE_CHOICES = [
+    ("view_only", "View Course Only"),
+    ("auto_enroll", "Auto Enroll on Scan"),
+]
+
 REVIEW_STATUS_CHOICES = [
     ("Pending", "Pending"),
     ("Approved", "Approved"),
@@ -58,6 +69,12 @@ class Course(models.Model):
         default="Draft",
         db_default="Draft",
     )
+    access_mode = models.CharField(
+        max_length=20,
+        choices=COURSE_ACCESS_MODE_CHOICES,
+        default="targeted",
+        db_default="targeted",
+    )
     created_by_user = models.ForeignKey(
         "identity.User",
         null=True,
@@ -87,6 +104,10 @@ class Course(models.Model):
             models.CheckConstraint(
                 condition=Q(lifecycle_status__in=["Draft", "InReview", "Published", "Archived"]),
                 name="ck_course_lifecycle_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(access_mode__in=["all_trainees", "targeted", "hidden"]),
+                name="ck_course_access_mode_valid",
             ),
             models.CheckConstraint(
                 condition=(
@@ -542,6 +563,37 @@ class CourseCommentReport(models.Model):
             models.CheckConstraint(
                 condition=Q(status__in=["Pending", "Resolved", "Dismissed"]),
                 name="ck_commentreport_status_valid",
+            ),
+        ]
+
+
+class CourseQrCode(models.Model):
+    """Configurable QR enrollment & access settings for a Course."""
+
+    id = models.BigAutoField(primary_key=True)
+    course = models.OneToOneField(
+        Course,
+        on_delete=models.DO_NOTHING,
+        db_column="course_id",
+        related_name="qr_code",
+    )
+    token = models.CharField(max_length=64, unique=True)
+    is_enabled = models.BooleanField(default=True, db_default=True)
+    qr_mode = models.CharField(
+        max_length=20,
+        choices=COURSE_QR_MODE_CHOICES,
+        default="view_only",
+        db_default="view_only",
+    )
+    expires_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "courses_courseqrcode"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(qr_mode__in=["view_only", "auto_enroll"]),
+                name="ck_course_qr_mode_valid",
             ),
         ]
 

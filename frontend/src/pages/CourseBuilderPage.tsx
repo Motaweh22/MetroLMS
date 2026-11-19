@@ -4,6 +4,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
 import { builderApi } from '@/features/course-builder/services/builderApi';
 import { MetadataEditor } from '@/features/course-builder/components/MetadataEditor';
+import { CourseAccessAndEnrollmentTab } from '@/features/course-builder/components/CourseAccessAndEnrollmentTab';
 import { CurriculumTreeEditor } from '@/features/course-builder/components/CurriculumTreeEditor';
 import { DownloadPoliciesEditor } from '@/features/course-builder/components/DownloadPoliciesEditor';
 import type { Course, CourseAuditLogEntry } from '@/core/courses/types';
@@ -38,7 +39,7 @@ export const CourseBuilderPage: React.FC = () => {
   const [course, setCourse] = useState<Course | null>(null);
   const [initialSnapshot, setInitialSnapshot] = useState<string>('');
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
-  const [activeTab, setActiveTab] = useState<'metadata' | 'requirements' | 'team' | 'curriculum' | 'downloads' | 'refresher' | 'history'>('metadata');
+  const [activeTab, setActiveTab] = useState<'metadata' | 'requirements' | 'team' | 'access' | 'curriculum' | 'downloads' | 'refresher' | 'history'>('metadata');
 
   const [loading, setLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -597,6 +598,7 @@ export const CourseBuilderPage: React.FC = () => {
             { id: 'metadata', label: 'البيانات الأساسية', icon: 'courses' },
             { id: 'requirements', label: 'المتطلبات والمصادر', icon: 'bookOpen' },
             { id: 'team', label: 'المحاضرون والتواصل', icon: 'users' },
+            { id: 'access', label: 'التسجيل والوصول', icon: 'shield' },
             { id: 'curriculum', label: 'هيكل المنهج والمحتوى', icon: 'courses' },
             { id: 'downloads', label: 'سياسات التنزيل والملفات', icon: 'download' },
             { id: 'refresher', label: 'النسخة التذكيرية', icon: 'refreshCw' },
@@ -637,6 +639,11 @@ export const CourseBuilderPage: React.FC = () => {
             }
           />
         </div>
+      ) : activeTab === 'access' ? (
+        <CourseAccessAndEnrollmentTab
+          course={course}
+          onChange={(updated) => setCourse(updated)}
+        />
       ) : (
         <div className="bg-white rounded-2xl border border-border p-6 shadow-xs">
           {activeTab === 'curriculum' && (
@@ -802,7 +809,11 @@ export const CourseBuilderPage: React.FC = () => {
           isOpen={isQrModalOpen}
           onClose={() => setIsQrModalOpen(false)}
           title={course.title}
-          url={`${window.location.origin}/courses/${encodeURIComponent(course.id)}`}
+          url={
+            course.qrSettings?.token
+              ? `${window.location.origin}/courses/join/${encodeURIComponent(course.qrSettings.token)}`
+              : `${window.location.origin}/courses/${encodeURIComponent(course.id)}`
+          }
           subtitle={`المحاضر: ${course.lecturerName}`}
           badgeLabel={`المقرر ${course.id}`}
           downloadFilename={`course-${course.id}-qr.png`}
