@@ -112,7 +112,7 @@ export const ProfilePage: React.FC = () => {
                       {profileData.user.name}
                     </h2>
                     <p className="text-xs sm:text-sm text-text-muted font-medium">
-                      {profileData.user.jobTitle || 'فني صيانة قطارات'}
+                      {profileData.user.jobTitle || 'غير مسجل'}
                     </p>
                   </div>
                 </div>
@@ -131,10 +131,55 @@ export const ProfilePage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4 border-t border-border">
                 <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
                   <span className="text-xs text-text-muted font-medium block mb-1">
+                    رقم الهاتف
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
+                    {profileData.user.phoneE164 || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
                     البريد الإلكتروني المهني
                   </span>
                   <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
-                    {profileData.user.email}
+                    {profileData.user.email || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    الرقم القومي
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
+                    {profileData.user.nationalId || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    تاريخ الميلاد
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
+                    {profileData.user.dateOfBirth || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    الحالة الاجتماعية
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading">
+                    {profileData.user.maritalStatus || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    الموقف من التجنيد
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading">
+                    {profileData.user.militaryServiceStatus || 'غير مسجل'}
                   </span>
                 </div>
 
@@ -143,7 +188,7 @@ export const ProfilePage: React.FC = () => {
                     القطاع / الإدارة التابع لها
                   </span>
                   <span className="text-sm font-semibold text-text-heading">
-                    {profileData.user.department || 'قطاع التشغيل والصيانة'}
+                    {profileData.user.department || 'غير مسجل'}
                   </span>
                 </div>
 
@@ -152,7 +197,52 @@ export const ProfilePage: React.FC = () => {
                     المسمى الوظيفي
                   </span>
                   <span className="text-sm font-semibold text-text-heading">
-                    {profileData.user.jobTitle || 'فني تشغيل وصيانة'}
+                    {profileData.user.jobTitle || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    خط المترو
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading">
+                    {profileData.user.metroLine || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    تاريخ التعيين
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
+                    {profileData.user.appointmentDate || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    تاريخ انتهاء الخدمة
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
+                    {profileData.user.serviceEndDate || 'على رأس العمل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    المؤهل الدراسي
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading">
+                    {profileData.user.educationalQualification || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60 sm:col-span-2 lg:col-span-2">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    العنوان
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading">
+                    {profileData.user.address || 'غير مسجل'}
                   </span>
                 </div>
 
@@ -162,7 +252,11 @@ export const ProfilePage: React.FC = () => {
                   </span>
                   <span className="text-sm font-bold text-success flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-success" />
-                    <span>نشط ومفعل بالمنصة</span>
+                    <span>
+                      {profileData.user.status === 'Suspended' || profileData.user.status === 'suspended'
+                        ? 'معطل'
+                        : 'نشط ومفعل بالمنصة'}
+                    </span>
                   </span>
                 </div>
 

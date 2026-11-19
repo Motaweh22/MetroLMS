@@ -14,7 +14,15 @@ from apps.identity.api.serializers.auth import AuthenticatedUserSerializer
 from apps.identity.models import User
 from apps.identity.services.user_deletion_service import UserDeletionError, delete_user_with_d01_cascade
 from apps.learning.models import Enrollment
-from apps.organization.models import MaritalStatusCatalog, MetroLine, MilitaryServiceStatusCatalog
+from apps.organization.models import (
+    JobTitle,
+    MaritalStatusCatalog,
+    MetroLine,
+    MilitaryServiceStatusCatalog,
+    OrganizationalDepartment,
+    UserJobTitle,
+    UserOrganizationalDepartment,
+)
 from shared.api import error_response, success_response
 from shared.permissions import get_visible_user_or_none
 from shared.validators import normalize_national_id, normalize_phone_e164
@@ -26,13 +34,49 @@ class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request):
-        user_data = AuthenticatedUserSerializer(request.user).data
-        user_data["name"] = request.user.full_name
-        user_data["role"] = "user" if request.user.role_id == "trainee" else request.user.role_id
-        user_data["initials"] = request.user.full_name[:2] if request.user.full_name else "م"
-        user_data["department"] = ""
-        user_data["jobTitle"] = ""
-        enrolled = Enrollment.objects.filter(user=request.user).count()
+        user = (
+            User.objects.select_related("marital_status", "military_service_status", "metro_line")
+            .filter(pk=request.user.pk)
+            .first()
+            or request.user
+        )
+        dept_link = (
+            UserOrganizationalDepartment.objects.filter(user=user)
+            .select_related("department")
+            .order_by("id")
+            .first()
+        )
+        job_link = (
+            UserJobTitle.objects.filter(user=user)
+            .select_related("job_title", "department")
+            .order_by("id")
+            .first()
+        )
+        dept_name = (
+            job_link.department.name_ar
+            if job_link and job_link.department
+            else (dept_link.department.name_ar if dept_link and dept_link.department else "")
+        )
+        job_name = job_link.job_title.name_ar if job_link and job_link.job_title else ""
+
+        user_data = AuthenticatedUserSerializer(user).data
+        user_data["name"] = user.full_name
+        user_data["role"] = "user" if user.role_id == "trainee" else user.role_id
+        user_data["initials"] = user.full_name[:2] if user.full_name else "م"
+        user_data["department"] = dept_name
+        user_data["jobTitle"] = job_name
+        user_data["nationalId"] = user.national_id
+        user_data["dateOfBirth"] = user.date_of_birth.isoformat() if user.date_of_birth else None
+        user_data["appointmentDate"] = user.appointment_date.isoformat() if user.appointment_date else None
+        user_data["serviceEndDate"] = user.service_end_date.isoformat() if user.service_end_date else None
+        user_data["address"] = user.address or ""
+        user_data["educationalQualification"] = user.educational_qualification or ""
+        user_data["maritalStatus"] = user.marital_status.name_ar if user.marital_status else ""
+        user_data["militaryServiceStatus"] = (
+            user.military_service_status.name_ar if user.military_service_status else ""
+        )
+        user_data["metroLine"] = user.metro_line.name_ar if user.metro_line else ""
+        enrolled = Enrollment.objects.filter(user=user).count()
         return success_response(
             {
                 "user": user_data,
@@ -183,6 +227,16 @@ class AdminUserListView(APIView):
         except ValidationError as exc:
             return error_response("VALIDATION_ERROR", "; ".join(exc.messages), status.HTTP_400_BAD_REQUEST)
 
+        dept_name = str(request.data.get("department") or "").strip()
+        job_name = str(request.data.get("jobTitle") or "").strip()
+        dept_obj = None
+        if dept_name:
+            dept_obj, _ = OrganizationalDepartment.objects.get_or_create(name_ar=dept_name)
+            UserOrganizationalDepartment.objects.get_or_create(user=user, department=dept_obj)
+        if job_name and dept_obj is not None:
+            job_obj, _ = JobTitle.objects.get_or_create(name_ar=job_name)
+            UserJobTitle.objects.get_or_create(user=user, department=dept_obj, job_title=job_obj)
+
         return success_response(
             {
                 "id": str(user.id),
@@ -191,8 +245,8 @@ class AdminUserListView(APIView):
                 "email": user.email or user.phone_e164,
                 "role": "user" if user.role_id == "trainee" else user.role_id,
                 "status": user.status.lower(),
-                "department": "",
-                "jobTitle": "",
+                "department": dept_name,
+                "jobTitle": job_name,
                 "initials": user.full_name[:2] if user.full_name else "م",
             },
             status_code=status.HTTP_201_CREATED,
