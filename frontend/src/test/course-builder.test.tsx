@@ -174,6 +174,13 @@ describe('Increment 8: Course Builder & Authoring Suite (/lecturer/builder/:cour
       renderBuilderWithUser(lecturerKhaled, 'CRS001');
 
       await waitFor(() => {
+        expect(screen.getByTestId('toggle-audience-categories')).toBeInTheDocument();
+      });
+
+      // Expand Target Categories section (collapsed by default via progressive disclosure)
+      fireEvent.click(screen.getByTestId('toggle-audience-categories'));
+
+      await waitFor(() => {
         expect(screen.getByTestId('builder-job-title-input')).toBeInTheDocument();
       });
 

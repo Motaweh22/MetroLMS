@@ -6,6 +6,8 @@ import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
+import { AudienceSelectionModal } from './AudienceSelectionModal';
+import { AudienceSectionCard } from './AudienceSectionCard';
 
 export interface MetadataEditorProps {
   course: Course;
@@ -206,6 +208,24 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
     Array<{ id: number; nameAr: string; departmentId?: number | null }>
   >([]);
   const [orgMetroLines, setOrgMetroLines] = useState<Array<{ id: number; nameAr: string }>>([]);
+  const [expandedAudience, setExpandedAudience] = useState<{
+    categories: boolean;
+    departments: boolean;
+    jobTitles: boolean;
+    metroLines: boolean;
+  }>({
+    categories: false,
+    departments: false,
+    jobTitles: false,
+    metroLines: false,
+  });
+  const [activeAudienceModal, setActiveAudienceModal] = useState<
+    'departments' | 'jobTitles' | 'metroLines' | null
+  >(null);
+
+  const toggleAudienceExpand = (key: keyof typeof expandedAudience) => {
+    setExpandedAudience((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   useEffect(() => {
     let active = true;
@@ -230,19 +250,21 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
     };
   }, []);
 
-  const toggleAudienceId = (
+  const handleSaveAudienceIds = (
     field: 'targetDepartmentIds' | 'targetJobTitleIds' | 'targetMetroLineIds',
-    id: number
+    nextIds: number[]
   ) => {
-    const current = course[field] || [];
-    const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
     if (field === 'targetJobTitleIds') {
-      const selectedNames = orgJobTitles.filter((j) => next.includes(j.id)).map((j) => j.nameAr);
-      onChange({ ...course, targetJobTitleIds: next, targetJobTitles: selectedNames });
+      const selectedNames = orgJobTitles.filter((j) => nextIds.includes(j.id)).map((j) => j.nameAr);
+      onChange({ ...course, targetJobTitleIds: nextIds, targetJobTitles: selectedNames });
       return;
     }
-    handleFieldChange(field, next);
+    handleFieldChange(field, nextIds);
   };
+
+  const deptNameById = new Map(orgDepartments.map((d) => [d.id, d.nameAr]));
+  const jobNameById = new Map(orgJobTitles.map((j) => [j.id, j.nameAr]));
+  const lineNameById = new Map(orgMetroLines.map((l) => [l.id, l.nameAr]));
 
   const handleAddJobTitle = (e: React.FormEvent) => {
     e.preventDefault();
@@ -675,140 +697,209 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
             </div>
           </div>
 
-          {/* Target Job Titles (Chips) */}
-          <div className="space-y-2 pt-3 border-t border-border/60">
-            <label className="block text-xs font-bold text-text-heading">
-              الفئات والوظائف المستهدفة
-            </label>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              {(course.targetJobTitles || []).map((job) => (
-                <span
-                  key={job}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-light text-text-heading border border-border text-xs font-medium"
-                >
-                  <span>{job}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveJobTitle(job)}
-                    className="text-text-muted hover:text-danger font-bold text-xs p-0.5"
-                    title="حذف الفئة"
-                    aria-label={`حذف الفئة ${job}`}
-                  >
-                    ✕
-                  </button>
-                </span>
-              ))}
+          {/* Progressive Disclosure Audience Sections (Collapsed by Default) */}
+          <div className="space-y-2.5 pt-3 border-t border-border/60">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-text-heading">الجمهور المستهدف</span>
+              <span className="text-[11px] text-text-muted">
+                تظهر الدورة للمتدرب إذا طابق أحد الاختيارات التالية
+              </span>
             </div>
 
-            <form onSubmit={handleAddJobTitle} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newJobTitle}
-                onChange={(e) => setNewJobTitle(e.target.value)}
-                placeholder="مثال: فني صيانة قطارات، سائق قطار، مهندس إشارات..."
-                className="flex-1 px-3.5 py-2.5 text-xs bg-surface border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                data-testid="builder-job-title-input"
-              />
-              <button
-                type="submit"
-                disabled={!newJobTitle.trim()}
-                className="px-4 py-2.5 text-xs font-bold rounded-xl border border-border bg-surface hover:bg-neutral-light disabled:opacity-40 transition-colors"
-                data-testid="builder-add-job-title-btn"
-              >
-                + إضافة فئة
-              </button>
-            </form>
-
-            {/* DB-Driven Audience Targeting (Departments, Job Titles, Metro Lines) */}
-            {(orgDepartments.length > 0 || orgJobTitles.length > 0 || orgMetroLines.length > 0) && (
-              <div className="space-y-4 pt-4 mt-3 border-t border-border/60">
-                <p className="text-[11px] text-text-muted">
-                  تحديد الجمهور المستهدف من قاعدة البيانات (تظهر الدورة للمتدرب إذا طابق أحد الاختيارات التالية):
-                </p>
-
-                {orgDepartments.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="block text-xs font-bold text-text-heading">
-                      القطاعات / الإدارات المستهدفة
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {orgDepartments.map((dept) => {
-                        const selected = (course.targetDepartmentIds || []).includes(dept.id);
-                        return (
-                          <button
-                            key={dept.id}
-                            type="button"
-                            onClick={() => toggleAudienceId('targetDepartmentIds', dept.id)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                              selected
-                                ? 'bg-primary text-white border-primary'
-                                : 'bg-surface text-text border-border hover:bg-bg'
-                            }`}
-                          >
-                            {dept.nameAr}
-                          </button>
-                        );
-                      })}
-                    </div>
+            {/* B. Target Categories */}
+            <AudienceSectionCard
+              title="الفئات المستهدفة"
+              description="إضافة وإدارة الفئات الوظيفية المخصصة لبطاقة الدورة"
+              summaryText={
+                (course.targetJobTitles || []).length > 0
+                  ? `${(course.targetJobTitles || []).length} فئات محددة`
+                  : 'لا توجد فئات محددة'
+              }
+              hasSelection={(course.targetJobTitles || []).length > 0}
+              isExpanded={expandedAudience.categories}
+              onToggleExpand={() => toggleAudienceExpand('categories')}
+              onEdit={() =>
+                setExpandedAudience((prev) => ({ ...prev, categories: !prev.categories }))
+              }
+              editLabel={expandedAudience.categories ? 'إغلاق' : 'تعديل'}
+              toggleTestId="toggle-audience-categories"
+              editTestId="edit-audience-categories-btn"
+            >
+              <div className="space-y-3">
+                {(course.targetJobTitles || []).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(course.targetJobTitles || []).map((job) => (
+                      <span
+                        key={job}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface text-text-heading border border-border text-xs font-medium"
+                      >
+                        <span>{job}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveJobTitle(job)}
+                          className="text-text-muted hover:text-danger font-bold text-xs p-0.5"
+                          title="حذف الفئة"
+                          aria-label={`حذف الفئة ${job}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 )}
 
-                {orgJobTitles.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="block text-xs font-bold text-text-heading">
-                      المسميات الوظيفية المستهدفة
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {orgJobTitles.map((job) => {
-                        const selected = (course.targetJobTitleIds || []).includes(job.id);
-                        return (
-                          <button
-                            key={job.id}
-                            type="button"
-                            onClick={() => toggleAudienceId('targetJobTitleIds', job.id)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                              selected
-                                ? 'bg-primary text-white border-primary'
-                                : 'bg-surface text-text border-border hover:bg-bg'
-                            }`}
-                          >
-                            {job.nameAr}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {orgMetroLines.length > 0 && (
-                  <div className="space-y-1.5">
-                    <span className="block text-xs font-bold text-text-heading">
-                      خطوط المترو المستهدفة
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {orgMetroLines.map((line) => {
-                        const selected = (course.targetMetroLineIds || []).includes(line.id);
-                        return (
-                          <button
-                            key={line.id}
-                            type="button"
-                            onClick={() => toggleAudienceId('targetMetroLineIds', line.id)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                              selected
-                                ? 'bg-primary text-white border-primary'
-                                : 'bg-surface text-text border-border hover:bg-bg'
-                            }`}
-                          >
-                            {line.nameAr}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <form onSubmit={handleAddJobTitle} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input
+                    type="text"
+                    value={newJobTitle}
+                    onChange={(e) => setNewJobTitle(e.target.value)}
+                    placeholder="مثال: فني صيانة قطارات، سائق قطار، مهندس إشارات..."
+                    className="flex-1 px-3.5 py-2 text-xs bg-surface border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    data-testid="builder-job-title-input"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newJobTitle.trim()}
+                    className="px-4 py-2 text-xs font-bold rounded-xl border border-border bg-surface hover:bg-neutral-light disabled:opacity-40 transition-colors"
+                    data-testid="builder-add-job-title-btn"
+                  >
+                    + إضافة فئة
+                  </button>
+                </form>
               </div>
-            )}
+            </AudienceSectionCard>
+
+            {/* C. Target Departments / Sectors */}
+            <AudienceSectionCard
+              title="القطاعات والإدارات المستهدفة"
+              description="تحديد القطاعات والإدارات التنظيمية المؤهلة للدورة"
+              summaryText={
+                (course.targetDepartmentIds || []).length > 0
+                  ? `${(course.targetDepartmentIds || []).length} قطاعاً محدداً`
+                  : 'لم يتم تحديد قطاعات'
+              }
+              hasSelection={(course.targetDepartmentIds || []).length > 0}
+              isExpanded={expandedAudience.departments}
+              onToggleExpand={() => toggleAudienceExpand('departments')}
+              onEdit={() => setActiveAudienceModal('departments')}
+              toggleTestId="toggle-audience-departments"
+              editTestId="edit-audience-departments-btn"
+            >
+              {(course.targetDepartmentIds || []).length === 0 ? (
+                <p className="text-xs text-text-muted">لم يتم تحديد أي قطاع أو إدارة بعد.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {(course.targetDepartmentIds || []).map((id) => (
+                    <Badge key={id} variant="neutral" size="sm">
+                      {deptNameById.get(id) || `#${id}`}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </AudienceSectionCard>
+
+            {/* D. Target Job Titles (DB Catalog) */}
+            <AudienceSectionCard
+              title="المسميات الوظيفية المستهدفة"
+              description="اختيار المسميات الوظيفية من دليل الوظائف بقاعدة البيانات"
+              summaryText={
+                (course.targetJobTitleIds || []).length > 0
+                  ? `${(course.targetJobTitleIds || []).length} مسمى وظيفياً`
+                  : 'لم يتم تحديد مسميات'
+              }
+              hasSelection={(course.targetJobTitleIds || []).length > 0}
+              isExpanded={expandedAudience.jobTitles}
+              onToggleExpand={() => toggleAudienceExpand('jobTitles')}
+              onEdit={() => setActiveAudienceModal('jobTitles')}
+              toggleTestId="toggle-audience-job-titles"
+              editTestId="edit-audience-job-titles-btn"
+            >
+              {(course.targetJobTitleIds || []).length === 0 ? (
+                <p className="text-xs text-text-muted">لم يتم تحديد أي مسمى وظيفي بعد.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {(course.targetJobTitleIds || []).map((id) => (
+                    <Badge key={id} variant="neutral" size="sm">
+                      {jobNameById.get(id) || `#${id}`}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </AudienceSectionCard>
+
+            {/* E. Target Metro Lines */}
+            <AudienceSectionCard
+              title="خطوط المترو المستهدفة"
+              description="تحديد خطوط التشغيل المستهدفة للدورة التدريبية"
+              summaryText={
+                (course.targetMetroLineIds || []).length > 0
+                  ? (course.targetMetroLineIds || []).length <= 2
+                    ? (course.targetMetroLineIds || [])
+                        .map((id) => lineNameById.get(id) || `#${id}`)
+                        .join('، ')
+                    : `${(course.targetMetroLineIds || []).length} خطوط محددة`
+                  : 'لم يتم تحديد خطوط'
+              }
+              hasSelection={(course.targetMetroLineIds || []).length > 0}
+              isExpanded={expandedAudience.metroLines}
+              onToggleExpand={() => toggleAudienceExpand('metroLines')}
+              onEdit={() => setActiveAudienceModal('metroLines')}
+              toggleTestId="toggle-audience-metro-lines"
+              editTestId="edit-audience-metro-lines-btn"
+            >
+              {(course.targetMetroLineIds || []).length === 0 ? (
+                <p className="text-xs text-text-muted">لم يتم تحديد أي خط مترو بعد.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {(course.targetMetroLineIds || []).map((id) => (
+                    <Badge key={id} variant="neutral" size="sm">
+                      {lineNameById.get(id) || `#${id}`}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </AudienceSectionCard>
           </div>
+
+          <AudienceSelectionModal
+            isOpen={activeAudienceModal === 'departments'}
+            title="تحديد القطاعات والإدارات المستهدفة"
+            description="اختر الإدارات والقطاعات التي يحق لمنتسبيها رؤية هذه الدورة."
+            items={orgDepartments.map((d) => ({ id: d.id, label: d.nameAr }))}
+            selectedIds={course.targetDepartmentIds || []}
+            onSave={(nextIds) => handleSaveAudienceIds('targetDepartmentIds', nextIds)}
+            onClose={() => setActiveAudienceModal(null)}
+            searchPlaceholder="ابحث عن قطاع أو إدارة..."
+            dataTestId="audience-departments-modal"
+          />
+
+          <AudienceSelectionModal
+            isOpen={activeAudienceModal === 'jobTitles'}
+            title="تحديد المسميات الوظيفية المستهدفة"
+            description="اختر المسميات الوظيفية المستهدفة من دليل الوظائف."
+            items={orgJobTitles.map((j) => ({
+              id: j.id,
+              label: j.nameAr,
+              subtitle: j.departmentId ? deptNameById.get(j.departmentId) : undefined,
+            }))}
+            selectedIds={course.targetJobTitleIds || []}
+            onSave={(nextIds) => handleSaveAudienceIds('targetJobTitleIds', nextIds)}
+            onClose={() => setActiveAudienceModal(null)}
+            searchPlaceholder="ابحث عن مسمى وظيفي..."
+            dataTestId="audience-job-titles-modal"
+          />
+
+          <AudienceSelectionModal
+            isOpen={activeAudienceModal === 'metroLines'}
+            title="تحديد خطوط المترو المستهدفة"
+            description="اختر خطوط المترو المستهدفة لهذه الدورة."
+            items={orgMetroLines.map((l) => ({ id: l.id, label: l.nameAr }))}
+            selectedIds={course.targetMetroLineIds || []}
+            onSave={(nextIds) => handleSaveAudienceIds('targetMetroLineIds', nextIds)}
+            onClose={() => setActiveAudienceModal(null)}
+            searchPlaceholder="ابحث عن خط مترو..."
+            dataTestId="audience-metro-lines-modal"
+          />
         </div>
       </section>
 
