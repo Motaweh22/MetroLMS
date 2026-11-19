@@ -139,9 +139,6 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
     });
   };
 
-  // Target Jobs State
-  const [newJobTitle, setNewJobTitle] = useState('');
-
   // Knowledge Prerequisites State (free-text requirements)
   const [newKnowledgePrereq, setNewKnowledgePrereq] = useState('');
   const [editingKnowledgeIdx, setEditingKnowledgeIdx] = useState<number | null>(null);
@@ -209,12 +206,10 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
   >([]);
   const [orgMetroLines, setOrgMetroLines] = useState<Array<{ id: number; nameAr: string }>>([]);
   const [expandedAudience, setExpandedAudience] = useState<{
-    categories: boolean;
     departments: boolean;
     jobTitles: boolean;
     metroLines: boolean;
   }>({
-    categories: false,
     departments: false,
     jobTitles: false,
     metroLines: false,
@@ -265,25 +260,6 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
   const deptNameById = new Map(orgDepartments.map((d) => [d.id, d.nameAr]));
   const jobNameById = new Map(orgJobTitles.map((j) => [j.id, j.nameAr]));
   const lineNameById = new Map(orgMetroLines.map((l) => [l.id, l.nameAr]));
-
-  const handleAddJobTitle = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = newJobTitle.trim();
-    if (!clean) return;
-    const current = course.targetJobTitles || [];
-    if (!current.includes(clean)) {
-      handleFieldChange('targetJobTitles', [...current, clean]);
-    }
-    setNewJobTitle('');
-  };
-
-  const handleRemoveJobTitle = (titleToRemove: string) => {
-    const current = course.targetJobTitles || [];
-    handleFieldChange(
-      'targetJobTitles',
-      current.filter((t) => t !== titleToRemove)
-    );
-  };
 
   // --- Knowledge Prerequisites (Free-Text Chips) ---
   const handleAddKnowledgePrereq = (e: React.FormEvent) => {
@@ -706,70 +682,7 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
               </span>
             </div>
 
-            {/* B. Target Categories */}
-            <AudienceSectionCard
-              title="الفئات المستهدفة"
-              description="إضافة وإدارة الفئات الوظيفية المخصصة لبطاقة الدورة"
-              summaryText={
-                (course.targetJobTitles || []).length > 0
-                  ? `${(course.targetJobTitles || []).length} فئات محددة`
-                  : 'لا توجد فئات محددة'
-              }
-              hasSelection={(course.targetJobTitles || []).length > 0}
-              isExpanded={expandedAudience.categories}
-              onToggleExpand={() => toggleAudienceExpand('categories')}
-              onEdit={() =>
-                setExpandedAudience((prev) => ({ ...prev, categories: !prev.categories }))
-              }
-              editLabel={expandedAudience.categories ? 'إغلاق' : 'تعديل'}
-              toggleTestId="toggle-audience-categories"
-              editTestId="edit-audience-categories-btn"
-            >
-              <div className="space-y-3">
-                {(course.targetJobTitles || []).length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(course.targetJobTitles || []).map((job) => (
-                      <span
-                        key={job}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface text-text-heading border border-border text-xs font-medium"
-                      >
-                        <span>{job}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveJobTitle(job)}
-                          className="text-text-muted hover:text-danger font-bold text-xs p-0.5"
-                          title="حذف الفئة"
-                          aria-label={`حذف الفئة ${job}`}
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <form onSubmit={handleAddJobTitle} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <input
-                    type="text"
-                    value={newJobTitle}
-                    onChange={(e) => setNewJobTitle(e.target.value)}
-                    placeholder="مثال: فني صيانة قطارات، سائق قطار، مهندس إشارات..."
-                    className="flex-1 px-3.5 py-2 text-xs bg-surface border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    data-testid="builder-job-title-input"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newJobTitle.trim()}
-                    className="px-4 py-2 text-xs font-bold rounded-xl border border-border bg-surface hover:bg-neutral-light disabled:opacity-40 transition-colors"
-                    data-testid="builder-add-job-title-btn"
-                  >
-                    + إضافة فئة
-                  </button>
-                </form>
-              </div>
-            </AudienceSectionCard>
-
-            {/* C. Target Departments / Sectors */}
+            {/* B. Target Departments / Sectors */}
             <AudienceSectionCard
               title="القطاعات والإدارات المستهدفة"
               description="تحديد القطاعات والإدارات التنظيمية المؤهلة للدورة"

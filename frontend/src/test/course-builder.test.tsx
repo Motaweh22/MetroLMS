@@ -170,34 +170,27 @@ describe('Increment 8: Course Builder & Authoring Suite (/lecturer/builder/:cour
       expect(draftCourse.title).toBe('عنوان تجريبي جديد لمسودة الكورس');
     });
 
-    it('manages target job titles (add and remove chips)', async () => {
+    it('renders collapsible DB-backed target audience sections and opens selection modal', async () => {
       renderBuilderWithUser(lecturerKhaled, 'CRS001');
 
       await waitFor(() => {
-        expect(screen.getByTestId('toggle-audience-categories')).toBeInTheDocument();
+        expect(screen.getByTestId('toggle-audience-departments')).toBeInTheDocument();
+        expect(screen.getByTestId('toggle-audience-job-titles')).toBeInTheDocument();
+        expect(screen.getByTestId('toggle-audience-metro-lines')).toBeInTheDocument();
       });
 
-      // Expand Target Categories section (collapsed by default via progressive disclosure)
-      fireEvent.click(screen.getByTestId('toggle-audience-categories'));
+      // Open Job Titles selection modal
+      fireEvent.click(screen.getByTestId('edit-audience-job-titles-btn'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('builder-job-title-input')).toBeInTheDocument();
+        expect(screen.getByTestId('audience-job-titles-modal')).toBeInTheDocument();
       });
 
-      // Add new job title
-      const jobInput = screen.getByTestId('builder-job-title-input');
-      const addBtn = screen.getByTestId('builder-add-job-title-btn');
-
-      fireEvent.change(jobInput, { target: { value: 'فني طوارئ سريع' } });
-      fireEvent.click(addBtn);
-
-      expect(screen.getByText('فني طوارئ سريع')).toBeInTheDocument();
-
-      // Remove existing job title
-      const removeBtn = screen.getByLabelText(/حذف الفئة مهندس تشغيل/i);
-      fireEvent.click(removeBtn);
-
-      expect(screen.queryByText('مهندس تشغيل')).not.toBeInTheDocument();
+      // Cancel closes modal cleanly
+      fireEvent.click(screen.getByTestId('audience-job-titles-modal-cancel-btn'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('audience-job-titles-modal')).not.toBeInTheDocument();
+      });
     });
   });
 
