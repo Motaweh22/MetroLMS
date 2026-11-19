@@ -1,6 +1,10 @@
 """Admin user lifecycle endpoints (D-01 deletion cascade)."""
 from __future__ import annotations
 
+from datetime import date
+
+from django.core.exceptions import ValidationError
+from django.utils.dateparse import parse_date
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -10,8 +14,10 @@ from apps.identity.api.serializers.auth import AuthenticatedUserSerializer
 from apps.identity.models import User
 from apps.identity.services.user_deletion_service import UserDeletionError, delete_user_with_d01_cascade
 from apps.learning.models import Enrollment
+from apps.organization.models import MaritalStatusCatalog, MetroLine, MilitaryServiceStatusCatalog
 from shared.api import error_response, success_response
 from shared.permissions import get_visible_user_or_none
+from shared.validators import normalize_national_id, normalize_phone_e164
 
 
 class ProfileView(APIView):
@@ -78,25 +84,105 @@ class AdminUserListView(APIView):
         if request.user.role_id not in {"developer", "super_admin", "admin"}:
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إنشاء مستخدمين.", status.HTTP_403_FORBIDDEN)
         name = str(request.data.get("name") or request.data.get("fullName") or "").strip()
-        phone = str(request.data.get("phoneE164") or request.data.get("phone") or "").strip()
+        raw_phone = str(request.data.get("phoneE164") or request.data.get("phone") or "").strip()
         password = str(request.data.get("password") or "Metro@12345")
         raw_role = str(request.data.get("role") or "user").strip()
         role_id = "trainee" if raw_role == "user" else raw_role
         email = request.data.get("email") or None
-        if not name or not phone:
+        raw_status = str(request.data.get("status") or "Active").strip()
+        user_status = "Suspended" if raw_status.lower() == "suspended" else "Active"
+
+        if not name or not raw_phone:
             return error_response("VALIDATION_ERROR", "الاسم ورقم الهاتف مطلوبان.", status.HTTP_400_BAD_REQUEST)
         if role_id not in {"super_admin", "admin", "assistant_admin", "lecturer", "trainee"}:
             return error_response("VALIDATION_ERROR", "الدور المحدد غير صالح.", status.HTTP_400_BAD_REQUEST)
+
+        phone = normalize_phone_e164(raw_phone)
+        if phone.startswith("01") and len(phone) == 11 and phone.isdigit():
+            phone = f"+2{phone}"
         if User.objects.filter(phone_e164=phone).exists():
             return error_response("CONFLICT", "رقم الهاتف مسجل بالفعل.", status.HTTP_409_CONFLICT)
-        user = User.objects.create_user(
-            phone_e164=phone,
-            full_name=name,
-            role_id=role_id,
-            password=password,
-            email=email,
-            status="Active",
+
+        raw_national_id = str(request.data.get("nationalId") or request.data.get("national_id") or "").strip()
+        if not raw_national_id:
+            return error_response("VALIDATION_ERROR", "الرقم القومي مطلوب (14 رقماً).", status.HTTP_400_BAD_REQUEST)
+        national_id = normalize_national_id(raw_national_id)
+        if len(national_id) != 14 or not national_id.isdigit():
+            return error_response("VALIDATION_ERROR", "الرقم القومي يجب أن يتكون من 14 رقماً.", status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(national_id=national_id).exists():
+            return error_response("CONFLICT", "الرقم القومي مسجل بالفعل.", status.HTTP_409_CONFLICT)
+
+        dob = parse_date(str(request.data.get("dateOfBirth") or request.data.get("date_of_birth") or "").strip())
+        if dob is None or dob >= date.today():
+            return error_response("VALIDATION_ERROR", "تاريخ الميلاد مطلوب ويجب أن يكون في الماضي.", status.HTTP_400_BAD_REQUEST)
+
+        appointment_date = parse_date(
+            str(request.data.get("appointmentDate") or request.data.get("appointment_date") or "").strip()
         )
+        if appointment_date is None:
+            return error_response("VALIDATION_ERROR", "تاريخ التعيين مطلوب.", status.HTTP_400_BAD_REQUEST)
+
+        raw_service_end = str(request.data.get("serviceEndDate") or request.data.get("service_end_date") or "").strip()
+        service_end_date = parse_date(raw_service_end) if raw_service_end else None
+
+        address = str(request.data.get("address") or "").strip()
+        educational_qualification = str(
+            request.data.get("educationalQualification") or request.data.get("educational_qualification") or ""
+        ).strip()
+        if not address or not educational_qualification:
+            return error_response(
+                "VALIDATION_ERROR",
+                "العنوان والمؤهل الدراسي مطلوبان.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        marital_id = request.data.get("maritalStatusId") or request.data.get("marital_status_id")
+        military_id = request.data.get("militaryServiceStatusId") or request.data.get("military_service_status_id")
+        metro_line_id = request.data.get("metroLineId") or request.data.get("metro_line_id")
+
+        marital_obj = (
+            MaritalStatusCatalog.objects.filter(pk=marital_id).first()
+            if marital_id
+            else MaritalStatusCatalog.objects.order_by("id").first()
+        )
+        military_obj = (
+            MilitaryServiceStatusCatalog.objects.filter(pk=military_id).first()
+            if military_id
+            else MilitaryServiceStatusCatalog.objects.order_by("id").first()
+        )
+        metro_line_obj = (
+            MetroLine.objects.filter(pk=metro_line_id).first()
+            if metro_line_id
+            else MetroLine.objects.order_by("id").first()
+        )
+        if marital_obj is None or military_obj is None or metro_line_obj is None:
+            return error_response(
+                "VALIDATION_ERROR",
+                "يرجى تحديد الحالة الاجتماعية والموقف من التجنيد وخط المترو.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.create_user(
+                phone_e164=phone,
+                full_name=name,
+                national_id=national_id,
+                marital_status=marital_obj,
+                appointment_date=appointment_date,
+                military_service_status=military_obj,
+                educational_qualification=educational_qualification,
+                address=address,
+                date_of_birth=dob,
+                service_end_date=service_end_date,
+                metro_line=metro_line_obj,
+                role_id=role_id,
+                password=password,
+                email=email,
+                status=user_status,
+            )
+        except ValidationError as exc:
+            return error_response("VALIDATION_ERROR", "; ".join(exc.messages), status.HTTP_400_BAD_REQUEST)
+
         return success_response(
             {
                 "id": str(user.id),
@@ -104,7 +190,7 @@ class AdminUserListView(APIView):
                 "phoneE164": user.phone_e164,
                 "email": user.email or user.phone_e164,
                 "role": "user" if user.role_id == "trainee" else user.role_id,
-                "status": user.status,
+                "status": user.status.lower(),
                 "department": "",
                 "jobTitle": "",
                 "initials": user.full_name[:2] if user.full_name else "م",

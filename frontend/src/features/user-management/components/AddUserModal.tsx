@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { apiClient } from '@/core/api/apiClient';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { canActorManageTargetAccount } from '@/core/permissions/policy';
 import { Modal } from '@/shared/ui/Modal';
@@ -23,11 +24,28 @@ export interface AddUserModalProps {
   onUserCreated: (newUser: ManagedUserDTO) => void;
 }
 
+interface CatalogItem {
+  id: number | string;
+  name?: string;
+  nameAr?: string;
+  label?: string;
+  code?: string;
+}
+
 interface FormState {
   name: string;
   username: string;
   email: string;
   phone: string;
+  nationalId: string;
+  dateOfBirth: string;
+  address: string;
+  educationalQualification: string;
+  maritalStatusId: string;
+  militaryServiceStatusId: string;
+  appointmentDate: string;
+  serviceEndDate: string;
+  metroLineId: string;
   jobTitle: string;
   department: string;
   role: UserRole;
@@ -40,6 +58,14 @@ interface FormErrors {
   username?: string;
   email?: string;
   phone?: string;
+  nationalId?: string;
+  dateOfBirth?: string;
+  address?: string;
+  educationalQualification?: string;
+  maritalStatusId?: string;
+  militaryServiceStatusId?: string;
+  appointmentDate?: string;
+  metroLineId?: string;
   jobTitle?: string;
   department?: string;
   role?: string;
@@ -51,6 +77,15 @@ const INITIAL_FORM_STATE: FormState = {
   username: '',
   email: '',
   phone: '',
+  nationalId: '',
+  dateOfBirth: '',
+  address: '',
+  educationalQualification: '',
+  maritalStatusId: '',
+  militaryServiceStatusId: '',
+  appointmentDate: '',
+  serviceEndDate: '',
+  metroLineId: '',
   jobTitle: METRO_JOB_TITLES[4] || 'مهندس تشغيل',
   department: METRO_DEPARTMENTS[4] || 'قطاع التشغيل',
   role: 'user',
@@ -77,6 +112,36 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [errors, setErrors] = useState<FormErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [maritalStatuses, setMaritalStatuses] = useState<CatalogItem[]>([]);
+  const [militaryStatuses, setMilitaryStatuses] = useState<CatalogItem[]>([]);
+  const [metroLines, setMetroLines] = useState<CatalogItem[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    Promise.allSettled([
+      apiClient<{ maritalStatuses?: CatalogItem[] }>('/api/admin/organization/marital-statuses'),
+      apiClient<{ militaryStatuses?: CatalogItem[] }>('/api/admin/organization/military-statuses'),
+      apiClient<{ metroLines?: CatalogItem[] }>('/api/admin/organization/metro-lines'),
+    ]).then(([maritalRes, militaryRes, lineRes]) => {
+      if (!active) return;
+      const mList = maritalRes.status === 'fulfilled' ? maritalRes.value.maritalStatuses || [] : [];
+      const milList = militaryRes.status === 'fulfilled' ? militaryRes.value.militaryStatuses || [] : [];
+      const lList = lineRes.status === 'fulfilled' ? lineRes.value.metroLines || [] : [];
+      setMaritalStatuses(mList);
+      setMilitaryStatuses(milList);
+      setMetroLines(lList);
+      setFormData((prev) => ({
+        ...prev,
+        maritalStatusId: prev.maritalStatusId || (mList[0] ? String(mList[0].id) : ''),
+        militaryServiceStatusId: prev.militaryServiceStatusId || (milList[0] ? String(milList[0].id) : ''),
+        metroLineId: prev.metroLineId || (lList[0] ? String(lList[0].id) : ''),
+      }));
+    });
+    return () => {
+      active = false;
+    };
+  }, [isOpen]);
 
   const resetForm = () => {
     setFormData(INITIAL_FORM_STATE);
@@ -103,14 +168,34 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       errs.username = 'اسم المستخدم يجب أن يحتوي على أحرف إنجليزية وأرقام وشرطة سفلية فقط';
     }
 
-    if (!formData.email.trim()) {
-      errs.email = 'يرجى إدخال البريد الإلكتروني الوظيفي';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       errs.email = 'صيغة البريد الإلكتروني غير صحيحة';
     }
 
-    if (formData.phone.trim() && !/^[0-9+\s-]{8,15}$/.test(formData.phone.trim())) {
-      errs.phone = 'رقم الهاتف يجب أن يحتوي على أرقام صحيحة';
+    if (!formData.phone.trim()) {
+      errs.phone = 'يرجى إدخال رقم الهاتف (مثال: 010XXXXXXXX أو +2010XXXXXXXX)';
+    } else if (!/^(01[0125][0-9]{8}|\+201[0125][0-9]{8})$/.test(formData.phone.trim())) {
+      errs.phone = 'رقم الهاتف يجب أن يكون رقم محمول مصري صحيح (010/011/012/015)';
+    }
+
+    if (!/^[0-9]{14}$/.test(formData.nationalId.trim())) {
+      errs.nationalId = 'الرقم القومي يجب أن يتكون من 14 رقماً';
+    }
+
+    if (!formData.dateOfBirth) {
+      errs.dateOfBirth = 'يرجى تحديد تاريخ الميلاد';
+    }
+
+    if (!formData.address.trim()) {
+      errs.address = 'يرجى إدخال العنوان';
+    }
+
+    if (!formData.educationalQualification.trim()) {
+      errs.educationalQualification = 'يرجى إدخال المؤهل الدراسي';
+    }
+
+    if (!formData.appointmentDate) {
+      errs.appointmentDate = 'يرجى تحديد تاريخ التعيين';
     }
 
     if (!formData.jobTitle.trim()) {
@@ -136,8 +221,17 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       const payload: CreateUserRequestDTO = {
         name: formData.name.trim(),
         username: formData.username.trim().toLowerCase(),
-        email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim() || undefined,
+        email: formData.email.trim() ? formData.email.trim().toLowerCase() : undefined,
+        phone: formData.phone.trim(),
+        nationalId: formData.nationalId.trim(),
+        dateOfBirth: formData.dateOfBirth,
+        address: formData.address.trim(),
+        educationalQualification: formData.educationalQualification.trim(),
+        maritalStatusId: formData.maritalStatusId || undefined,
+        militaryServiceStatusId: formData.militaryServiceStatusId || undefined,
+        appointmentDate: formData.appointmentDate,
+        serviceEndDate: formData.serviceEndDate || null,
+        metroLineId: formData.metroLineId || undefined,
         jobTitle: formData.jobTitle.trim(),
         department: formData.department.trim(),
         role: formData.role,
@@ -243,13 +337,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-email" className="text-xs font-semibold text-text">
-              البريد الإلكتروني الوظيفي <span className="text-danger" aria-hidden="true">*</span>
+              البريد الإلكتروني الوظيفي <span className="text-text-muted text-[11px]">(اختياري)</span>
             </label>
             <input
               id="add-user-email"
               data-testid="add-user-email-input"
               type="email"
-              required
               disabled={isSubmitting}
               dir="ltr"
               placeholder="e.g. tarek@cairo-metro.com"
@@ -269,12 +362,13 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-phone" className="text-xs font-semibold text-text">
-              رقم الهاتف <span className="text-text-muted text-[11px]">(اختياري)</span>
+              رقم الهاتف <span className="text-danger" aria-hidden="true">*</span>
             </label>
             <input
               id="add-user-phone"
               data-testid="add-user-phone-input"
               type="tel"
+              required
               disabled={isSubmitting}
               dir="ltr"
               placeholder="010XXXXXXXX"
@@ -290,6 +384,239 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               }`}
             />
             {errors.phone && <span className="text-[11px] text-danger">{errors.phone}</span>}
+          </div>
+        </div>
+
+        {/* National ID & Date of Birth */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-national-id" className="text-xs font-semibold text-text">
+              الرقم القومي (14 رقماً) <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="add-user-national-id"
+              data-testid="add-user-national-id-input"
+              type="text"
+              inputMode="numeric"
+              maxLength={14}
+              required
+              disabled={isSubmitting}
+              dir="ltr"
+              placeholder="29501010100001"
+              value={formData.nationalId}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, nationalId: e.target.value }));
+                if (errors.nationalId) setErrors((prev) => ({ ...prev, nationalId: undefined }));
+              }}
+              className={`w-full bg-bg text-text text-sm rounded-lg border py-2 px-3 transition-colors outline-none text-left ${
+                errors.nationalId
+                  ? 'border-danger focus:border-danger ring-1 ring-danger'
+                  : 'border-border focus:border-primary'
+              }`}
+            />
+            {errors.nationalId && <span className="text-[11px] text-danger">{errors.nationalId}</span>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-dob" className="text-xs font-semibold text-text">
+              تاريخ الميلاد <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="add-user-dob"
+              data-testid="add-user-dob-input"
+              type="date"
+              required
+              disabled={isSubmitting}
+              value={formData.dateOfBirth}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, dateOfBirth: e.target.value }));
+                if (errors.dateOfBirth) setErrors((prev) => ({ ...prev, dateOfBirth: undefined }));
+              }}
+              className={`w-full bg-bg text-text text-sm rounded-lg border py-2 px-3 transition-colors outline-none ${
+                errors.dateOfBirth
+                  ? 'border-danger focus:border-danger ring-1 ring-danger'
+                  : 'border-border focus:border-primary'
+              }`}
+            />
+            {errors.dateOfBirth && <span className="text-[11px] text-danger">{errors.dateOfBirth}</span>}
+          </div>
+        </div>
+
+        {/* Address & Educational Qualification */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-address" className="text-xs font-semibold text-text">
+              العنوان <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="add-user-address"
+              data-testid="add-user-address-input"
+              type="text"
+              required
+              disabled={isSubmitting}
+              placeholder="مثال: القاهرة - مدينة نصر"
+              value={formData.address}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, address: e.target.value }));
+                if (errors.address) setErrors((prev) => ({ ...prev, address: undefined }));
+              }}
+              className={`w-full bg-bg text-text text-sm rounded-lg border py-2 px-3 transition-colors outline-none ${
+                errors.address
+                  ? 'border-danger focus:border-danger ring-1 ring-danger'
+                  : 'border-border focus:border-primary'
+              }`}
+            />
+            {errors.address && <span className="text-[11px] text-danger">{errors.address}</span>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-qualification" className="text-xs font-semibold text-text">
+              المؤهل الدراسي <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="add-user-qualification"
+              data-testid="add-user-qualification-input"
+              type="text"
+              required
+              disabled={isSubmitting}
+              placeholder="مثال: بكالوريوس هندسة"
+              value={formData.educationalQualification}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, educationalQualification: e.target.value }));
+                if (errors.educationalQualification) {
+                  setErrors((prev) => ({ ...prev, educationalQualification: undefined }));
+                }
+              }}
+              className={`w-full bg-bg text-text text-sm rounded-lg border py-2 px-3 transition-colors outline-none ${
+                errors.educationalQualification
+                  ? 'border-danger focus:border-danger ring-1 ring-danger'
+                  : 'border-border focus:border-primary'
+              }`}
+            />
+            {errors.educationalQualification && (
+              <span className="text-[11px] text-danger">{errors.educationalQualification}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Marital Status & Military Status */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-marital" className="text-xs font-semibold text-text">
+              الحالة الاجتماعية <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select
+              id="add-user-marital"
+              data-testid="add-user-marital-input"
+              disabled={isSubmitting}
+              value={formData.maritalStatusId}
+              onChange={(e) => setFormData((prev) => ({ ...prev, maritalStatusId: e.target.value }))}
+              className="w-full bg-bg text-text text-sm rounded-lg border border-border py-2 px-3 transition-colors outline-none focus:border-primary"
+            >
+              {maritalStatuses.length === 0 ? (
+                <option value="">الافتراضي</option>
+              ) : (
+                maritalStatuses.map((item) => (
+                  <option key={String(item.id)} value={String(item.id)}>
+                    {item.nameAr || item.name || item.label || item.code || String(item.id)}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-military" className="text-xs font-semibold text-text">
+              الموقف من التجنيد <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select
+              id="add-user-military"
+              data-testid="add-user-military-input"
+              disabled={isSubmitting}
+              value={formData.militaryServiceStatusId}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, militaryServiceStatusId: e.target.value }))
+              }
+              className="w-full bg-bg text-text text-sm rounded-lg border border-border py-2 px-3 transition-colors outline-none focus:border-primary"
+            >
+              {militaryStatuses.length === 0 ? (
+                <option value="">الافتراضي</option>
+              ) : (
+                militaryStatuses.map((item) => (
+                  <option key={String(item.id)} value={String(item.id)}>
+                    {item.nameAr || item.name || item.label || item.code || String(item.id)}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+        </div>
+
+        {/* Appointment Date, Service End Date & Metro Line */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-appointment" className="text-xs font-semibold text-text">
+              تاريخ التعيين <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="add-user-appointment"
+              data-testid="add-user-appointment-input"
+              type="date"
+              required
+              disabled={isSubmitting}
+              value={formData.appointmentDate}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, appointmentDate: e.target.value }));
+                if (errors.appointmentDate) setErrors((prev) => ({ ...prev, appointmentDate: undefined }));
+              }}
+              className={`w-full bg-bg text-text text-sm rounded-lg border py-2 px-3 transition-colors outline-none ${
+                errors.appointmentDate
+                  ? 'border-danger focus:border-danger ring-1 ring-danger'
+                  : 'border-border focus:border-primary'
+              }`}
+            />
+            {errors.appointmentDate && (
+              <span className="text-[11px] text-danger">{errors.appointmentDate}</span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-service-end" className="text-xs font-semibold text-text">
+              تاريخ انتهاء الخدمة <span className="text-text-muted text-[11px]">(اختياري)</span>
+            </label>
+            <input
+              id="add-user-service-end"
+              data-testid="add-user-service-end-input"
+              type="date"
+              disabled={isSubmitting}
+              value={formData.serviceEndDate}
+              onChange={(e) => setFormData((prev) => ({ ...prev, serviceEndDate: e.target.value }))}
+              className="w-full bg-bg text-text text-sm rounded-lg border border-border py-2 px-3 transition-colors outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-metro-line" className="text-xs font-semibold text-text">
+              خط المترو <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select
+              id="add-user-metro-line"
+              data-testid="add-user-metro-line-input"
+              disabled={isSubmitting}
+              value={formData.metroLineId}
+              onChange={(e) => setFormData((prev) => ({ ...prev, metroLineId: e.target.value }))}
+              className="w-full bg-bg text-text text-sm rounded-lg border border-border py-2 px-3 transition-colors outline-none focus:border-primary"
+            >
+              {metroLines.length === 0 ? (
+                <option value="">الافتراضي</option>
+              ) : (
+                metroLines.map((item) => (
+                  <option key={String(item.id)} value={String(item.id)}>
+                    {item.nameAr || item.name || item.label || item.code || String(item.id)}
+                  </option>
+                ))
+              )}
+            </select>
           </div>
         </div>
 

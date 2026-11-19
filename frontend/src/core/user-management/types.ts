@@ -50,7 +50,7 @@ export interface ManagedUserDTO {
 export interface CreateUserRequestDTO {
   name: string;
   username: string;
-  email: string;
+  email?: string;
   phone?: string;
   jobTitle: string;
   department: string;
@@ -58,6 +58,16 @@ export interface CreateUserRequestDTO {
   status?: UserStatus;
   /** Optional development password provisioned separately from directory records */
   password?: string;
+  /** Canonical Egyptian HR / Employee fields (identity.User) */
+  nationalId?: string;
+  dateOfBirth?: string;
+  appointmentDate?: string;
+  serviceEndDate?: string | null;
+  address?: string;
+  educationalQualification?: string;
+  maritalStatusId?: number | string;
+  militaryServiceStatusId?: number | string;
+  metroLineId?: number | string;
 }
 
 /**
