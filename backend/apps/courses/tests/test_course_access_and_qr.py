@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.courses.models import CourseAudienceMetroLine
+from apps.courses.models import CourseAudienceDepartment, CourseAudienceMetroLine
 from apps.courses.services.course_service import (
     create_course,
     decide_course_review,
@@ -19,7 +19,7 @@ from apps.courses.services.course_service import (
 from apps.communications.models import NotificationItem
 from apps.identity.models import RolePolicy, User
 from apps.learning.models import Enrollment
-from apps.organization.models import MaritalStatusCatalog, MetroLine, MilitaryServiceStatusCatalog
+from apps.organization.models import MaritalStatusCatalog, MetroLine, MilitaryServiceStatusCatalog, OrganizationalDepartment, UserOrganizationalDepartment
 from shared.permissions import ROLE_DEFAULT_CAPABILITIES
 
 
@@ -243,5 +243,56 @@ class CourseAccessAndQrTests(APITestCase):
             NotificationItem.objects.filter(
                 user=self.trainee2,
                 title__contains="دورة الخط الأول",
+            ).exists()
+        )
+
+    def test_auto_revoke_targeted_course_and_notify_on_department_change(self) -> None:
+        dept_a, _ = OrganizationalDepartment.objects.get_or_create(name_ar="إدارة الإشارات")
+        dept_b, _ = OrganizationalDepartment.objects.get_or_create(name_ar="إدارة المحطات")
+
+        UserOrganizationalDepartment.objects.create(user=self.trainee2, department=dept_a)
+
+        dept_course = create_course(
+            actor=self.lecturer,
+            title="دورة تخصص الإشارات",
+            description="وصف",
+            course_type="main",
+            primary_lecturer=self.lecturer,
+        )
+        dept_course.access_mode = "targeted"
+        dept_course.save(update_fields=["access_mode", "updated_at"])
+        CourseAudienceDepartment.objects.create(course=dept_course, department=dept_a)
+        save_course_draft(
+            actor=self.lecturer,
+            course=dept_course,
+            title_snapshot="دورة تخصص الإشارات",
+            modules_payload=[{"title": "وحدة", "order": 1, "items": [{"title": "درس", "itemType": "video", "order": 1}]}],
+        )
+        sub = submit_course_for_review(actor=self.lecturer, course=dept_course)
+        decide_course_review(reviewer=self.admin, submission=sub, decision="approve")
+
+        # Enroll trainee2 directly while in dept_a
+        self.client.force_authenticate(user=self.lecturer)
+        self.client.post(
+            f"/api/courses/{dept_course.id}/enrollments/bulk-add",
+            {"userIds": [self.trainee2.id]},
+            format="json",
+        )
+        self.assertTrue(is_course_visible_to_trainee(self.trainee2, dept_course))
+
+        # Admin moves trainee2 from dept_a to dept_b -> course must be revoked + notification sent
+        self.client.force_authenticate(user=self.admin)
+        resp_upd = self.client.patch(
+            f"/api/admin/users/{self.trainee2.id}",
+            {"department": dept_b.name_ar},
+            format="json",
+        )
+        self.assertEqual(resp_upd.status_code, status.HTTP_200_OK)
+        self.assertIn("دورة تخصص الإشارات", resp_upd.data["data"]["revokedCourseTitles"])
+        self.assertFalse(is_course_visible_to_trainee(self.trainee2, dept_course))
+        self.assertTrue(
+            NotificationItem.objects.filter(
+                user=self.trainee2,
+                title__contains="تم سحب صلاحية الوصول إلى مقرر",
             ).exists()
         )

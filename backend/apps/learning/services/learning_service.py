@@ -149,6 +149,47 @@ def enroll_user_in_course(
 
 
 @transaction.atomic
+def reconcile_user_enrollments_on_org_change(*, actor: User, user: User) -> list[Course]:
+    """Revoke non-group enrollments for targeted courses no longer matching user's org profile, and notify user."""
+    from apps.communications.services.communications_service import send_notification
+    from apps.courses.services.course_service import does_user_match_course_audience
+
+    revoked_courses: list[Course] = []
+    enrollments = (
+        Enrollment.objects.filter(user=user, source_grants__isnull=False)
+        .select_related("course")
+        .distinct()
+    )
+    for enrollment in enrollments:
+        course = enrollment.course
+        if (getattr(course, "access_mode", "targeted") or "targeted") != "targeted":
+            continue
+        if does_user_match_course_audience(user, course):
+            continue
+        if enrollment.source_grants.filter(source_type="group").exists():
+            continue
+
+        deleted_count, _ = EnrollmentSourceGrant.objects.filter(enrollment=enrollment).exclude(
+            source_type="group"
+        ).delete()
+        if deleted_count > 0:
+            revoked_courses.append(course)
+            send_notification(
+                user=user,
+                title=f"تم سحب صلاحية الوصول إلى مقرر: {course.title}",
+                body=f"نظراً لتحديث بياناتك التنظيمية (الإدارة أو المسمى الوظيفي أو خط المترو)، تم إلغاء تسجيلك في المقرر «{course.title}» لأنه مخصص لفئة تنظيمية أخرى.",
+            )
+            record_audit_log(
+                action="learning.enrollment_revoked_org_change",
+                actor=actor,
+                target_entity_type="Enrollment",
+                target_entity_id=str(enrollment.id),
+                details_snapshot={"userId": user.id, "courseId": course.id},
+            )
+    return revoked_courses
+
+
+@transaction.atomic
 def revoke_group_enrollment_grant(
     *,
     actor: User | None,

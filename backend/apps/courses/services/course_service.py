@@ -372,6 +372,26 @@ def _notify_eligible_trainees_on_publish(course: Course) -> int:
     return len(to_create)
 
 
+def does_user_match_course_audience(user: User, course: Course) -> bool:
+    """Return True if user's dept, job title, or metro line matches course audience targeting."""
+    dept_ids = set(CourseAudienceDepartment.objects.filter(course=course).values_list("department_id", flat=True))
+    job_ids = set(CourseAudienceJobTitle.objects.filter(course=course).values_list("job_title_id", flat=True))
+    line_ids = set(CourseAudienceMetroLine.objects.filter(course=course).values_list("metro_line_id", flat=True))
+
+    user_depts = set(UserOrganizationalDepartment.objects.filter(user=user).values_list("department_id", flat=True))
+    user_jobs = set(user.user_job_titles.values_list("job_title_id", flat=True))
+
+    if not dept_ids and not job_ids and not line_ids:
+        has_user_org_profile = bool(user.metro_line_id or user_depts or user_jobs)
+        return not has_user_org_profile
+
+    if user.metro_line_id in line_ids:
+        return True
+    if user_depts & dept_ids:
+        return True
+    return bool(user_jobs & job_ids)
+
+
 def is_course_visible_to_trainee(user: User, course: Course) -> bool:
     """Visibility across access_mode (all_trainees / targeted / hidden), enrollments & groups."""
     if course.lifecycle_status != "Published":
@@ -393,22 +413,7 @@ def is_course_visible_to_trainee(user: User, course: Course) -> bool:
     if access_mode == "all_trainees":
         return True
 
-    dept_ids = set(CourseAudienceDepartment.objects.filter(course=course).values_list("department_id", flat=True))
-    job_ids = set(CourseAudienceJobTitle.objects.filter(course=course).values_list("job_title_id", flat=True))
-    line_ids = set(CourseAudienceMetroLine.objects.filter(course=course).values_list("metro_line_id", flat=True))
-
-    user_depts = set(UserOrganizationalDepartment.objects.filter(user=user).values_list("department_id", flat=True))
-    user_jobs = set(user.user_job_titles.values_list("job_title_id", flat=True))
-
-    if not dept_ids and not job_ids and not line_ids:
-        has_user_org_profile = bool(user.metro_line_id or user_depts or user_jobs)
-        return not has_user_org_profile
-
-    if user.metro_line_id in line_ids:
-        return True
-    if user_depts & dept_ids:
-        return True
-    return bool(user_jobs & job_ids)
+    return does_user_match_course_audience(user, course)
 
 
 def add_course_comment(*, author: User, course: Course, body: str) -> CourseComment:

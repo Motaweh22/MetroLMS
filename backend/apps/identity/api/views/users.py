@@ -381,6 +381,10 @@ class AdminUserDeleteView(APIView):
                     return error_response("VALIDATION_ERROR", "الموقف من التجنيد غير صالح.", status.HTTP_400_BAD_REQUEST)
                 target.military_service_status = mil_obj
 
+        old_line_id = target.metro_line_id
+        old_dept_ids = set(UserOrganizationalDepartment.objects.filter(user=target).values_list("department_id", flat=True))
+        old_job_ids = set(target.user_job_titles.values_list("job_title_id", flat=True))
+
         if "metroLineId" in data or "metro_line_id" in data:
             line_id = data.get("metroLineId") or data.get("metro_line_id")
             if line_id:
@@ -406,6 +410,15 @@ class AdminUserDeleteView(APIView):
                     job_obj, _ = JobTitle.objects.get_or_create(name_ar=job_name)
                     UserJobTitle.objects.filter(user=target).delete()
                     UserJobTitle.objects.create(user=target, department=dept_obj, job_title=job_obj)
+
+        new_line_id = target.metro_line_id
+        new_dept_ids = set(UserOrganizationalDepartment.objects.filter(user=target).values_list("department_id", flat=True))
+        new_job_ids = set(target.user_job_titles.values_list("job_title_id", flat=True))
+        revoked_courses = []
+        if old_line_id != new_line_id or old_dept_ids != new_dept_ids or old_job_ids != new_job_ids:
+            from apps.learning.services.learning_service import reconcile_user_enrollments_on_org_change
+
+            revoked_courses = reconcile_user_enrollments_on_org_change(actor=request.user, user=target)
 
         dept_link = UserOrganizationalDepartment.objects.filter(user=target).select_related("department").first()
         job_link = UserJobTitle.objects.filter(user=target).select_related("job_title", "department").first()
@@ -439,6 +452,7 @@ class AdminUserDeleteView(APIView):
                     target.military_service_status.name_ar if target.military_service_status else ""
                 ),
                 "metroLine": target.metro_line.name_ar if target.metro_line else "",
+                "revokedCourseTitles": [c.title for c in revoked_courses],
                 "initials": target.full_name[:2] if target.full_name else "م",
             }
         )
