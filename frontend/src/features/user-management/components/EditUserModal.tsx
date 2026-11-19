@@ -316,6 +316,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                     .filter(Boolean);
                   if (scoped.length > 0 && !scoped.includes(jobTitle)) {
                     setJobTitle(scoped[0]);
+                  } else if (scoped.length === 0) {
+                    setJobTitle('');
                   }
                 }
               }}

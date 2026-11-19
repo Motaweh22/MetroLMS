@@ -558,6 +558,56 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
         iconName="calendar"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-dept" className="text-xs font-semibold text-text">
+              القطاع / الإدارة <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <select
+              id="add-user-dept"
+              data-testid="add-user-dept-input"
+              required
+              disabled={isSubmitting}
+              value={formData.department}
+              onChange={(e) => {
+                const nextDept = e.target.value;
+                updateField('department', nextDept);
+                if (jobTitleRecords.length > 0) {
+                  const matchedDept = departmentRecords.find(
+                    (d) => (d.nameAr || d.name || '') === nextDept
+                  );
+                  if (matchedDept) {
+                    const scopedJobs = jobTitleRecords
+                      .filter(
+                        (j) =>
+                          j.departmentId == null || String(j.departmentId) === String(matchedDept.id)
+                      )
+                      .map((j) => j.nameAr || j.name || '')
+                      .filter(Boolean);
+                    if (scopedJobs.length > 0 && !scopedJobs.includes(formData.jobTitle)) {
+                      updateField('jobTitle', scopedJobs[0]);
+                    } else if (scopedJobs.length === 0) {
+                      updateField('jobTitle', '');
+                    }
+                  }
+                }
+              }}
+              className={inputClass(errors.department)}
+            >
+              {departmentOptions.length === 0 ? (
+                <option value="">لا توجد إدارات مسجلة</option>
+              ) : (
+                departmentOptions.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))
+              )}
+            </select>
+            {errors.department && (
+              <span className="text-[11px] text-danger">{errors.department}</span>
+            )}
+          </div>
+
           <div className="flex flex-col gap-1.5 relative" ref={jobDropdownRef}>
             <label htmlFor="add-user-job" className="text-xs font-semibold text-text">
               المسمى الوظيفي <span className="text-danger" aria-hidden="true">*</span>
@@ -573,7 +623,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
                 autoComplete="off"
                 required
                 disabled={isSubmitting}
-                placeholder="اختر أو اكتب المسمى الوظيفي"
+                placeholder="اختر المسمى الوظيفي"
                 value={formData.jobTitle}
                 onFocus={() => setIsJobDropdownOpen(true)}
                 onKeyDown={(e) => {
@@ -637,54 +687,6 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               </ul>
             )}
             {errors.jobTitle && <span className="text-[11px] text-danger">{errors.jobTitle}</span>}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="add-user-dept" className="text-xs font-semibold text-text">
-              القطاع / الإدارة <span className="text-danger" aria-hidden="true">*</span>
-            </label>
-            <select
-              id="add-user-dept"
-              data-testid="add-user-dept-input"
-              required
-              disabled={isSubmitting}
-              value={formData.department}
-              onChange={(e) => {
-                const nextDept = e.target.value;
-                updateField('department', nextDept);
-                if (jobTitleRecords.length > 0) {
-                  const matchedDept = departmentRecords.find(
-                    (d) => (d.nameAr || d.name || '') === nextDept
-                  );
-                  if (matchedDept) {
-                    const scopedJobs = jobTitleRecords
-                      .filter(
-                        (j) =>
-                          j.departmentId == null || String(j.departmentId) === String(matchedDept.id)
-                      )
-                      .map((j) => j.nameAr || j.name || '')
-                      .filter(Boolean);
-                    if (scopedJobs.length > 0 && !scopedJobs.includes(formData.jobTitle)) {
-                      updateField('jobTitle', scopedJobs[0]);
-                    }
-                  }
-                }
-              }}
-              className={inputClass(errors.department)}
-            >
-              {departmentOptions.length === 0 ? (
-                <option value="">لا توجد إدارات مسجلة</option>
-              ) : (
-                departmentOptions.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))
-              )}
-            </select>
-            {errors.department && (
-              <span className="text-[11px] text-danger">{errors.department}</span>
-            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
