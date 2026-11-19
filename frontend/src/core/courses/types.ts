@@ -173,6 +173,9 @@ export interface Course {
   coLecturers?: string[];
   assistants?: string[];
   targetJobTitles?: string[];
+  targetDepartmentIds?: number[];
+  targetJobTitleIds?: number[];
+  targetMetroLineIds?: number[];
   level: CourseLevel;
   estimatedHours: number;
   rating: number;
@@ -396,6 +399,9 @@ export interface CourseBaselineSnapshot {
   coverColor?: string;
   thumbnail?: string;
   targetJobTitles?: string[];
+  targetDepartmentIds?: number[];
+  targetJobTitleIds?: number[];
+  targetMetroLineIds?: number[];
   prerequisiteCourseId?: string | null;
   courseZipPolicy?: CourseZipPolicy;
   externalResources?: ExternalResource[];

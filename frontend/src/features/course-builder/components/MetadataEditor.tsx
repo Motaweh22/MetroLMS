@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiClient } from '@/core/api/apiClient';
 import type { Course, CourseLevel } from '@/core/courses/types';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
@@ -200,6 +201,49 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
   };
 
   // --- Target Job Titles ---
+  const [orgDepartments, setOrgDepartments] = useState<Array<{ id: number; nameAr: string }>>([]);
+  const [orgJobTitles, setOrgJobTitles] = useState<
+    Array<{ id: number; nameAr: string; departmentId?: number | null }>
+  >([]);
+  const [orgMetroLines, setOrgMetroLines] = useState<Array<{ id: number; nameAr: string }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      apiClient<{ departments?: Array<{ id: number; nameAr: string }> }>(
+        '/api/admin/organization/departments'
+      ),
+      apiClient<{ jobTitles?: Array<{ id: number; nameAr: string; departmentId?: number | null }> }>(
+        '/api/admin/organization/job-titles'
+      ),
+      apiClient<{ metroLines?: Array<{ id: number; nameAr: string }> }>(
+        '/api/admin/organization/metro-lines'
+      ),
+    ]).then(([deptRes, jobRes, lineRes]) => {
+      if (!active) return;
+      if (deptRes.status === 'fulfilled') setOrgDepartments(deptRes.value.departments || []);
+      if (jobRes.status === 'fulfilled') setOrgJobTitles(jobRes.value.jobTitles || []);
+      if (lineRes.status === 'fulfilled') setOrgMetroLines(lineRes.value.metroLines || []);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleAudienceId = (
+    field: 'targetDepartmentIds' | 'targetJobTitleIds' | 'targetMetroLineIds',
+    id: number
+  ) => {
+    const current = course[field] || [];
+    const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+    if (field === 'targetJobTitleIds') {
+      const selectedNames = orgJobTitles.filter((j) => next.includes(j.id)).map((j) => j.nameAr);
+      onChange({ ...course, targetJobTitleIds: next, targetJobTitles: selectedNames });
+      return;
+    }
+    handleFieldChange(field, next);
+  };
+
   const handleAddJobTitle = (e: React.FormEvent) => {
     e.preventDefault();
     const clean = newJobTitle.trim();
@@ -674,6 +718,96 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
                 + إضافة فئة
               </button>
             </form>
+
+            {/* DB-Driven Audience Targeting (Departments, Job Titles, Metro Lines) */}
+            {(orgDepartments.length > 0 || orgJobTitles.length > 0 || orgMetroLines.length > 0) && (
+              <div className="space-y-4 pt-4 mt-3 border-t border-border/60">
+                <p className="text-[11px] text-text-muted">
+                  تحديد الجمهور المستهدف من قاعدة البيانات (تظهر الدورة للمتدرب إذا طابق أحد الاختيارات التالية):
+                </p>
+
+                {orgDepartments.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="block text-xs font-bold text-text-heading">
+                      القطاعات / الإدارات المستهدفة
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {orgDepartments.map((dept) => {
+                        const selected = (course.targetDepartmentIds || []).includes(dept.id);
+                        return (
+                          <button
+                            key={dept.id}
+                            type="button"
+                            onClick={() => toggleAudienceId('targetDepartmentIds', dept.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                              selected
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-surface text-text border-border hover:bg-bg'
+                            }`}
+                          >
+                            {dept.nameAr}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {orgJobTitles.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="block text-xs font-bold text-text-heading">
+                      المسميات الوظيفية المستهدفة
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {orgJobTitles.map((job) => {
+                        const selected = (course.targetJobTitleIds || []).includes(job.id);
+                        return (
+                          <button
+                            key={job.id}
+                            type="button"
+                            onClick={() => toggleAudienceId('targetJobTitleIds', job.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                              selected
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-surface text-text border-border hover:bg-bg'
+                            }`}
+                          >
+                            {job.nameAr}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {orgMetroLines.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="block text-xs font-bold text-text-heading">
+                      خطوط المترو المستهدفة
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {orgMetroLines.map((line) => {
+                        const selected = (course.targetMetroLineIds || []).includes(line.id);
+                        return (
+                          <button
+                            key={line.id}
+                            type="button"
+                            onClick={() => toggleAudienceId('targetMetroLineIds', line.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                              selected
+                                ? 'bg-primary text-white border-primary'
+                                : 'bg-surface text-text border-border hover:bg-bg'
+                            }`}
+                          >
+                            {line.nameAr}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>

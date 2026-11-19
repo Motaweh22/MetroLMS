@@ -5,6 +5,9 @@ from rest_framework import serializers
 
 from apps.courses.models import (
     Course,
+    CourseAudienceDepartment,
+    CourseAudienceJobTitle,
+    CourseAudienceMetroLine,
     CourseComment,
     CourseCommentReport,
     CourseDraft,
@@ -33,6 +36,10 @@ class CourseSerializer(serializers.ModelSerializer):
     rating = serializers.SerializerMethodField()
     ratingCount = serializers.SerializerMethodField()
     enrollmentCount = serializers.SerializerMethodField()
+    targetDepartmentIds = serializers.SerializerMethodField()
+    targetJobTitleIds = serializers.SerializerMethodField()
+    targetJobTitles = serializers.SerializerMethodField()
+    targetMetroLineIds = serializers.SerializerMethodField()
     estimatedHours = serializers.SerializerMethodField()
     prerequisites = serializers.SerializerMethodField()
     modules = serializers.SerializerMethodField()
@@ -62,6 +69,10 @@ class CourseSerializer(serializers.ModelSerializer):
             "enrollmentCount",
             "estimatedHours",
             "prerequisites",
+            "targetDepartmentIds",
+            "targetJobTitleIds",
+            "targetJobTitles",
+            "targetMetroLineIds",
             "modules",
             "chapters",
             "createdAt",
@@ -93,6 +104,35 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_rating(self, obj: Course) -> float:
         return 0.0
+
+    def get_targetDepartmentIds(self, obj: Course) -> list[int]:
+        return list(
+            CourseAudienceDepartment.objects.filter(course=obj)
+            .order_by("department_id")
+            .values_list("department_id", flat=True)
+        )
+
+    def get_targetJobTitleIds(self, obj: Course) -> list[int]:
+        return list(
+            CourseAudienceJobTitle.objects.filter(course=obj)
+            .order_by("job_title_id")
+            .values_list("job_title_id", flat=True)
+        )
+
+    def get_targetJobTitles(self, obj: Course) -> list[str]:
+        return list(
+            CourseAudienceJobTitle.objects.filter(course=obj)
+            .select_related("job_title")
+            .order_by("job_title_id")
+            .values_list("job_title__name_ar", flat=True)
+        )
+
+    def get_targetMetroLineIds(self, obj: Course) -> list[int]:
+        return list(
+            CourseAudienceMetroLine.objects.filter(course=obj)
+            .order_by("metro_line_id")
+            .values_list("metro_line_id", flat=True)
+        )
 
     def get_ratingCount(self, obj: Course) -> int:
         return 0

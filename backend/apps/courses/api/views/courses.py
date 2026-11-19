@@ -16,11 +16,15 @@ from apps.courses.api.serializers.courses import (
 )
 from apps.courses.models import (
     Course,
+    CourseAudienceDepartment,
+    CourseAudienceJobTitle,
+    CourseAudienceMetroLine,
     CourseComment,
     CourseCommentReport,
     CourseReviewSubmission,
     StagedAdminEdit,
 )
+from apps.organization.models import JobTitle, MetroLine, OrganizationalDepartment
 from apps.courses.services.course_service import (
     CourseDomainError,
     add_course_comment,
@@ -34,6 +38,38 @@ from apps.courses.services.course_service import (
 from apps.identity.models import User
 from shared.api import error_response, success_response
 from shared.permissions import has_capability
+
+
+def _sync_course_audience(course: Course, data: dict) -> None:
+    """Sync CourseAudienceDepartment, CourseAudienceJobTitle, CourseAudienceMetroLine."""
+    if not isinstance(data, dict):
+        return
+    if "targetDepartmentIds" in data and isinstance(data.get("targetDepartmentIds"), list):
+        dept_ids = [int(x) for x in data["targetDepartmentIds"] if str(x).isdigit()]
+        valid_dept_ids = list(OrganizationalDepartment.objects.filter(pk__in=dept_ids).values_list("id", flat=True))
+        CourseAudienceDepartment.objects.filter(course=course).delete()
+        for did in valid_dept_ids:
+            CourseAudienceDepartment.objects.create(course=course, department_id=did)
+
+    if "targetJobTitleIds" in data and isinstance(data.get("targetJobTitleIds"), list):
+        job_ids = [int(x) for x in data["targetJobTitleIds"] if str(x).isdigit()]
+        valid_job_ids = list(JobTitle.objects.filter(pk__in=job_ids).values_list("id", flat=True))
+        CourseAudienceJobTitle.objects.filter(course=course).delete()
+        for jid in valid_job_ids:
+            CourseAudienceJobTitle.objects.create(course=course, job_title_id=jid)
+    elif "targetJobTitles" in data and isinstance(data.get("targetJobTitles"), list):
+        names = [str(x).strip() for x in data["targetJobTitles"] if str(x).strip()]
+        valid_job_ids = list(JobTitle.objects.filter(name_ar__in=names).values_list("id", flat=True))
+        CourseAudienceJobTitle.objects.filter(course=course).delete()
+        for jid in valid_job_ids:
+            CourseAudienceJobTitle.objects.create(course=course, job_title_id=jid)
+
+    if "targetMetroLineIds" in data and isinstance(data.get("targetMetroLineIds"), list):
+        line_ids = [int(x) for x in data["targetMetroLineIds"] if str(x).isdigit()]
+        valid_line_ids = list(MetroLine.objects.filter(pk__in=line_ids).values_list("id", flat=True))
+        CourseAudienceMetroLine.objects.filter(course=course).delete()
+        for lid in valid_line_ids:
+            CourseAudienceMetroLine.objects.create(course=course, metro_line_id=lid)
 
 
 class CourseCatalogListView(APIView):
@@ -111,6 +147,7 @@ class LecturerCourseListView(APIView):
         except Exception:
             return error_response("VALIDATION_ERROR", "طلب غير صالح. يرجى مراجعة البيانات المدخلة.", status.HTTP_400_BAD_REQUEST)
 
+        _sync_course_audience(course, request.data)
         return success_response({"course": CourseSerializer(course).data}, status_code=status.HTTP_201_CREATED)
 
 
@@ -172,6 +209,7 @@ class LecturerCourseDraftView(APIView):
                 if new_desc is not None:
                     course.description = str(new_desc)
                 course.save(update_fields=["title", "description", "updated_at"])
+            _sync_course_audience(course, request.data)
         except CourseDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
         return success_response(
