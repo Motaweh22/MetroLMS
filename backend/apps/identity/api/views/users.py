@@ -97,7 +97,7 @@ class AdminUserListView(APIView):
     def get(self, request: Request):
         if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية عرض دليل المستخدمين.", status.HTTP_403_FORBIDDEN)
-        qs = User.objects.all().order_by("id")
+        qs = User.objects.select_related("marital_status", "military_service_status", "metro_line").all().order_by("id")
         if request.user.role_id != "developer":
             qs = qs.exclude(role_id="developer")
         role_filter = request.query_params.get("role")
@@ -108,19 +108,54 @@ class AdminUserListView(APIView):
         if status_filter:
             qs = qs.filter(status=status_filter)
 
+        user_list = list(qs)
+        user_ids = [u.id for u in user_list]
+        dept_map: dict[int, str] = {}
+        for link in (
+            UserOrganizationalDepartment.objects.filter(user_id__in=user_ids)
+            .select_related("department")
+            .order_by("id")
+        ):
+            if link.user_id not in dept_map and link.department is not None:
+                dept_map[link.user_id] = link.department.name_ar
+        job_map: dict[int, str] = {}
+        for jlink in (
+            UserJobTitle.objects.filter(user_id__in=user_ids)
+            .select_related("job_title", "department")
+            .order_by("id")
+        ):
+            if jlink.user_id not in job_map and jlink.job_title is not None:
+                job_map[jlink.user_id] = jlink.job_title.name_ar
+            if jlink.user_id not in dept_map and jlink.department is not None:
+                dept_map[jlink.user_id] = jlink.department.name_ar
+
         users = [
             {
                 "id": str(u.id),
                 "name": u.full_name,
+                "username": u.phone_e164,
                 "phoneE164": u.phone_e164,
+                "phone": u.phone_e164,
                 "email": u.email or u.phone_e164,
                 "role": "user" if u.role_id == "trainee" else u.role_id,
-                "status": u.status,
-                "department": "",
-                "jobTitle": "",
+                "status": u.status.lower(),
+                "department": dept_map.get(u.id, ""),
+                "jobTitle": job_map.get(u.id, ""),
+                "nationalId": u.national_id,
+                "dateOfBirth": u.date_of_birth.isoformat() if u.date_of_birth else None,
+                "appointmentDate": u.appointment_date.isoformat() if u.appointment_date else None,
+                "serviceEndDate": u.service_end_date.isoformat() if u.service_end_date else None,
+                "address": u.address or "",
+                "educationalQualification": u.educational_qualification or "",
+                "maritalStatus": u.marital_status.name_ar if u.marital_status else "",
+                "militaryServiceStatus": (
+                    u.military_service_status.name_ar if u.military_service_status else ""
+                ),
+                "metroLine": u.metro_line.name_ar if u.metro_line else "",
+                "createdAt": u.created_at.isoformat() if u.created_at else None,
                 "initials": u.full_name[:2] if u.full_name else "م",
             }
-            for u in qs
+            for u in user_list
         ]
         return success_response(users)
 

@@ -30,6 +30,16 @@ export interface ManagedUserDTO {
   jobTitle: string;
   /** Organizational unit / department */
   department: string;
+  /** Canonical HR / Employee fields */
+  nationalId?: string;
+  dateOfBirth?: string | null;
+  appointmentDate?: string | null;
+  serviceEndDate?: string | null;
+  address?: string;
+  educationalQualification?: string;
+  maritalStatus?: string;
+  militaryServiceStatus?: string;
+  metroLine?: string;
   /** Core application role */
   role: UserRole;
   /** Account status */

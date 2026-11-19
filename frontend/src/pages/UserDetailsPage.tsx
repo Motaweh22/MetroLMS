@@ -266,7 +266,7 @@ export const UserDetailsPage: React.FC = () => {
           <div>
             <span className="text-text-muted block text-[11px] mb-0.5">البريد الإلكتروني الوظيفي</span>
             <span className="font-medium text-text font-mono" dir="ltr">
-              {user.email}
+              {user.email || '—'}
             </span>
           </div>
           <div>
@@ -274,6 +274,50 @@ export const UserDetailsPage: React.FC = () => {
             <span className="font-medium text-text" dir="ltr">
               {user.phone || '—'}
             </span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">الرقم القومي</span>
+            <span className="font-medium text-text font-mono" dir="ltr">
+              {user.nationalId || '—'}
+            </span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">تاريخ الميلاد</span>
+            <span className="font-medium text-text" dir="ltr">
+              {user.dateOfBirth || '—'}
+            </span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">الحالة الاجتماعية</span>
+            <span className="font-medium text-text">{user.maritalStatus || '—'}</span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">الموقف من التجنيد</span>
+            <span className="font-medium text-text">{user.militaryServiceStatus || '—'}</span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">خط المترو</span>
+            <span className="font-medium text-text">{user.metroLine || '—'}</span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">المؤهل الدراسي</span>
+            <span className="font-medium text-text">{user.educationalQualification || '—'}</span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">تاريخ التعيين</span>
+            <span className="font-medium text-text" dir="ltr">
+              {user.appointmentDate || '—'}
+            </span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">تاريخ انتهاء الخدمة</span>
+            <span className="font-medium text-text" dir="ltr">
+              {user.serviceEndDate || 'على رأس العمل'}
+            </span>
+          </div>
+          <div className="sm:col-span-2">
+            <span className="text-text-muted block text-[11px] mb-0.5">العنوان</span>
+            <span className="font-medium text-text">{user.address || '—'}</span>
           </div>
           <div>
             <span className="text-text-muted block text-[11px] mb-0.5">تاريخ التسجيل بالمنظومة</span>
