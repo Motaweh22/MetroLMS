@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ManagedUserDTO, UserRole, UserStatus } from '@/core/user-management/types';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
 import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import { UserFilterBar } from '@/features/user-management/components/UserFilterBar';
 import { UserTable } from '@/features/user-management/components/UserTable';
-import { AddUserModal } from '@/features/user-management/components/AddUserModal';
 import { SuspendUserModal } from '@/features/user-management/components/SuspendUserModal';
 import { UserPermissionsModal } from '@/features/permissions/components/UserPermissionsModal';
 import { Badge } from '@/shared/ui/Badge';
@@ -26,6 +26,7 @@ import { useToast } from '@/shared/ui/Toast';
  * - RBAC protection for administrators only.
  */
 export const UserManagementPage: React.FC = () => {
+  const navigate = useNavigate();
   const toast = useToast();
   const [users, setUsers] = useState<ManagedUserDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -38,7 +39,6 @@ export const UserManagementPage: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState<string | 'all'>('all');
 
   // Modal & Mutation states
-  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [statusModalUser, setStatusModalUser] = useState<ManagedUserDTO | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<UserStatus>('suspended');
   const [permissionsModalUser, setPermissionsModalUser] = useState<ManagedUserDTO | null>(null);
@@ -132,10 +132,6 @@ export const UserManagementPage: React.FC = () => {
     setSelectedDepartment('all');
   };
 
-  const handleUserCreated = (newUser: ManagedUserDTO) => {
-    setUsers((prev) => [newUser, ...prev]);
-  };
-
   const handleRoleChange = async (user: ManagedUserDTO, newRole: UserRole) => {
     if (user.role === newRole) return;
 
@@ -156,7 +152,7 @@ export const UserManagementPage: React.FC = () => {
         );
         toast.info(
           (updated as unknown as { message?: string }).message ||
-            `تم تقديم طلب تعديل دور "${user.name}" للاعتماد؛ بانتظار موافقة مدير النظام.`
+          `تم تقديم طلب تعديل دور "${user.name}" للاعتماد؛ بانتظار موافقة مدير النظام.`
         );
       } else {
         setUsers((prev) =>
@@ -218,7 +214,7 @@ export const UserManagementPage: React.FC = () => {
             type="button"
             variant="primary"
             size="sm"
-            onClick={() => setIsAddUserModalOpen(true)}
+            onClick={() => navigate('/admin/users/new')}
             data-testid="open-add-user-modal-btn"
             className="w-full sm:w-auto"
           >
@@ -277,13 +273,6 @@ export const UserManagementPage: React.FC = () => {
         onOpenStatusModal={handleOpenStatusModal}
         onManagePermissions={(u) => setPermissionsModalUser(u)}
         updatingUserId={updatingUserId}
-      />
-
-      {/* Add User Modal */}
-      <AddUserModal
-        isOpen={isAddUserModalOpen}
-        onClose={() => setIsAddUserModalOpen(false)}
-        onUserCreated={handleUserCreated}
       />
 
       {/* Suspend / Reactivate Status Modal */}

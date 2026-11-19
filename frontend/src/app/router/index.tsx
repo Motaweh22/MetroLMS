@@ -35,6 +35,7 @@ import { GroupEditorPage } from '@/pages/GroupEditorPage';
 import { GroupMonitoringPage } from '@/pages/GroupMonitoringPage';
 import { JoinGroupPage } from '@/pages/JoinGroupPage';
 import { UserManagementPage } from '@/pages/UserManagementPage';
+import { AddUserPage } from '@/pages/AddUserPage';
 import { UserDetailsPage } from '@/pages/UserDetailsPage';
 import { PermissionsMatrixPage } from '@/pages/PermissionsMatrixPage';
 import { SecurityAuditPage } from '@/pages/SecurityAuditPage';
@@ -234,6 +235,14 @@ export const appRouteElements = (
         element={
           <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
             <UserManagementPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="admin/users/new"
+        element={
+          <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'assistant_admin']}>
+            <AddUserPage />
           </ProtectedRoute>
         }
       />

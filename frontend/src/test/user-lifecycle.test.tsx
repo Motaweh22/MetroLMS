@@ -406,27 +406,45 @@ describe('Increment 11 — Phase 2: User Lifecycle, Role Mutations & Account Sta
 
   // ── 5. User Directory UI Workflows ───────────────────────────────────
   describe('5. User Directory UI Workflows (/admin/users)', () => {
-    it('opens AddUserModal, fills form, validates, and adds user to table', async () => {
+    it('navigates to AddUserPage, fills form, validates, and adds user to table', async () => {
       renderUserDirectoryAsAdmin();
 
       await waitFor(() => {
         expect(screen.getByTestId('user-table')).toBeInTheDocument();
       });
 
-      // Click open add user modal button
+      // Click add user button -> navigates to /admin/users/new
       const openBtn = screen.getByTestId('open-add-user-modal-btn');
       fireEvent.click(openBtn);
 
       await waitFor(() => {
-        expect(screen.getByTestId('add-user-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('add-user-page')).toBeInTheDocument();
       });
 
-      // Fill in fields
+      // Fill in required fields
       fireEvent.change(screen.getByTestId('add-user-name-input'), {
         target: { value: 'م. إبراهيم كمال' },
       });
       fireEvent.change(screen.getByTestId('add-user-username-input'), {
         target: { value: 'ibrahim_kamal' },
+      });
+      fireEvent.change(screen.getByTestId('add-user-phone-input'), {
+        target: { value: '01012345678' },
+      });
+      fireEvent.change(screen.getByTestId('add-user-national-id-input'), {
+        target: { value: '29501010100099' },
+      });
+      fireEvent.change(screen.getByTestId('add-user-dob-input'), {
+        target: { value: '1995-01-01' },
+      });
+      fireEvent.change(screen.getByTestId('add-user-address-input'), {
+        target: { value: 'القاهرة - مدينة نصر' },
+      });
+      fireEvent.change(screen.getByTestId('add-user-qualification-input'), {
+        target: { value: 'بكالوريوس هندسة' },
+      });
+      fireEvent.change(screen.getByTestId('add-user-appointment-input'), {
+        target: { value: '2020-03-01' },
       });
       fireEvent.change(screen.getByTestId('add-user-email-input'), {
         target: { value: 'ibrahim.kamal@cairo-metro.com' },
@@ -436,8 +454,9 @@ describe('Increment 11 — Phase 2: User Lifecycle, Role Mutations & Account Sta
       const submitBtn = screen.getByTestId('add-user-submit-btn');
       fireEvent.click(submitBtn);
 
-      // Verify new user appears in table
+      // Verify navigation back to directory and new user appears in table
       await waitFor(() => {
+        expect(screen.getByTestId('user-management-page')).toBeInTheDocument();
         expect(screen.getByText('م. إبراهيم كمال')).toBeInTheDocument();
       });
     }, 15000);
