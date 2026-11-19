@@ -120,6 +120,8 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
   const [maritalStatuses, setMaritalStatuses] = useState<CatalogItem[]>([]);
   const [militaryStatuses, setMilitaryStatuses] = useState<CatalogItem[]>([]);
   const [metroLines, setMetroLines] = useState<CatalogItem[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>(METRO_DEPARTMENTS);
+  const [jobTitleOptions, setJobTitleOptions] = useState<string[]>(METRO_JOB_TITLES);
   const [hasEdited, setHasEdited] = useState(false);
   const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
   const jobDropdownRef = useRef<HTMLDivElement>(null);
@@ -136,10 +138,10 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
   const filteredJobTitles = useMemo(() => {
     const query = formData.jobTitle.trim();
-    if (!query || METRO_JOB_TITLES.includes(query)) return METRO_JOB_TITLES;
-    const matches = METRO_JOB_TITLES.filter((t) => t.includes(query));
-    return matches.length > 0 ? matches : METRO_JOB_TITLES;
-  }, [formData.jobTitle]);
+    if (!query || jobTitleOptions.includes(query)) return jobTitleOptions;
+    const matches = jobTitleOptions.filter((t) => t.includes(query));
+    return matches.length > 0 ? matches : jobTitleOptions;
+  }, [formData.jobTitle, jobTitleOptions]);
 
   const availableRoleOptions = useMemo<UserRole[]>(() => {
     const candidateRoles: UserRole[] = ['super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'];
@@ -156,20 +158,34 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
       apiClient<{ maritalStatuses?: CatalogItem[] }>('/api/admin/organization/marital-statuses'),
       apiClient<{ militaryStatuses?: CatalogItem[] }>('/api/admin/organization/military-statuses'),
       apiClient<{ metroLines?: CatalogItem[] }>('/api/admin/organization/metro-lines'),
-    ]).then(([maritalRes, militaryRes, lineRes]) => {
+      apiClient<{ departments?: CatalogItem[] }>('/api/admin/organization/departments'),
+      apiClient<{ jobTitles?: CatalogItem[] }>('/api/admin/organization/job-titles'),
+    ]).then(([maritalRes, militaryRes, lineRes, deptRes, jobRes]) => {
       if (!active) return;
       const mList = maritalRes.status === 'fulfilled' ? maritalRes.value.maritalStatuses || [] : [];
       const milList = militaryRes.status === 'fulfilled' ? militaryRes.value.militaryStatuses || [] : [];
       const lList = lineRes.status === 'fulfilled' ? lineRes.value.metroLines || [] : [];
+      const dList =
+        deptRes.status === 'fulfilled'
+          ? (deptRes.value.departments || []).map((d) => d.nameAr || d.name || '').filter(Boolean)
+          : [];
+      const jList =
+        jobRes.status === 'fulfilled'
+          ? (jobRes.value.jobTitles || []).map((j) => j.nameAr || j.name || '').filter(Boolean)
+          : [];
       setMaritalStatuses(mList);
       setMilitaryStatuses(milList);
       setMetroLines(lList);
+      if (dList.length > 0) setDepartmentOptions(dList);
+      if (jList.length > 0) setJobTitleOptions(jList);
       setFormData((prev) => ({
         ...prev,
         maritalStatusId: prev.maritalStatusId || (mList[0] ? String(mList[0].id) : ''),
         militaryServiceStatusId:
           prev.militaryServiceStatusId || (milList[0] ? String(milList[0].id) : ''),
         metroLineId: prev.metroLineId || (lList[0] ? String(lList[0].id) : ''),
+        department: dList.length > 0 && !dList.includes(prev.department) ? dList[0] : prev.department,
+        jobTitle: jList.length > 0 && !jList.includes(prev.jobTitle) ? jList[0] : prev.jobTitle,
       }));
     });
     return () => {
@@ -599,7 +615,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               onChange={(e) => updateField('department', e.target.value)}
               className={inputClass(errors.department)}
             >
-              {METRO_DEPARTMENTS.map((dept) => (
+              {departmentOptions.map((dept) => (
                 <option key={dept} value={dept}>
                   {dept}
                 </option>

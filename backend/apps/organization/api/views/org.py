@@ -193,9 +193,34 @@ class _BaseCatalogListView(APIView):
 
 class _BaseCatalogDetailView(APIView):
     model = None
+    serializer_class = BilingualCatalogSerializer
 
     def get_permissions(self):
         return [IsAuthenticated(), has_capability("permissions.configure_departments")()]
+
+    def _update(self, request: Request, item_id: int, partial: bool):
+        obj = self.model.objects.filter(pk=item_id).first()
+        if obj is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        serializer = self.serializer_class(data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        for attr, val in serializer.validated_data.items():
+            setattr(obj, attr, val)
+        try:
+            obj.save()
+        except IntegrityError:
+            return error_response(
+                "CONFLICT",
+                "تعارض في معالجة الطلب. قد يكون الاسم مسجلاً بالفعل.",
+                status.HTTP_409_CONFLICT,
+            )
+        return success_response({"item": self.serializer_class(obj).data})
+
+    def put(self, request: Request, item_id: int):
+        return self._update(request, item_id, partial=False)
+
+    def patch(self, request: Request, item_id: int):
+        return self._update(request, item_id, partial=True)
 
     def delete(self, request: Request, item_id: int):
         obj = self.model.objects.filter(pk=item_id).first()

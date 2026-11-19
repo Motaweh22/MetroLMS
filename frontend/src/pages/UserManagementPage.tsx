@@ -208,8 +208,19 @@ export const UserManagementPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Button: Add User */}
-        <div>
+        {/* Action Buttons: Organization Catalog & Add User */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/organization')}
+            data-testid="open-org-catalog-btn"
+            className="w-full sm:w-auto"
+          >
+            <Icon name="settings" size="sm" className="ml-1.5" />
+            إدارة البيانات الوظيفية
+          </Button>
           <Button
             type="button"
             variant="primary"
