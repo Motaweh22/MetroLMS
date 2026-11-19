@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -84,6 +84,45 @@ export const GroupEditorPage: React.FC = () => {
       ? 'meetings'
       : 'general'
   );
+
+  const groupTabs = useMemo(
+    () =>
+      [
+        { id: 'general', label: 'البيانات الأساسية' },
+        { id: 'schedule', label: 'مواقيت المجموعة' },
+        { id: 'members', label: 'المتدربون ورمز QR' },
+        { id: 'courses', label: 'المقررات التدريبية' },
+        { id: 'materials', label: 'حقيبة المواد' },
+        { id: 'meetings', label: 'اللقاءات التفاعلية والمواد المرفقة' },
+      ] as const,
+    []
+  );
+
+  const activeGroupTabIndex = groupTabs.findIndex((t) => t.id === activeTab);
+  const prevGroupTab = activeGroupTabIndex > 0 ? groupTabs[activeGroupTabIndex - 1] : null;
+  const nextGroupTab =
+    activeGroupTabIndex >= 0 && activeGroupTabIndex < groupTabs.length - 1
+      ? groupTabs[activeGroupTabIndex + 1]
+      : null;
+
+  const tabsScrollRef = useRef<HTMLElement | null>(null);
+  const [hasTabOverflow, setHasTabOverflow] = useState(false);
+
+  const updateTabOverflow = useCallback(() => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    setHasTabOverflow(el.scrollWidth > el.clientWidth + 4);
+  }, []);
+
+  useEffect(() => {
+    updateTabOverflow();
+    window.addEventListener('resize', updateTabOverflow);
+    return () => window.removeEventListener('resize', updateTabOverflow);
+  }, [updateTabOverflow]);
+
+  const scrollGroupTabs = (deltaX: number) => {
+    tabsScrollRef.current?.scrollBy({ left: deltaX, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     if (tabParam === 'schedule' || tabParam === 'timing') {
@@ -692,9 +731,21 @@ export const GroupEditorPage: React.FC = () => {
       </div>
 
       {/* Workspace Tabs (Unified 7-Tab Strip Architecture) */}
-      <div className="border-b border-border">
+      <div className="border-b border-border flex items-center gap-1">
+        {hasTabOverflow && (
+          <button
+            type="button"
+            onClick={() => scrollGroupTabs(220)}
+            aria-label="التمرير لليمين"
+            data-testid="group-tabs-scroll-right"
+            className="p-2 rounded-lg border border-border bg-white text-text-muted hover:text-primary hover:border-primary/40 transition-colors shrink-0 shadow-2xs"
+          >
+            <Icon name="chevronRight" size="sm" />
+          </button>
+        )}
         <nav
-          className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px"
+          ref={tabsScrollRef}
+          className="flex items-center gap-2 overflow-x-auto flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px"
           aria-label="تبويبات إعدادات المجموعة"
         >
           <button
@@ -819,6 +870,17 @@ export const GroupEditorPage: React.FC = () => {
             </button>
           )}
         </nav>
+        {hasTabOverflow && (
+          <button
+            type="button"
+            onClick={() => scrollGroupTabs(-220)}
+            aria-label="التمرير لليسار"
+            data-testid="group-tabs-scroll-left"
+            className="p-2 rounded-lg border border-border bg-white text-text-muted hover:text-primary hover:border-primary/40 transition-colors shrink-0 shadow-2xs"
+          >
+            <Icon name="chevronLeft" size="sm" />
+          </button>
+        )}
       </div>
 
       {/* Submit Error Banner for Non-Form Tabs */}
@@ -1550,6 +1612,56 @@ export const GroupEditorPage: React.FC = () => {
           </form>
         </div>
       )}
+
+      {/* Bottom Next / Previous Step Navigation */}
+      <div
+        className="flex items-center justify-between gap-3 pt-4 border-t border-border"
+        data-testid="group-editor-bottom-nav"
+      >
+        <div>
+          {prevGroupTab && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon="chevronRight"
+              onClick={() => {
+                handleTabSwitch(prevGroupTab.id);
+                if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              data-testid="group-prev-tab-btn"
+            >
+              السابق: {prevGroupTab.label}
+            </Button>
+          )}
+        </div>
+
+        <span className="text-xs text-text-muted font-semibold hidden sm:inline">
+          الخطوة {activeGroupTabIndex + 1} من {groupTabs.length}
+        </span>
+
+        <div>
+          {nextGroupTab && (
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              rightIcon="chevronLeft"
+              onClick={() => {
+                handleTabSwitch(nextGroupTab.id);
+                if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              data-testid="group-next-tab-btn"
+            >
+              التالي: {nextGroupTab.label}
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
