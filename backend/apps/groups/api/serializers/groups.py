@@ -143,7 +143,7 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
         return "keep_no_cert"
 
     def get_description(self, obj: TrainingGroup) -> str:
-        return ""
+        return obj.description or ""
 
     def get_traineeCount(self, obj: TrainingGroup) -> int:
         return GroupMembership.objects.filter(training_group=obj).count()

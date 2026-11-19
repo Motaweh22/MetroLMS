@@ -38,6 +38,7 @@ class TrainingGroup(models.Model):
 
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=255, validators=[validate_non_empty_text])
+    description = models.TextField(blank=True, default="", db_default="")
     group_type = models.CharField(max_length=20, choices=GROUP_TYPE_CHOICES)
     is_archived = models.BooleanField(default=False, db_default=False)
     auto_renewal_enabled = models.BooleanField()

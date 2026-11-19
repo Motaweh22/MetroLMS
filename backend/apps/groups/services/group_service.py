@@ -47,6 +47,7 @@ def create_training_group(
     actor: User,
     name: str,
     group_type: str,
+    description: str = "",
     auto_renewal_enabled: bool = False,
     interval_days: int | None = None,
     deadline_datetime=None,
@@ -70,6 +71,7 @@ def create_training_group(
     next_renewal = deadline_datetime if (auto_renewal_enabled and deadline_datetime is not None) else None
     group = TrainingGroup.objects.create(
         name=norm_name,
+        description=description.strip(),
         group_type=group_type,
         is_archived=False,
         auto_renewal_enabled=auto_renewal_enabled,

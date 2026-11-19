@@ -107,6 +107,7 @@ class AdminGroupListView(APIView):
             group, cycle = create_training_group(
                 actor=request.user,
                 name=str(request.data.get("name", "")),
+                description=str(request.data.get("description") or ""),
                 group_type=_normalize_group_type(request.data.get("groupType")),
                 auto_renewal_enabled=auto_renewal,
                 interval_days=interval,
@@ -152,6 +153,8 @@ class AdminGroupDetailView(APIView):
         if not name:
             return error_response("VALIDATION_ERROR", "اسم المجموعة مطلوب.", status.HTTP_400_BAD_REQUEST)
         group.name = name
+        if "description" in request.data:
+            group.description = str(request.data.get("description") or "").strip()
         if "groupType" in request.data:
             group.group_type = _normalize_group_type(request.data.get("groupType"))
         if "adminStatus" in request.data:
@@ -431,7 +434,7 @@ class MyGroupsView(APIView):
                 {
                     "id": str(g.id),
                     "name": g.name,
-                    "description": "",
+                    "description": g.description or "",
                     "groupType": g.group_type,
                     "operationalStatus": op_status,
                     "traineeCount": GroupMembership.objects.filter(training_group=g).count(),
