@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.courses.models import CourseAudienceMetroLine
 from apps.courses.services.course_service import (
     create_course,
     decide_course_review,
@@ -15,6 +16,7 @@ from apps.courses.services.course_service import (
     save_course_draft,
     submit_course_for_review,
 )
+from apps.communications.models import NotificationItem
 from apps.identity.models import RolePolicy, User
 from apps.learning.models import Enrollment
 from apps.organization.models import MaritalStatusCatalog, MetroLine, MilitaryServiceStatusCatalog
@@ -172,3 +174,74 @@ class CourseAccessAndQrTests(APITestCase):
         self.client.force_authenticate(user=self.trainee1)
         resp_exp = self.client.post("/api/courses/join-by-qr", {"token": new_token}, format="json")
         self.assertEqual(resp_exp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_notifications_on_direct_enroll_targeted_publish_and_hidden_silence(self) -> None:
+        # 1. Direct bulk-add sends NotificationItem to added trainee
+        self.course.access_mode = "hidden"
+        self.course.save(update_fields=["access_mode", "updated_at"])
+        self.client.force_authenticate(user=self.lecturer)
+        self.client.post(
+            f"/api/courses/{self.course.id}/enrollments/bulk-add",
+            {"userIds": [self.trainee1.id]},
+            format="json",
+        )
+        self.assertTrue(
+            NotificationItem.objects.filter(
+                user=self.trainee1,
+                title__contains="تمت إضافتك إلى مقرر جديد",
+            ).exists()
+        )
+
+        # 2. Publishing a hidden course sends ZERO publish notifications
+        NotificationItem.objects.all().delete()
+        hidden_course = create_course(
+            actor=self.lecturer,
+            title="دورة مخفية",
+            description="وصف",
+            course_type="main",
+            primary_lecturer=self.lecturer,
+        )
+        hidden_course.access_mode = "hidden"
+        hidden_course.save(update_fields=["access_mode", "updated_at"])
+        save_course_draft(
+            actor=self.lecturer,
+            course=hidden_course,
+            title_snapshot="دورة مخفية",
+            modules_payload=[{"title": "وحدة", "order": 1, "items": [{"title": "درس", "itemType": "video", "order": 1}]}],
+        )
+        sub_h = submit_course_for_review(actor=self.lecturer, course=hidden_course)
+        decide_course_review(reviewer=self.admin, submission=sub_h, decision="approve")
+        self.assertEqual(NotificationItem.objects.count(), 0)
+
+        # 3. Publishing a targeted course (line1 only) notifies trainee1 only, NOT trainee2
+        targeted_course = create_course(
+            actor=self.lecturer,
+            title="دورة الخط الأول",
+            description="وصف",
+            course_type="main",
+            primary_lecturer=self.lecturer,
+        )
+        targeted_course.access_mode = "targeted"
+        targeted_course.save(update_fields=["access_mode", "updated_at"])
+        CourseAudienceMetroLine.objects.create(course=targeted_course, metro_line=self.line1)
+        save_course_draft(
+            actor=self.lecturer,
+            course=targeted_course,
+            title_snapshot="دورة الخط الأول",
+            modules_payload=[{"title": "وحدة", "order": 1, "items": [{"title": "درس", "itemType": "video", "order": 1}]}],
+        )
+        sub_t = submit_course_for_review(actor=self.lecturer, course=targeted_course)
+        decide_course_review(reviewer=self.admin, submission=sub_t, decision="approve")
+
+        self.assertTrue(
+            NotificationItem.objects.filter(
+                user=self.trainee1,
+                title__contains="دورة الخط الأول",
+            ).exists()
+        )
+        self.assertFalse(
+            NotificationItem.objects.filter(
+                user=self.trainee2,
+                title__contains="دورة الخط الأول",
+            ).exists()
+        )

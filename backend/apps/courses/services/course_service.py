@@ -335,7 +335,41 @@ def decide_course_review(
         target_entity_id=str(pub_ver.id),
         details_snapshot={"courseId": course.id, "versionNumber": pub_ver.version_number},
     )
+    _notify_eligible_trainees_on_publish(course)
     return submission, pub_ver
+
+
+def _notify_eligible_trainees_on_publish(course: Course) -> int:
+    """Send NotificationItem to eligible active trainees when a non-hidden course is published."""
+    access_mode = getattr(course, "access_mode", "targeted") or "targeted"
+    if access_mode == "hidden":
+        return 0
+
+    from apps.communications.models import NotificationItem
+
+    active_trainees = User.objects.filter(role_id="trainee", status="Active").only("id", "metro_line_id")
+    if access_mode == "all_trainees":
+        recipients = list(active_trainees)
+    else:
+        recipients = [u for u in active_trainees if is_course_visible_to_trainee(u, course)]
+
+    if not recipients:
+        return 0
+
+    title = f"مقرر تدريبي جديد متاح لك: {course.title}"
+    body = f"أصبح المقرر التدريبي «{course.title}» متاحاً الآن في كتالوج المقررات ضمن الفئة المستهدفة الخاصة بك."
+    existing_user_ids = set(
+        NotificationItem.objects.filter(user__in=recipients, title=title).values_list("user_id", flat=True)
+    )
+    now = timezone.now()
+    to_create = [
+        NotificationItem(user=u, title=title, body=body, is_read=False, created_at=now)
+        for u in recipients
+        if u.id not in existing_user_ids
+    ]
+    if to_create:
+        NotificationItem.objects.bulk_create(to_create)
+    return len(to_create)
 
 
 def is_course_visible_to_trainee(user: User, course: Course) -> bool:

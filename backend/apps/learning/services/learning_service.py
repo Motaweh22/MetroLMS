@@ -105,7 +105,7 @@ def enroll_user_in_course(
     if enrollment is None:
         enrollment = Enrollment.objects.create(user=user, course=course, enrolled_at=now)
 
-    grant, _ = EnrollmentSourceGrant.objects.get_or_create(
+    grant, grant_created = EnrollmentSourceGrant.objects.get_or_create(
         enrollment=enrollment,
         source_type=source_type,
         training_group=training_group,
@@ -137,6 +137,14 @@ def enroll_user_in_course(
             "trainingGroupId": training_group.id if training_group else None,
         },
     )
+    if grant_created and source_type == "direct" and actor.id != user.id:
+        from apps.communications.services.communications_service import send_notification
+
+        send_notification(
+            user=user,
+            title=f"تمت إضافتك إلى مقرر جديد: {course.title}",
+            body=f"تم تسجيلك مباشرة في المقرر التدريبي «{course.title}». يمكنك البدء في استعراض المحتوى من قائمة مقرراتي.",
+        )
     return enrollment, grant, attempt
 
 
