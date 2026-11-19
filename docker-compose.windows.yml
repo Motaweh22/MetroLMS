@@ -1,0 +1,27 @@
+# MetroLMS Unified Windows Server 2022 Docker Compose
+# Runs Frontend + Backend together on port 8000 (optional; coexists with .bat scripts)
+# Usage:
+#   docker compose -f docker-compose.windows.yml up -d --build
+#   docker compose -f docker-compose.windows.yml down
+
+services:
+  metrolms:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows
+      args:
+        WINDOWS_BASE_TAG: ltsc2022
+    container_name: metrolms-app
+    ports:
+      # Change to "127.0.0.1:8000:8000" when placing behind IIS Reverse Proxy on the same host
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      METROLMS_SERVE_FRONTEND: "True"
+      METROLMS_FRONTEND_DIST_DIR: "C:\\app\\frontend\\dist"
+      METROLMS_MEDIA_ROOT: "C:\\MetroLMSMedia"
+      METROLMS_RUN_MIGRATIONS_ON_START: "True"
+    volumes:
+      - "${METROLMS_MEDIA_HOST_DIR:-D:\\MetroLMSMedia}:C:\\MetroLMSMedia"
+    restart: unless-stopped

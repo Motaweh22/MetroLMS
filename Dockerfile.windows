@@ -1,0 +1,66 @@
+# escape=`
+# MetroLMS Unified Windows Server 2022 Container (Frontend + Backend on :8000)
+# Usage:
+#   docker compose -f docker-compose.windows.yml up -d --build
+
+ARG WINDOWS_BASE_TAG=ltsc2022
+
+# ------------------------------------------------------------------------------
+# Stage 1: Build Production Frontend (frontend/dist)
+# ------------------------------------------------------------------------------
+FROM mcr.microsoft.com/windows/servercore:${WINDOWS_BASE_TAG} AS frontend-builder
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+ARG NODE_VERSION=24.11.0
+RUN Invoke-WebRequest -Uri "https://nodejs.org/dist/v$env:NODE_VERSION/node-v$env:NODE_VERSION-win-x64.zip" -OutFile C:\node.zip; `
+    Expand-Archive C:\node.zip -DestinationPath C:\; `
+    Rename-Item "C:\node-v$env:NODE_VERSION-win-x64" C:\nodejs; `
+    Remove-Item C:\node.zip -Force; `
+    setx PATH "$env:PATH;C:\nodejs" /M
+
+WORKDIR C:\build\frontend
+COPY frontend\package.json frontend\package-lock.json .\
+RUN npm ci
+
+COPY frontend\ .\
+RUN npx vite build
+
+# ------------------------------------------------------------------------------
+# Stage 2: Python 3.12 + ODBC Driver 18 + Waitress + WhiteNoise Runtime
+# ------------------------------------------------------------------------------
+FROM mcr.microsoft.com/windows/servercore:${WINDOWS_BASE_TAG}
+
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+
+ARG PYTHON_VERSION=3.12.10
+RUN Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$env:PYTHON_VERSION/python-$env:PYTHON_VERSION-amd64.exe" -OutFile C:\python-installer.exe; `
+    Start-Process -Wait -FilePath C:\python-installer.exe -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0'; `
+    Remove-Item C:\python-installer.exe -Force
+
+# Install VC++ 2015-2022 Redistributable + Microsoft ODBC Driver 18 for SQL Server
+RUN Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile C:\vc_redist.x64.exe; `
+    Start-Process -Wait -FilePath C:\vc_redist.x64.exe -ArgumentList '/install /quiet /norestart'; `
+    Remove-Item C:\vc_redist.x64.exe -Force; `
+    Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2266337" -OutFile C:\msodbcsql.msi; `
+    Start-Process -Wait -FilePath msiexec.exe -ArgumentList '/i C:\msodbcsql.msi /qn IACCEPTMSODBCSQLLICENSETERMS=1'; `
+    Remove-Item C:\msodbcsql.msi -Force
+
+WORKDIR C:\app\backend
+COPY backend\requirements.txt backend\requirements-prod.txt .\
+RUN python -m pip install --no-cache-dir --upgrade pip; `
+    python -m pip install --no-cache-dir -r requirements-prod.txt
+
+COPY backend\ .\
+COPY --from=frontend-builder C:\build\frontend\dist C:\app\frontend\dist
+
+RUN New-Item -ItemType Directory -Force -Path C:\MetroLMSMedia | Out-Null
+
+ENV PYTHONUNBUFFERED=1 `
+    METROLMS_SERVE_FRONTEND=True `
+    METROLMS_FRONTEND_DIST_DIR=C:\app\frontend\dist `
+    METROLMS_MEDIA_ROOT=C:\MetroLMSMedia
+
+EXPOSE 8000
+
+CMD ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; if ($env:METROLMS_RUN_MIGRATIONS_ON_START -ne 'False') { python manage.py migrate --noinput }; waitress-serve --host=0.0.0.0 --port=8000 --threads=8 config.wsgi:application"]

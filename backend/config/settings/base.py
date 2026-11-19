@@ -65,6 +65,14 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# Optional unified single-port serving (for Docker / single-process deployments)
+METROLMS_SERVE_FRONTEND = os.environ.get("METROLMS_SERVE_FRONTEND", "False").lower() in ("1", "true", "yes")
+FRONTEND_DIST_DIR = Path(os.environ.get("METROLMS_FRONTEND_DIST_DIR", str(BASE_DIR.parent / "frontend" / "dist")))
+if METROLMS_SERVE_FRONTEND:
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+    if FRONTEND_DIST_DIR.is_dir():
+        WHITENOISE_ROOT = FRONTEND_DIST_DIR
+
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
@@ -113,6 +121,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Media Storage (D-MEDIA-01 / INV-DOM21-06)
 MEDIA_ROOT = Path(os.environ.get("METROLMS_MEDIA_ROOT", r"D:\MetroLMSMedia"))
 STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 AUTHENTICATION_BACKENDS = [
     "apps.identity.services.auth_backend.PhoneE164Backend",

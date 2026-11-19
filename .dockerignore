@@ -1,0 +1,18 @@
+# Ignore local environments, secrets, VCS, and build artifacts
+.git/
+.gitignore
+**/.venv/
+**/.env
+**/.env.*
+!backend/.env.example
+**/node_modules/
+frontend/dist/
+backend/staticfiles/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.log
+docs/
+legacy-reference/
+Demo/
