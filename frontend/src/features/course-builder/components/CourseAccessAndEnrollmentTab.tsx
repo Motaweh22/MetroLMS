@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type {
   Course,
-  CourseAccessMode,
   CourseEnrollmentMember,
   CourseLinkedGroupSummary,
   CourseQrMode,
   CourseQrSettings,
+  CourseVisibilityMode,
 } from '@/core/courses/types';
 import { coursesApi } from '@/features/courses/services/coursesApi';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
@@ -22,7 +22,7 @@ export interface CourseAccessAndEnrollmentTabProps {
 }
 
 const ACCESS_MODE_OPTIONS: Array<{
-  value: CourseAccessMode;
+  value: CourseVisibilityMode;
   title: string;
   description: string;
   badge: string;
@@ -67,7 +67,7 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
   onChange,
 }) => {
   const toast = useToast();
-  const accessMode: CourseAccessMode = course.accessMode || 'targeted';
+  const accessMode: CourseVisibilityMode = course.accessMode || 'targeted';
 
   const [enrollments, setEnrollments] = useState<CourseEnrollmentMember[]>([]);
   const [linkedGroups, setLinkedGroups] = useState<CourseLinkedGroupSummary[]>([]);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { coursesApi } from '@/features/courses/services/coursesApi';
-import type { CourseAccessMode, CourseQrMode } from '@/core/courses/types';
+import type { CourseQrMode, CourseVisibilityMode } from '@/core/courses/types';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
@@ -23,7 +23,7 @@ export const CourseQrJoinPage: React.FC = () => {
       description?: string;
       lecturerName: string;
       lifecycleStatus: string;
-      accessMode: CourseAccessMode;
+      accessMode: CourseVisibilityMode;
     };
     qrSettings: {
       isEnabled: boolean;

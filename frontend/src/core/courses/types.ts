@@ -161,7 +161,7 @@ export interface CourseChapter {
   items: ChapterItem[];
 }
 
-export type CourseAccessMode = 'all_trainees' | 'targeted' | 'hidden';
+export type CourseVisibilityMode = 'all_trainees' | 'targeted' | 'hidden';
 export type CourseQrMode = 'view_only' | 'auto_enroll';
 
 export interface CourseQrSettings {
@@ -209,7 +209,7 @@ export interface Course {
   targetDepartmentIds?: number[];
   targetJobTitleIds?: number[];
   targetMetroLineIds?: number[];
-  accessMode?: CourseAccessMode;
+  accessMode?: CourseVisibilityMode;
   qrSettings?: CourseQrSettings;
   level: CourseLevel;
   estimatedHours: number;
@@ -437,7 +437,7 @@ export interface CourseBaselineSnapshot {
   targetDepartmentIds?: number[];
   targetJobTitleIds?: number[];
   targetMetroLineIds?: number[];
-  accessMode?: CourseAccessMode;
+  accessMode?: CourseVisibilityMode;
   qrSettings?: CourseQrSettings;
   prerequisiteCourseId?: string | null;
   courseZipPolicy?: CourseZipPolicy;

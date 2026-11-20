@@ -483,7 +483,7 @@ export const LearningPlayerPage: React.FC = () => {
               courseTitle={course.title}
               commentsEnabled={course.commentsEnabled}
               isEnrolled={isEnrolled}
-              courseLecturerId={course.lecturerId}
+              courseLecturerId={course.lecturerId ?? undefined}
               courseCoLecturers={course.coLecturers}
             />
           </div>
@@ -523,7 +523,7 @@ export const LearningPlayerPage: React.FC = () => {
           course: {
             id: course.id,
             title: course.title,
-            lecturerId: course.lecturerId,
+            lecturerId: course.lecturerId ?? undefined,
             lecturerName: course.lecturerName,
             coLecturers: course.coLecturers,
             whatsappContacts: course.whatsappContacts,

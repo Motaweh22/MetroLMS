@@ -197,7 +197,7 @@ export const coursesApi = {
       description?: string;
       lecturerName: string;
       lifecycleStatus: string;
-      accessMode: import('@/core/courses/types').CourseAccessMode;
+      accessMode: import('@/core/courses/types').CourseVisibilityMode;
     };
     qrSettings: {
       isEnabled: boolean;
