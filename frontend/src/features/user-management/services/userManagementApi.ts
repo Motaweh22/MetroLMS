@@ -125,10 +125,12 @@ export const userManagementApi = {
    */
   async deleteUser(
     userId: string,
+    payload?: { reason?: string },
     options?: RequestOptions
   ): Promise<{ success: boolean; message?: string; approvalRequired?: boolean; requestId?: string }> {
     return apiClient(`/api/admin/users/${encodeURIComponent(userId)}`, {
       method: 'DELETE',
+      body: payload ? JSON.stringify(payload) : undefined,
       ...options,
     });
   },

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import type { UserTranscriptDTO, ManagedUserDTO, UserStatus } from '@/core/user-management/types';
 import { USER_ROLE_LABELS_AR, USER_STATUS_LABELS_AR } from '@/core/user-management/types';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
@@ -9,6 +10,7 @@ import { UserTranscriptCard } from '@/features/user-management/components/UserTr
 import { UserCoursesHistoryList } from '@/features/user-management/components/UserCoursesHistoryList';
 import { SuspendUserModal } from '@/features/user-management/components/SuspendUserModal';
 import { EditUserModal } from '@/features/user-management/components/EditUserModal';
+import { DeleteUserModal } from '@/features/user-management/components/DeleteUserModal';
 import { Badge, type BadgeVariant } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
@@ -54,6 +56,12 @@ function formatDate(dateStr?: string | null): string {
 
 export const UserDetailsPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
+  const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
+  const canDeleteUsers =
+    currentUser?.role === 'developer' ||
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'admin';
 
   const [transcript, setTranscript] = useState<UserTranscriptDTO | null>(null);
   const [overview, setOverview] = useState<UserOverviewData | null>(null);
@@ -65,6 +73,7 @@ export const UserDetailsPage: React.FC = () => {
   const [statusModalUser, setStatusModalUser] = useState<ManagedUserDTO | null>(null);
   const [statusModalTarget, setStatusModalTarget] = useState<UserStatus>('suspended');
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
 
   const fetchTranscript = useCallback(async () => {
     if (!userId) {
@@ -279,6 +288,19 @@ export const UserDetailsPage: React.FC = () => {
                 إيقاف الحساب
               </Button>
             )}
+
+            {canDeleteUsers && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsDeleteModalOpen(true)}
+                data-testid="header-delete-user-btn"
+                className="text-xs text-danger hover:text-danger-dark border-danger/40 hover:bg-danger/10"
+              >
+                حذف نهائي
+              </Button>
+            )}
           </div>
         </div>
 
@@ -385,6 +407,15 @@ export const UserDetailsPage: React.FC = () => {
         user={user}
         onClose={() => setIsEditModalOpen(false)}
         onSuccess={fetchTranscript}
+      />
+
+      {/* Safe D-01 Delete User Modal with Clear Blocker Reasons */}
+      <DeleteUserModal
+        isOpen={isDeleteModalOpen}
+        user={user}
+        overview={overview}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onDeleted={() => navigate('/admin/users')}
       />
     </div>
   );
