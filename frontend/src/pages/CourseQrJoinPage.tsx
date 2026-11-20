@@ -89,7 +89,7 @@ export const CourseQrJoinPage: React.FC = () => {
   if (errorMsg || !info) {
     return (
       <div className="max-w-lg mx-auto py-12 px-4 space-y-4" data-testid="course-qr-join-error">
-        <Alert variant="error" title="تعذر استخدام رمز QR">
+        <Alert variant="danger" title="تعذر استخدام رمز QR">
           {errorMsg || 'رمز QR غير صالح.'}
         </Alert>
         <Button type="button" variant="outline" onClick={() => navigate('/courses')}>

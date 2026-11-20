@@ -58,7 +58,7 @@ export const MemberProfilePage: React.FC = () => {
   if (error || !data) {
     return (
       <div className="max-w-3xl mx-auto py-10 px-4 space-y-4" data-testid="member-profile-error">
-        <Alert variant="error" title="تعذر عرض الملف الشخصي">
+        <Alert variant="danger" title="تعذر عرض الملف الشخصي">
           {error || 'العضو غير موجود.'}
         </Alert>
         <Button type="button" variant="outline" size="sm" onClick={() => navigate(-1)}>
