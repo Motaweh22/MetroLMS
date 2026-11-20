@@ -55,6 +55,7 @@ class MediaAssetUploadView(APIView):
         group_id = _parse_pos_int(request.data.get("groupId"))
         chapter_id = str(request.data.get("chapterId") or "").strip() or None
         media_role = str(request.data.get("mediaRole") or "").strip() or None
+        folder_id = str(request.data.get("folderId") or "").strip() or None
 
         try:
             asset = upload_media_asset(
@@ -65,6 +66,7 @@ class MediaAssetUploadView(APIView):
                 chapter_id=chapter_id,
                 media_role=media_role,
                 group_id=group_id,
+                folder_id=folder_id,
             )
         except MediaDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)

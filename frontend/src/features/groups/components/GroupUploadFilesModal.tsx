@@ -112,6 +112,9 @@ export const GroupUploadFilesModal: React.FC<GroupUploadFilesModalProps> = ({
           if (groupId) {
             formData.append('groupId', String(groupId));
           }
+          if (folder?.id) {
+            formData.append('folderId', String(folder.id));
+          }
           const upResp = await fetch('/api/media/assets/upload', {
             method: 'POST',
             credentials: 'same-origin',

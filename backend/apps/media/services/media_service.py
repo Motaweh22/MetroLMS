@@ -34,6 +34,7 @@ def upload_media_asset(
     chapter_id: str | None = None,
     media_role: str | None = None,
     group_id: int | None = None,
+    folder_id: str | None = None,
     storage: LocalMediaStorage | None = None,
 ) -> MediaAsset:
     """Step 1: Validate, checksum, store binary, and create immutable MediaAsset."""
@@ -68,7 +69,16 @@ def upload_media_asset(
         else:
             scope_prefix = f"courses/course_{int(course_id)}"
     elif group_id is not None and int(group_id) > 0:
-        scope_prefix = f"groups/group_{int(group_id)}"
+        if folder_id:
+            import re as _re
+
+            safe_folder = _re.sub(r"[^A-Za-z0-9_-]", "", str(folder_id).strip())[:64]
+            if safe_folder:
+                scope_prefix = f"groups/group_{int(group_id)}/folder_{safe_folder}"
+            else:
+                scope_prefix = f"groups/group_{int(group_id)}"
+        else:
+            scope_prefix = f"groups/group_{int(group_id)}"
 
     try:
         storage_key, size_bytes, checksum = store.save_uploaded_file(

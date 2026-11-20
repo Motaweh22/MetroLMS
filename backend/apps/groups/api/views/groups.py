@@ -986,18 +986,23 @@ class AdminGroupMaterialFolderDetailView(APIView):
 
         manifest = _load_materials_manifest(group_id)
         deleted_files = 0
+        removed_media_ids: list[object] = []
         kept = []
         found = False
         for fld in manifest["folders"]:
             if fld["id"] == folder_id:
                 found = True
-                deleted_files = len(fld.get("files", []))
+                fld_files = fld.get("files", [])
+                deleted_files = len(fld_files)
+                for f in fld_files:
+                    removed_media_ids.append(f.get("mediaAssetId") or f.get("mediaId"))
             else:
                 kept.append(fld)
         if not found:
             return error_response("RESOURCE_NOT_FOUND", "المجلد غير موجود.", status.HTTP_404_NOT_FOUND)
         manifest["folders"] = kept
         _save_materials_manifest(group_id, manifest)
+        _purge_group_material_assets(removed_media_ids)
         return success_response({"success": True, "deletedFilesCount": deleted_files})
 
 
@@ -1121,18 +1126,30 @@ class AdminGroupMaterialFileDetailView(APIView):
             return error_response(exc.code, exc.message, exc.status_code)
 
         manifest = _load_materials_manifest(group_id)
-        before = len(manifest["rootFiles"])
-        manifest["rootFiles"] = [f for f in manifest["rootFiles"] if f["id"] != file_id]
-        removed = len(manifest["rootFiles"]) < before
+        removed_media_ids: list[object] = []
+        new_root = []
+        removed = False
+        for f in manifest["rootFiles"]:
+            if f["id"] == file_id:
+                removed = True
+                removed_media_ids.append(f.get("mediaAssetId") or f.get("mediaId"))
+            else:
+                new_root.append(f)
+        manifest["rootFiles"] = new_root
         for fld in manifest["folders"]:
             files = fld.get("files", [])
-            new_files = [f for f in files if f["id"] != file_id]
-            if len(new_files) < len(files):
-                removed = True
+            new_files = []
+            for f in files:
+                if f["id"] == file_id:
+                    removed = True
+                    removed_media_ids.append(f.get("mediaAssetId") or f.get("mediaId"))
+                else:
+                    new_files.append(f)
             fld["files"] = new_files
         if not removed:
             return error_response("RESOURCE_NOT_FOUND", "الملف غير موجود.", status.HTTP_404_NOT_FOUND)
         _save_materials_manifest(group_id, manifest)
+        _purge_group_material_assets(removed_media_ids)
         return success_response({"success": True, "message": "تم حذف الملف بنجاح."})
 
 
@@ -1175,7 +1192,73 @@ class AdminGroupMaterialFileMoveView(APIView):
         else:
             manifest["rootFiles"].append(found_file)
         _save_materials_manifest(group_id, manifest)
+        _move_group_material_asset(
+            found_file.get("mediaAssetId") or found_file.get("mediaId"),
+            group_id,
+            target_folder_id,
+        )
         return success_response(found_file)
+
+
+def _purge_group_material_assets(media_ids: list[object]) -> None:
+    """Delete unreferenced MediaAsset records and physical files when removed from a group."""
+    from apps.media.models import MediaAsset, MediaContentReference
+    from infrastructure.storage.local_storage import LocalMediaStorage
+
+    storage = LocalMediaStorage()
+    for raw_id in media_ids:
+        if not raw_id or not str(raw_id).isdigit():
+            continue
+        aid = int(str(raw_id))
+        if MediaContentReference.objects.filter(media_asset_id=aid).exists():
+            continue
+        asset = MediaAsset.objects.filter(pk=aid).first()
+        if asset is None:
+            continue
+        key = asset.storage_key
+        asset.delete()
+        try:
+            storage.delete_stored_file(key)
+        except Exception:
+            pass
+
+
+def _move_group_material_asset(media_id: object, group_id: int, target_folder_id: object) -> None:
+    """Move a group material's MediaAsset physical file into its new folder_<id> or group root."""
+    if not media_id or not str(media_id).isdigit():
+        return
+    import os
+    import re as _re
+    from pathlib import Path
+    from apps.media.models import MediaAsset
+    from infrastructure.storage.local_storage import LocalMediaStorage
+
+    asset = MediaAsset.objects.filter(pk=int(str(media_id))).first()
+    if asset is None:
+        return
+    storage = LocalMediaStorage()
+    filename = Path(asset.storage_key).name
+    if target_folder_id:
+        safe_folder = _re.sub(r"[^A-Za-z0-9_-]", "", str(target_folder_id).strip())[:64]
+        new_key = (
+            f"groups/group_{group_id}/folder_{safe_folder}/{filename}"
+            if safe_folder
+            else f"groups/group_{group_id}/{filename}"
+        )
+    else:
+        new_key = f"groups/group_{group_id}/{filename}"
+    if new_key == asset.storage_key:
+        return
+    old_path = storage.root / asset.storage_key
+    new_path = storage.resolve_safe_path(new_key)
+    if old_path.exists():
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.replace(old_path, new_path)
+        except PermissionError:
+            return
+    asset.storage_key = new_key
+    asset.save(update_fields=["storage_key"])
 
 
 class AdminGroupMonitoringView(APIView):

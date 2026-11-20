@@ -19,8 +19,8 @@ class Command(BaseCommand):
         storage = LocalMediaStorage()
         root = storage.root
 
-        # Collect asset IDs referenced in group_materials/*.json
-        group_json_assets: dict[int, int] = {}
+        # Collect asset IDs referenced in group_materials/*.json -> (group_id, folder_id)
+        group_json_assets: dict[int, tuple[int, str | None]] = {}
         gm_dir = root / "group_materials"
         if gm_dir.exists():
             for jf in gm_dir.glob("group_*.json"):
@@ -30,12 +30,13 @@ class Command(BaseCommand):
                     for f in data.get("rootFiles", []):
                         aid = f.get("mediaAssetId") or f.get("mediaId")
                         if aid and str(aid).isdigit():
-                            group_json_assets[int(aid)] = gid
+                            group_json_assets[int(aid)] = (gid, None)
                     for fld in data.get("folders", []):
+                        fid = str(fld.get("id") or "").strip() or None
                         for f in fld.get("files", []):
                             aid = f.get("mediaAssetId") or f.get("mediaId")
                             if aid and str(aid).isdigit():
-                                group_json_assets[int(aid)] = gid
+                                group_json_assets[int(aid)] = (gid, fid)
                 except Exception:
                     continue
 
@@ -98,7 +99,14 @@ class Command(BaseCommand):
                     gid = chosen.group_renewal_cycle.training_group_id
                     target_prefix = f"groups/group_{gid}"
             elif asset.id in group_json_assets:
-                target_prefix = f"groups/group_{group_json_assets[asset.id]}"
+                gid, fid = group_json_assets[asset.id]
+                if fid:
+                    import re as _re
+
+                    safe_fid = _re.sub(r"[^A-Za-z0-9_-]", "", fid)[:64]
+                    target_prefix = f"groups/group_{gid}/folder_{safe_fid}" if safe_fid else f"groups/group_{gid}"
+                else:
+                    target_prefix = f"groups/group_{gid}"
             else:
                 # Orphan asset (0 references everywhere) -> purge cleanly
                 old_key = asset.storage_key
