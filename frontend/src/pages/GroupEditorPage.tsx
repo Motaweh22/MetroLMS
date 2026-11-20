@@ -28,6 +28,7 @@ import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { FormInput } from '@/shared/ui/FormInput';
 import { useToast } from '@/shared/ui/Toast';
 import { useUnsavedChangesGuard } from '@/core/navigation/useUnsavedChangesGuard';
@@ -170,6 +171,9 @@ export const GroupEditorPage: React.FC = () => {
   const [adminStatus, setAdminStatus] = useState<GroupAdminStatus>('active');
   const [startDateTime, setStartDateTime] = useState<string>('');
   const [deadlineDateTime, setDeadlineDateTime] = useState<string>('');
+  const [hasNoDeadline, setHasNoDeadline] = useState<boolean>(false);
+  const [isRemoveDeadlineConfirmOpen, setIsRemoveDeadlineConfirmOpen] = useState<boolean>(false);
+  const [isRemovingDeadline, setIsRemovingDeadline] = useState<boolean>(false);
   const [postDeadlinePolicy, setPostDeadlinePolicy] = useState<PostDeadlinePolicy>('keep_no_cert');
   const [enrollmentPolicy, setEnrollmentPolicy] = useState<GroupEnrollmentPolicy>('open');
   const [maxTrainees, setMaxTrainees] = useState<string>('');
@@ -265,7 +269,8 @@ export const GroupEditorPage: React.FC = () => {
       setDescription(data.description || '');
       setAdminStatus(data.adminStatus || 'active');
       setStartDateTime(toDatetimeLocal(data.startDateTime));
-      setDeadlineDateTime(toDatetimeLocal(data.deadlineDateTime));
+      setDeadlineDateTime(data.deadlineDateTime ? toDatetimeLocal(data.deadlineDateTime) : '');
+      setHasNoDeadline(!data.deadlineDateTime);
       setPostDeadlinePolicy(data.postDeadlinePolicy || 'keep_no_cert');
       setEnrollmentPolicy(data.enrollmentPolicy || 'open');
       setMaxTrainees(data.maxTrainees !== null && data.maxTrainees !== undefined ? String(data.maxTrainees) : '');
@@ -434,11 +439,11 @@ export const GroupEditorPage: React.FC = () => {
       errs.startDateTime = 'تاريخ بداية المجموعة مطلوب';
     }
 
-    if (!deadlineDateTime) {
-      errs.deadlineDateTime = 'الموعد النهائي للمجموعة مطلوب';
+    if (!hasNoDeadline && !deadlineDateTime) {
+      errs.deadlineDateTime = 'الموعد النهائي للمجموعة مطلوب (أو فعّل خيار مجموعة مفتوحة بدون موعد انتهاء)';
     }
 
-    if (startDateTime && deadlineDateTime) {
+    if (!hasNoDeadline && startDateTime && deadlineDateTime) {
       const startMs = new Date(startDateTime).getTime();
       const deadlineMs = new Date(deadlineDateTime).getTime();
       if (deadlineMs <= startMs) {
@@ -505,7 +510,7 @@ export const GroupEditorPage: React.FC = () => {
       name: name.trim(),
       description: description.trim(),
       startDateTime: toIsoString(startDateTime),
-      deadlineDateTime: toIsoString(deadlineDateTime),
+      deadlineDateTime: hasNoDeadline || !deadlineDateTime ? null : toIsoString(deadlineDateTime),
       postDeadlinePolicy,
       adminStatus,
       enrollmentPolicy,
@@ -529,7 +534,7 @@ export const GroupEditorPage: React.FC = () => {
 
     try {
       if (isCreateMode && !loadedGroup) {
-        const created = await groupsApi.createGroup(payload);
+        const created = await groupsApi.createGroup(payload as any);
         if ((created as any)?.approvalRequired) {
           setIsDirty(false);
           toast.info(
@@ -550,7 +555,10 @@ export const GroupEditorPage: React.FC = () => {
         );
       } else if (loadedGroup || groupId) {
         const targetId = loadedGroup?.id || groupId!;
-        const updated = await groupsApi.updateGroup(targetId, payload);
+        if (hasNoDeadline && loadedGroup?.deadlineDateTime) {
+          await groupsApi.removeGroupDeadline(targetId);
+        }
+        const updated = await groupsApi.updateGroup(targetId, payload as any);
         if ((updated as any)?.approvalRequired) {
           setIsDirty(false);
           toast.info(
@@ -1058,19 +1066,58 @@ export const GroupEditorPage: React.FC = () => {
 
                   {/* Deadline Date */}
                   <div className="space-y-2">
-                    <label htmlFor="group-deadline-input" className="block text-xs font-bold text-text">
-                      الموعد النهائي العام للاستحقاق <span className="text-danger">*</span>
-                    </label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label htmlFor="group-deadline-input" className="block text-xs font-bold text-text">
+                        الموعد النهائي العام للاستحقاق {!hasNoDeadline && <span className="text-danger">*</span>}
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={hasNoDeadline}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            if (
+                              checked &&
+                              !isCreateMode &&
+                              loadedGroup?.groupType === 'reminder' &&
+                              autoRenewalEnabled
+                            ) {
+                              setIsRemoveDeadlineConfirmOpen(true);
+                              return;
+                            }
+                            setHasNoDeadline(checked);
+                            setIsDirty(true);
+                            setSubmitError(null);
+                            if (checked) {
+                              setDeadlineDateTime('');
+                              setAutoRenewalEnabled(false);
+                            }
+                          }}
+                          className="w-3.5 h-3.5 accent-primary rounded"
+                          data-testid="group-no-deadline-toggle"
+                        />
+                        <span>مجموعة مفتوحة (بدون موعد انتهاء)</span>
+                      </label>
+                    </div>
                     <input
                       id="group-deadline-input"
                       type="datetime-local"
-                      value={deadlineDateTime}
-                      onChange={(e) => handleFieldChange(setDeadlineDateTime)(e.target.value)}
-                      className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all ${
+                      value={hasNoDeadline ? '' : deadlineDateTime}
+                      disabled={hasNoDeadline}
+                      onChange={(e) => {
+                        setHasNoDeadline(false);
+                        handleFieldChange(setDeadlineDateTime)(e.target.value);
+                      }}
+                      className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                         errors.deadlineDateTime ? 'border-danger' : 'border-border'
                       }`}
                       data-testid="group-deadline-input"
                     />
+                    {hasNoDeadline && (
+                      <p className="text-[11px] text-text-muted" data-testid="group-no-deadline-note">
+                        هذه المجموعة مفتوحة ومستمرة بدون موعد انتهاء محدد.
+                      </p>
+                    )}
                     {errors.deadlineDateTime && (
                       <span className="text-xs text-danger flex items-center gap-1 font-medium">
                         <Icon name="alert" size="sm" />
@@ -1103,6 +1150,7 @@ export const GroupEditorPage: React.FC = () => {
                     type="checkbox"
                     id="auto-renewal-toggle"
                     checked={autoRenewalEnabled}
+                    disabled={hasNoDeadline}
                     onChange={(e) => {
                       const enabled = e.target.checked;
                       handleFieldChange(setAutoRenewalEnabled)(enabled);
@@ -1110,7 +1158,7 @@ export const GroupEditorPage: React.FC = () => {
                         handleFieldChange(setRenewalIntervalDays)('30');
                       }
                     }}
-                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer accent-primary"
+                    className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer accent-primary disabled:opacity-50 disabled:cursor-not-allowed"
                     data-testid="auto-renewal-toggle"
                   />
                   <div>
@@ -1121,7 +1169,9 @@ export const GroupEditorPage: React.FC = () => {
                       تفعيل التجديد الدوري الآلي للمجموعة التدريبية
                     </label>
                     <span className="text-[11px] text-text-muted block mt-0.5">
-                      إنشاء مجموعة تدريبية جديدة تلقائياً بنفس المتدربين والمقررات عند حلول موعد الاستحقاق المجدول
+                      {hasNoDeadline
+                        ? 'يتطلب التجديد الدوري الآلي تحديد موعد انتهاء أولاً.'
+                        : 'إنشاء مجموعة تدريبية جديدة تلقائياً بنفس المتدربين والمقررات عند حلول موعد الاستحقاق المجدول'}
                     </span>
                   </div>
                 </div>
@@ -1635,6 +1685,36 @@ export const GroupEditorPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* INV-DOM10-10 Option A Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isRemoveDeadlineConfirmOpen}
+        title="إزالة موعد الانتهاء وإلغاء التجديد التلقائي"
+        message="هذه المجموعة تعمل حاليًا في وضع التذكير والتجديد المتكرر. إزالة موعد الانتهاء ستؤدي إلى إلغاء التجديد التلقائي، مع استمرار المجموعة دون تاريخ انتهاء. هل تريد المتابعة؟"
+        confirmLabel="تأكيد وإلغاء التجديد التلقائي"
+        cancelLabel="إلغاء"
+        variant="warning"
+        isConfirming={isRemovingDeadline}
+        onCancel={() => setIsRemoveDeadlineConfirmOpen(false)}
+        onConfirm={async () => {
+          if (!loadedGroup) return;
+          setIsRemovingDeadline(true);
+          try {
+            const updated = await groupsApi.removeGroupDeadline(loadedGroup.id);
+            setLoadedGroup((prev) => (prev ? { ...prev, ...updated } : updated));
+            setHasNoDeadline(true);
+            setDeadlineDateTime('');
+            setAutoRenewalEnabled(false);
+            setIsDirty(false);
+            setIsRemoveDeadlineConfirmOpen(false);
+            toast.success('تمت إزالة موعد الانتهاء وتعطيل التجديد التلقائي مع الإبقاء على تصنيف المجموعة التذكيري.');
+          } catch {
+            toast.error('تعذر إزالة موعد الانتهاء.');
+          } finally {
+            setIsRemovingDeadline(false);
+          }
+        }}
+      />
     </div>
   );
 };

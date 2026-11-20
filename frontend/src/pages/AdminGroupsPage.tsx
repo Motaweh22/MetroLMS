@@ -515,7 +515,11 @@ export const AdminGroupsPage: React.FC = () => {
 
                       {/* Dates */}
                       <td className="py-3.5 px-3 whitespace-nowrap text-xs text-text-muted">
-                        <div>إلى {formatDateAr(g.deadlineDateTime)}</div>
+                        <div>
+                          {g.deadlineDateTime
+                            ? `إلى ${formatDateAr(g.deadlineDateTime)}`
+                            : 'مفتوحة (بدون موعد انتهاء)'}
+                        </div>
                         <div className="text-[10px] text-text-muted/80">{g.timeRemainingText}</div>
                       </td>
 

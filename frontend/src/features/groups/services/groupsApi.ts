@@ -669,4 +669,21 @@ export const groupsApi = {
       ...options,
     });
   },
+
+  /**
+   * Remove group deadline & disable auto-renewal (INV-DOM10-10 Option A)
+   */
+  async removeGroupDeadline(
+    groupId: string,
+    options?: RequestOptions
+  ): Promise<TrainingGroup> {
+    const res = await apiClient<TrainingGroup | { group: TrainingGroup }>(
+      `/api/admin/groups/${encodeURIComponent(groupId)}/deadline`,
+      {
+        method: 'DELETE',
+        ...options,
+      }
+    );
+    return 'group' in res ? res.group : res;
+  },
 };

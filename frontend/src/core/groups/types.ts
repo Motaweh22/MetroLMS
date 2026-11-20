@@ -63,9 +63,9 @@ export interface GroupRenewalCycle {
   cycleNumber: number; // 1, 2, 3...
   title: string; // e.g. "دورة تدريب أبريل - مايو 2026"
   name?: string;
-  status: 'active' | 'completed' | 'archived';
+  status: 'active' | 'completed' | 'archived' | 'cancelled';
   startDateTime: string;
-  deadlineDateTime: string;
+  deadlineDateTime?: string | null;
   postDeadlinePolicy?: PostDeadlinePolicy;
   courses: GroupCycleCourseAssignment[];
   traineeIds: string[];
@@ -218,7 +218,7 @@ export interface TrainingGroup {
   /** Dynamically resolved instructor contact details (resolved from user directory at read time) */
   instructors?: GroupInstructorDTO[];
   startDateTime: string;
-  deadlineDateTime: string;
+  deadlineDateTime?: string | null;
   postDeadlinePolicy: PostDeadlinePolicy;
   resources: GroupResource[];
   // Increment 10 Extensions:
@@ -244,7 +244,7 @@ export interface TrainingGroup {
 export interface EffectiveCourseSettings {
   courseId: string;
   startDateTime: string;
-  deadlineDateTime: string;
+  deadlineDateTime?: string | null;
   effectiveStartDateTime: string;
   effectiveDeadlineDateTime: string;
   postDeadlinePolicy: PostDeadlinePolicy;
