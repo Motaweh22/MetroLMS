@@ -797,7 +797,11 @@ export const AdminGroupsPage: React.FC = () => {
                             {Number(g.averageProgressPercent ?? 0) || 0}%
                           </span>
                         </div>
-                        <ProgressBar value={Number(g.averageProgressPercent ?? 0) || 0} size="sm" />
+                        <ProgressBar
+                          value={Number(g.averageProgressPercent ?? 0) || 0}
+                          size="sm"
+                          showPercentage={false}
+                        />
                       </td>
 
                       {/* Actions */}
