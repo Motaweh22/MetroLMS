@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import {
   profileApi,
   type PublicUserOverviewResponse,
@@ -16,6 +17,7 @@ import type { UserRole } from '@/core/auth/types';
 export const MemberProfilePage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
 
   const [data, setData] = useState<PublicUserOverviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,6 +70,11 @@ export const MemberProfilePage: React.FC = () => {
 
   const { user, overview } = data;
   const roleLabel = ROLE_CANONICAL_LABELS_AR[user.role as UserRole] || user.role;
+  const canViewFullAdminProfile =
+    currentUser?.role === 'developer' ||
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'assistant_admin';
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-5xl mx-auto" data-testid="member-profile-page">
@@ -83,6 +90,17 @@ export const MemberProfilePage: React.FC = () => {
           <span>/</span>
           <span className="text-text-heading font-bold">الملف العام للعضو</span>
         </div>
+
+        {canViewFullAdminProfile && (
+          <Link
+            to={`/admin/users/${encodeURIComponent(user.id)}`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/40 bg-primary/5 text-primary text-xs font-bold hover:bg-primary/10 transition-colors"
+            data-testid="open-full-admin-profile-btn"
+          >
+            <Icon name="shield" size="sm" />
+            <span>عرض الملف الإداري الكامل</span>
+          </Link>
+        )}
       </div>
 
       {/* Non-Sensitive Public Identity Card */}
