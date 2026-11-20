@@ -81,6 +81,14 @@ def _sync_course_audience(course: Course, data: dict) -> None:
         for lid in valid_line_ids:
             CourseAudienceMetroLine.objects.create(course=course, metro_line_id=lid)
 
+    if "targetLeadershipTitles" in data and isinstance(data.get("targetLeadershipTitles"), list):
+        from apps.courses.models import CourseAudienceLeadership
+
+        titles = [str(x).strip() for x in data["targetLeadershipTitles"] if str(x).strip()]
+        CourseAudienceLeadership.objects.filter(course=course).delete()
+        for title in dict.fromkeys(titles):
+            CourseAudienceLeadership.objects.create(course=course, leadership_title=title[:100])
+
 
 class CourseCatalogListView(APIView):
     """GET /api/courses — Audience-filtered catalog for trainees; full catalog for staff."""
@@ -270,6 +278,9 @@ class LecturerCourseDetailView(APIView):
 
             CourseAudienceDepartment.objects.filter(course=course).delete()
             CourseAudienceJobTitle.objects.filter(course=course).delete()
+            from apps.courses.models import CourseAudienceLeadership
+
+            CourseAudienceLeadership.objects.filter(course=course).delete()
             CourseAudienceMetroLine.objects.filter(course=course).delete()
             CourseAssistantLecturer.objects.filter(course=course).delete()
             CourseQrCode.objects.filter(course=course).delete()
@@ -1011,8 +1022,18 @@ class CourseQrJoinView(APIView):
         )
 
 
+CANONICAL_LEADERSHIP_TITLES = [
+    "رئيس قطاع / رئيس إدارة مركزية",
+    "مدير عام",
+    "مدير إدارة",
+    "رئيس قسم / رئيس وحدة",
+    "مشرف / رئيس وردية",
+    "قائد فريق / منسق",
+]
+
+
 class AdminCourseVisibilityCatalogView(APIView):
-    """GET /api/admin/course-visibility — Courses, Departments, and Job Titles visibility matrix."""
+    """GET /api/admin/course-visibility — Courses, Departments, Job Titles, and Leadership Titles visibility matrix."""
 
     permission_classes = [IsAuthenticated]
 
@@ -1024,7 +1045,11 @@ class AdminCourseVisibilityCatalogView(APIView):
                 status.HTTP_403_FORBIDDEN,
             )
 
-        from apps.courses.models import CourseAudienceDepartment, CourseAudienceJobTitle
+        from apps.courses.models import (
+            CourseAudienceDepartment,
+            CourseAudienceJobTitle,
+            CourseAudienceLeadership,
+        )
         from apps.organization.models import JobTitle, OrganizationalDepartment
 
         dept_map: dict[int, list[str]] = {}
@@ -1035,6 +1060,10 @@ class AdminCourseVisibilityCatalogView(APIView):
         for row in CourseAudienceJobTitle.objects.all().values("course_id", "job_title_id"):
             job_map.setdefault(row["course_id"], []).append(str(row["job_title_id"]))
 
+        leadership_map: dict[int, list[str]] = {}
+        for row in CourseAudienceLeadership.objects.all().values("course_id", "leadership_title"):
+            leadership_map.setdefault(row["course_id"], []).append(str(row["leadership_title"]))
+
         courses_data = [
             {
                 "id": str(c.id),
@@ -1043,6 +1072,7 @@ class AdminCourseVisibilityCatalogView(APIView):
                 "accessMode": c.access_mode,
                 "targetDepartmentIds": dept_map.get(c.id, []),
                 "targetJobTitleIds": job_map.get(c.id, []),
+                "targetLeadershipTitles": leadership_map.get(c.id, []),
             }
             for c in Course.objects.exclude(lifecycle_status="Archived").order_by("id")
         ]
@@ -1072,6 +1102,7 @@ class AdminCourseVisibilityCatalogView(APIView):
                 "courses": courses_data,
                 "departments": departments_data,
                 "jobTitles": job_titles_data,
+                "leadershipTitles": CANONICAL_LEADERSHIP_TITLES,
             }
         )
 
@@ -1097,7 +1128,11 @@ class AdminCourseVisibilityUpdateView(APIView):
             )
 
         from django.db import transaction
-        from apps.courses.models import CourseAudienceDepartment, CourseAudienceJobTitle
+        from apps.courses.models import (
+            CourseAudienceDepartment,
+            CourseAudienceJobTitle,
+            CourseAudienceLeadership,
+        )
         from apps.governance.services.governance_service import record_audit_log
 
         with transaction.atomic():
@@ -1110,6 +1145,7 @@ class AdminCourseVisibilityUpdateView(APIView):
                 details_snapshot={
                     "targetDepartmentIds": request.data.get("targetDepartmentIds", []),
                     "targetJobTitleIds": request.data.get("targetJobTitleIds", []),
+                    "targetLeadershipTitles": request.data.get("targetLeadershipTitles", []),
                 },
             )
 
@@ -1121,18 +1157,23 @@ class AdminCourseVisibilityUpdateView(APIView):
             str(x)
             for x in CourseAudienceJobTitle.objects.filter(course=course).values_list("job_title_id", flat=True)
         ]
+        leadership_titles = [
+            str(x)
+            for x in CourseAudienceLeadership.objects.filter(course=course).values_list("leadership_title", flat=True)
+        ]
         return success_response(
             {
                 "courseId": str(course.id),
                 "targetDepartmentIds": dept_ids,
                 "targetJobTitleIds": job_ids,
+                "targetLeadershipTitles": leadership_titles,
                 "message": f"تم تحديث قواعد ظهور الدورة «{course.title}» بنجاح.",
             }
         )
 
 
 class AdminScopeCourseVisibilityUpdateView(APIView):
-    """PUT /api/admin/course-visibility/scope — Assign courses to a department or job title."""
+    """PUT /api/admin/course-visibility/scope — Assign courses to a department, job title, or leadership title."""
 
     permission_classes = [IsAuthenticated]
 
@@ -1147,37 +1188,56 @@ class AdminScopeCourseVisibilityUpdateView(APIView):
         scope_type = str(request.data.get("scopeType") or "").strip()
         raw_scope_id = str(request.data.get("scopeId") or "").strip()
         raw_course_ids = request.data.get("courseIds")
-        if scope_type not in {"department", "job_title"} or not raw_scope_id.isdigit() or not isinstance(raw_course_ids, list):
+        if (
+            scope_type not in {"department", "job_title", "leadership"}
+            or not raw_scope_id
+            or (scope_type in {"department", "job_title"} and not raw_scope_id.isdigit())
+            or not isinstance(raw_course_ids, list)
+        ):
             return error_response(
                 "VALIDATION_ERROR",
                 "بيانات التحديد غير صالحة.",
                 status.HTTP_400_BAD_REQUEST,
             )
 
-        scope_id = int(raw_scope_id)
         selected_course_ids = {int(str(cid)) for cid in raw_course_ids if str(cid).isdigit()}
 
         from django.db import transaction
-        from apps.courses.models import CourseAudienceDepartment, CourseAudienceJobTitle
+        from apps.courses.models import (
+            CourseAudienceDepartment,
+            CourseAudienceJobTitle,
+            CourseAudienceLeadership,
+        )
         from apps.governance.services.governance_service import record_audit_log
 
         with transaction.atomic():
             if scope_type == "department":
+                scope_id = int(raw_scope_id)
                 CourseAudienceDepartment.objects.filter(department_id=scope_id).delete()
                 for cid in selected_course_ids:
                     if Course.objects.filter(pk=cid).exists():
                         CourseAudienceDepartment.objects.create(course_id=cid, department_id=scope_id)
-            else:
+            elif scope_type == "job_title":
+                scope_id = int(raw_scope_id)
                 CourseAudienceJobTitle.objects.filter(job_title_id=scope_id).delete()
                 for cid in selected_course_ids:
                     if Course.objects.filter(pk=cid).exists():
                         CourseAudienceJobTitle.objects.create(course_id=cid, job_title_id=scope_id)
+            else:
+                CourseAudienceLeadership.objects.filter(leadership_title=raw_scope_id).delete()
+                for cid in selected_course_ids:
+                    if Course.objects.filter(pk=cid).exists():
+                        CourseAudienceLeadership.objects.create(course_id=cid, leadership_title=raw_scope_id[:100])
 
             record_audit_log(
                 action="course.scope_visibility_updated",
                 actor=request.user,
-                target_entity_type="Department" if scope_type == "department" else "JobTitle",
-                target_entity_id=str(scope_id),
+                target_entity_type=(
+                    "Department"
+                    if scope_type == "department"
+                    else ("JobTitle" if scope_type == "job_title" else "LeadershipTitle")
+                ),
+                target_entity_id=raw_scope_id,
                 details_snapshot={"courseIds": [str(x) for x in selected_course_ids]},
             )
 
@@ -1185,7 +1245,7 @@ class AdminScopeCourseVisibilityUpdateView(APIView):
             {
                 "updated": True,
                 "scopeType": scope_type,
-                "scopeId": str(scope_id),
+                "scopeId": raw_scope_id,
                 "courseIds": [str(x) for x in selected_course_ids],
                 "message": "تم حفظ تخصيص الكورسات بنجاح.",
             }

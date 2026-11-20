@@ -115,6 +115,7 @@ class User(AbstractBaseUser):
         related_name="users",
     )
     email = models.EmailField(max_length=254, null=True, blank=True)
+    leadership_title = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

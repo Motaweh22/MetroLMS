@@ -24,6 +24,7 @@ export interface CourseVisibilityItem {
   accessMode: string;
   targetDepartmentIds: string[];
   targetJobTitleIds: string[];
+  targetLeadershipTitles?: string[];
 }
 
 export interface OrgDepartmentOption {
@@ -44,6 +45,7 @@ export interface CourseVisibilityCatalogResponse {
   courses: CourseVisibilityItem[];
   departments: OrgDepartmentOption[];
   jobTitles: OrgJobTitleOption[];
+  leadershipTitles?: string[];
 }
 
 export const departmentTracksApi = {
@@ -101,32 +103,34 @@ export const departmentTracksApi = {
   async updateCourseVisibility(
     courseId: string,
     targetDepartmentIds: string[],
-    targetJobTitleIds: string[]
+    targetJobTitleIds: string[],
+    targetLeadershipTitles: string[] = []
   ): Promise<{
     courseId: string;
     targetDepartmentIds: string[];
     targetJobTitleIds: string[];
+    targetLeadershipTitles?: string[];
     message?: string;
   }> {
     return apiClient(
       `/api/admin/course-visibility/course/${encodeURIComponent(courseId)}`,
       {
         method: 'PUT',
-        body: JSON.stringify({ targetDepartmentIds, targetJobTitleIds }),
+        body: JSON.stringify({ targetDepartmentIds, targetJobTitleIds, targetLeadershipTitles }),
       }
     );
   },
 
   /**
-   * Updates assigned courses for a specific department or job title.
+   * Updates assigned courses for a specific department, job title, or leadership title.
    */
   async updateScopeCourseVisibility(
-    scopeType: 'department' | 'job_title',
+    scopeType: 'department' | 'job_title' | 'leadership',
     scopeId: string,
     courseIds: string[]
   ): Promise<{
     updated: boolean;
-    scopeType: 'department' | 'job_title';
+    scopeType: 'department' | 'job_title' | 'leadership';
     scopeId: string;
     courseIds: string[];
     message?: string;

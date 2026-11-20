@@ -28,6 +28,8 @@ export interface ManagedUserDTO {
   phone?: string;
   /** Job title / position */
   jobTitle: string;
+  /** Optional leadership / supervisory title */
+  leadershipTitle?: string;
   /** Organizational unit / department */
   department: string;
   /** Canonical HR / Employee fields */
@@ -63,6 +65,7 @@ export interface CreateUserRequestDTO {
   email?: string;
   phone?: string;
   jobTitle: string;
+  leadershipTitle?: string;
   department: string;
   role: UserRole;
   status?: UserStatus;

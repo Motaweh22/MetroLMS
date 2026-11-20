@@ -373,18 +373,26 @@ def _notify_eligible_trainees_on_publish(course: Course) -> int:
 
 
 def does_user_match_course_audience(user: User, course: Course) -> bool:
-    """Return True if user's dept, job title, or metro line matches course audience targeting."""
+    """Return True if user's dept, job title, metro line, or leadership title matches course audience targeting."""
+    from apps.courses.models import CourseAudienceLeadership
+
     dept_ids = set(CourseAudienceDepartment.objects.filter(course=course).values_list("department_id", flat=True))
     job_ids = set(CourseAudienceJobTitle.objects.filter(course=course).values_list("job_title_id", flat=True))
     line_ids = set(CourseAudienceMetroLine.objects.filter(course=course).values_list("metro_line_id", flat=True))
+    leadership_titles = set(
+        CourseAudienceLeadership.objects.filter(course=course).values_list("leadership_title", flat=True)
+    )
 
     user_depts = set(UserOrganizationalDepartment.objects.filter(user=user).values_list("department_id", flat=True))
     user_jobs = set(user.user_job_titles.values_list("job_title_id", flat=True))
+    user_leadership = (getattr(user, "leadership_title", None) or "").strip()
 
-    if not dept_ids and not job_ids and not line_ids:
+    if not dept_ids and not job_ids and not line_ids and not leadership_titles:
         has_user_org_profile = bool(user.metro_line_id or user_depts or user_jobs)
         return not has_user_org_profile
 
+    if user_leadership and user_leadership in leadership_titles:
+        return True
     if user.metro_line_id in line_ids:
         return True
     if user_depts & dept_ids:

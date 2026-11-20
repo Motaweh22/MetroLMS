@@ -42,6 +42,7 @@ interface FormState {
   serviceEndDate: string;
   metroLineId: string;
   jobTitle: string;
+  leadershipTitle: string;
   department: string;
   role: UserRole;
   status: UserStatus;
@@ -77,6 +78,7 @@ const INITIAL_FORM_STATE: FormState = {
   serviceEndDate: '',
   metroLineId: '',
   jobTitle: '',
+  leadershipTitle: '',
   department: '',
   role: 'user',
   status: 'active',
@@ -320,6 +322,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
         serviceEndDate: formData.serviceEndDate || null,
         metroLineId: formData.metroLineId || undefined,
         jobTitle: formData.jobTitle.trim(),
+        leadershipTitle: formData.leadershipTitle.trim() || undefined,
         department: formData.department.trim(),
         role: formData.role,
         status: formData.status,
@@ -674,6 +677,30 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               </ul>
             )}
             {errors.jobTitle && <span className="text-[11px] text-danger">{errors.jobTitle}</span>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-leadership" className="text-xs font-semibold text-text">
+              الصفة القيادية / الإشرافية <span className="text-[11px] text-text-muted font-normal">(اختياري)</span>
+            </label>
+            <StyledSelect
+              id="add-user-leadership"
+              dataTestId="add-user-leadership-input"
+              disabled={isSubmitting}
+              value={formData.leadershipTitle}
+              onChange={(val) => updateField('leadershipTitle', val)}
+              placeholder="— بدون (فارغ) —"
+              emptyMessage="لا توجد مسميات قيادية"
+              options={[
+                { value: '', label: '— بدون (فارغ) —' },
+                { value: 'رئيس قطاع / رئيس إدارة مركزية', label: 'رئيس قطاع / رئيس إدارة مركزية' },
+                { value: 'مدير عام', label: 'مدير عام' },
+                { value: 'مدير إدارة', label: 'مدير إدارة' },
+                { value: 'رئيس قسم / رئيس وحدة', label: 'رئيس قسم / رئيس وحدة' },
+                { value: 'مشرف / رئيس وردية', label: 'مشرف / رئيس وردية' },
+                { value: 'قائد فريق / منسق', label: 'قائد فريق / منسق' },
+              ]}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">

@@ -66,6 +66,7 @@ class ProfileView(APIView):
         user_data["initials"] = user.full_name[:2] if user.full_name else "م"
         user_data["department"] = dept_name
         user_data["jobTitle"] = job_name
+        user_data["leadershipTitle"] = user.leadership_title or ""
         user_data["nationalId"] = user.national_id
         user_data["dateOfBirth"] = user.date_of_birth.isoformat() if user.date_of_birth else None
         user_data["appointmentDate"] = user.appointment_date.isoformat() if user.appointment_date else None
@@ -145,6 +146,7 @@ class AdminUserListView(APIView):
                 "status": u.status.lower(),
                 "department": dept_map.get(u.id, ""),
                 "jobTitle": job_map.get(u.id, ""),
+                "leadershipTitle": u.leadership_title or "",
                 "nationalId": u.national_id,
                 "dateOfBirth": u.date_of_birth.isoformat() if u.date_of_birth else None,
                 "appointmentDate": u.appointment_date.isoformat() if u.appointment_date else None,
@@ -268,6 +270,10 @@ class AdminUserListView(APIView):
 
         dept_name = str(request.data.get("department") or "").strip()
         job_name = str(request.data.get("jobTitle") or "").strip()
+        leadership_title = str(request.data.get("leadershipTitle") or "").strip() or None
+        if leadership_title is not None:
+            user.leadership_title = leadership_title
+            user.save(update_fields=["leadership_title"])
         dept_obj = None
         if dept_name:
             dept_obj, _ = OrganizationalDepartment.objects.get_or_create(name_ar=dept_name)
@@ -286,6 +292,7 @@ class AdminUserListView(APIView):
                 "status": user.status.lower(),
                 "department": dept_name,
                 "jobTitle": job_name,
+                "leadershipTitle": user.leadership_title or "",
                 "initials": user.full_name[:2] if user.full_name else "م",
             },
             status_code=status.HTTP_201_CREATED,
@@ -397,6 +404,9 @@ class AdminUserDeleteView(APIView):
                     return error_response("VALIDATION_ERROR", "خط المترو غير صالح.", status.HTTP_400_BAD_REQUEST)
                 target.metro_line = line_obj
 
+        if "leadershipTitle" in data:
+            target.leadership_title = str(data.get("leadershipTitle") or "").strip() or None
+
         try:
             target.full_clean()
             target.save()
@@ -445,6 +455,7 @@ class AdminUserDeleteView(APIView):
                 "status": target.status.lower(),
                 "department": dept_out,
                 "jobTitle": job_out,
+                "leadershipTitle": target.leadership_title or "",
                 "nationalId": target.national_id,
                 "dateOfBirth": target.date_of_birth.isoformat() if target.date_of_birth else None,
                 "appointmentDate": target.appointment_date.isoformat() if target.appointment_date else None,

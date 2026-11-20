@@ -201,6 +201,25 @@ class CourseAudienceJobTitle(models.Model):
         ]
 
 
+class CourseAudienceLeadership(models.Model):
+    """M:N Course audience targeting by Leadership / Supervisory Title."""
+
+    id = models.BigAutoField(primary_key=True)
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.DO_NOTHING,
+        db_column="course_id",
+        related_name="audience_leadership_titles",
+    )
+    leadership_title = models.CharField(max_length=100)
+
+    class Meta:
+        db_table = "courses_courseaudienceleadership"
+        constraints = [
+            models.UniqueConstraint(fields=["course", "leadership_title"], name="uq_course_aud_leadership"),
+        ]
+
+
 class CourseAudienceMetroLine(models.Model):
     """M:N Course audience targeting by MetroLine."""
 

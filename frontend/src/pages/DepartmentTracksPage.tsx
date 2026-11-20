@@ -14,7 +14,16 @@ import {
   type OrgJobTitleOption,
 } from '@/features/permissions/services/departmentTracksApi';
 
-type VisibilityViewMode = 'by_course' | 'by_department' | 'by_job_title';
+type VisibilityViewMode = 'by_course' | 'by_department' | 'by_job_title' | 'by_leadership';
+
+const DEFAULT_LEADERSHIP_TITLES = [
+  'رئيس قطاع / رئيس إدارة مركزية',
+  'مدير عام',
+  'مدير إدارة',
+  'رئيس قسم / رئيس وحدة',
+  'مشرف / رئيس وردية',
+  'قائد فريق / منسق',
+];
 
 export const DepartmentTracksPage: React.FC = () => {
   const { user } = useAuth();
@@ -27,6 +36,7 @@ export const DepartmentTracksPage: React.FC = () => {
   const [courses, setCourses] = useState<CourseVisibilityItem[]>([]);
   const [departments, setDepartments] = useState<OrgDepartmentOption[]>([]);
   const [jobTitles, setJobTitles] = useState<OrgJobTitleOption[]>([]);
+  const [leadershipTitles, setLeadershipTitles] = useState<string[]>(DEFAULT_LEADERSHIP_TITLES);
 
   const [viewMode, setViewMode] = useState<VisibilityViewMode>('by_course');
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,12 +45,13 @@ export const DepartmentTracksPage: React.FC = () => {
   const [editingCourse, setEditingCourse] = useState<CourseVisibilityItem | null>(null);
   const [modalDeptIds, setModalDeptIds] = useState<string[]>([]);
   const [modalJobIds, setModalJobIds] = useState<string[]>([]);
+  const [modalLeadershipTitles, setModalLeadershipTitles] = useState<string[]>([]);
   const [modalScopeSearch, setModalScopeSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Modal 2: Edit courses for a specific department or job title
+  // Modal 2: Edit courses for a specific department, job title, or leadership title
   const [editingScope, setEditingScope] = useState<{
-    type: 'department' | 'job_title';
+    type: 'department' | 'job_title' | 'leadership';
     id: string;
     label: string;
   } | null>(null);
@@ -60,6 +71,9 @@ export const DepartmentTracksPage: React.FC = () => {
       setCourses(data.courses || []);
       setDepartments(data.departments || []);
       setJobTitles(data.jobTitles || []);
+      if (data.leadershipTitles && data.leadershipTitles.length > 0) {
+        setLeadershipTitles(data.leadershipTitles);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'تعذر تحميل إعدادات ظهور الكورسات.';
       setError(msg);
@@ -116,6 +130,7 @@ export const DepartmentTracksPage: React.FC = () => {
     setEditingCourse(course);
     setModalDeptIds([...course.targetDepartmentIds]);
     setModalJobIds([...course.targetJobTitleIds]);
+    setModalLeadershipTitles([...(course.targetLeadershipTitles || [])]);
     setModalScopeSearch('');
   };
 
@@ -126,7 +141,8 @@ export const DepartmentTracksPage: React.FC = () => {
       const res = await departmentTracksApi.updateCourseVisibility(
         editingCourse.id,
         modalDeptIds,
-        modalJobIds
+        modalJobIds,
+        modalLeadershipTitles
       );
       setCourses((prev) =>
         prev.map((c) =>
@@ -135,6 +151,7 @@ export const DepartmentTracksPage: React.FC = () => {
                 ...c,
                 targetDepartmentIds: res.targetDepartmentIds,
                 targetJobTitleIds: res.targetJobTitleIds,
+                targetLeadershipTitles: res.targetLeadershipTitles || modalLeadershipTitles,
               }
             : c
         )
@@ -148,9 +165,9 @@ export const DepartmentTracksPage: React.FC = () => {
     }
   };
 
-  // Open Scope Courses Modal (by Department or Job Title)
+  // Open Scope Courses Modal (by Department, Job Title, or Leadership Title)
   const handleOpenScopeModal = (
-    type: 'department' | 'job_title',
+    type: 'department' | 'job_title' | 'leadership',
     id: string,
     label: string
   ) => {
@@ -158,7 +175,9 @@ export const DepartmentTracksPage: React.FC = () => {
       .filter((c) =>
         type === 'department'
           ? c.targetDepartmentIds.includes(id)
-          : c.targetJobTitleIds.includes(id)
+          : type === 'job_title'
+            ? c.targetJobTitleIds.includes(id)
+            : (c.targetLeadershipTitles || []).includes(id)
       )
       .map((c) => c.id);
     setEditingScope({ type, id, label });
@@ -185,10 +204,18 @@ export const DepartmentTracksPage: React.FC = () => {
               targetDepartmentIds: selectedSet.has(c.id) ? [...without, editingScope.id] : without,
             };
           }
-          const without = c.targetJobTitleIds.filter((x) => x !== editingScope.id);
+          if (editingScope.type === 'job_title') {
+            const without = c.targetJobTitleIds.filter((x) => x !== editingScope.id);
+            return {
+              ...c,
+              targetJobTitleIds: selectedSet.has(c.id) ? [...without, editingScope.id] : without,
+            };
+          }
+          const currentLead = c.targetLeadershipTitles || [];
+          const without = currentLead.filter((x) => x !== editingScope.id);
           return {
             ...c,
-            targetJobTitleIds: selectedSet.has(c.id) ? [...without, editingScope.id] : without,
+            targetLeadershipTitles: selectedSet.has(c.id) ? [...without, editingScope.id] : without,
           };
         })
       );
@@ -291,6 +318,11 @@ export const DepartmentTracksPage: React.FC = () => {
               label: `حسب المسمى الوظيفي (${jobTitles.length})`,
               icon: 'user' as const,
             },
+            {
+              id: 'by_leadership',
+              label: `حسب الصفة القيادية (${leadershipTitles.length})`,
+              icon: 'shield' as const,
+            },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -350,6 +382,7 @@ export const DepartmentTracksPage: React.FC = () => {
                   <th className="py-3.5 px-3">الحالة</th>
                   <th className="py-3.5 px-3">الإدارات المسموح لها</th>
                   <th className="py-3.5 px-3">المسميات الوظيفية المسموح لها</th>
+                  <th className="py-3.5 px-3">الصفات القيادية</th>
                   <th className="py-3.5 px-4 text-center">الإجراء</th>
                 </tr>
               </thead>
@@ -397,6 +430,21 @@ export const DepartmentTracksPage: React.FC = () => {
                             {c.targetJobTitleIds.map((jid) => (
                               <Badge key={jid} variant="info" size="sm">
                                 {jobNameMap.get(jid) || jid}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3">
+                        {!c.targetLeadershipTitles || c.targetLeadershipTitles.length === 0 ? (
+                          <Badge variant="neutral" size="sm">
+                            متاح للجميع
+                          </Badge>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {c.targetLeadershipTitles.map((lt) => (
+                              <Badge key={lt} variant="warning" size="sm">
+                                {lt}
                               </Badge>
                             ))}
                           </div>
@@ -492,7 +540,7 @@ export const DepartmentTracksPage: React.FC = () => {
             </table>
           </div>
         </div>
-      ) : (
+      ) : viewMode === 'by_job_title' ? (
         <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse text-xs sm:text-sm" data-testid="visibility-by-job-table">
@@ -565,6 +613,69 @@ export const DepartmentTracksPage: React.FC = () => {
             </table>
           </div>
         </div>
+      ) : (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right border-collapse text-xs sm:text-sm" data-testid="visibility-by-leadership-table">
+              <thead className="bg-bg-alt/60 border-b border-border text-xs text-text-muted font-bold">
+                <tr>
+                  <th className="py-3.5 px-4">الصفة القيادية / الإشرافية</th>
+                  <th className="py-3.5 px-3">الكورسات المخصصة لهذه الصفة</th>
+                  <th className="py-3.5 px-4 text-center">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/70">
+                {leadershipTitles
+                  .filter((lt) => !searchQuery.trim() || lt.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((lt) => {
+                    const assignedCourses = courses.filter((c) =>
+                      (c.targetLeadershipTitles || []).includes(lt)
+                    );
+                    return (
+                      <tr key={lt} className="hover:bg-bg/40 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-text-heading">{lt}</td>
+                        <td className="py-3.5 px-3">
+                          {assignedCourses.length === 0 ? (
+                            <span className="text-xs text-text-muted">
+                              لا توجد كورسات مخصصة خصيصاً لهذه الصفة القيادية
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              <Badge variant="warning" size="sm">
+                                {assignedCourses.length} كورس مخصص
+                              </Badge>
+                              {assignedCourses.slice(0, 4).map((c) => (
+                                <Badge key={c.id} variant="neutral" size="sm">
+                                  {c.title}
+                                </Badge>
+                              ))}
+                              {assignedCourses.length > 4 && (
+                                <Badge variant="neutral" size="sm">
+                                  +{assignedCourses.length - 4} أخرى
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon="edit"
+                            onClick={() => handleOpenScopeModal('leadership', lt, lt)}
+                            data-testid={`edit-leadership-courses-btn-${lt}`}
+                          >
+                            تعديل الكورسات
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Modal 1: Edit Departments & Job Titles for a Course */}
@@ -591,7 +702,7 @@ export const DepartmentTracksPage: React.FC = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Departments Section */}
             <div className="border border-border rounded-xl p-3 space-y-2 bg-bg/30">
               <div className="flex items-center justify-between pb-2 border-b border-border">
@@ -672,6 +783,48 @@ export const DepartmentTracksPage: React.FC = () => {
                           <div className="text-[10px] text-text-muted">{job.departmentNameAr}</div>
                         )}
                       </div>
+                    </label>
+                  ))}
+              </div>
+            </div>
+
+            {/* Leadership Titles Section */}
+            <div className="border border-border rounded-xl p-3 space-y-2 bg-bg/30">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <span className="text-xs font-bold text-text-heading">
+                  الصفات القيادية ({modalLeadershipTitles.length === 0 ? 'الكل' : modalLeadershipTitles.length})
+                </span>
+                {modalLeadershipTitles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setModalLeadershipTitles([])}
+                    className="text-[11px] text-primary hover:underline cursor-pointer"
+                  >
+                    إتاحة للجميع
+                  </button>
+                )}
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-1.5">
+                {leadershipTitles
+                  .filter(
+                    (lt) =>
+                      !modalScopeSearch.trim() ||
+                      lt.toLowerCase().includes(modalScopeSearch.toLowerCase())
+                  )
+                  .map((lt) => (
+                    <label
+                      key={lt}
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-surface cursor-pointer text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={modalLeadershipTitles.includes(lt)}
+                        onChange={() =>
+                          setModalLeadershipTitles((prev) => toggleId(prev, lt))
+                        }
+                        className="h-4 w-4 rounded border-border accent-primary-dark"
+                      />
+                      <span className="text-text">{lt}</span>
                     </label>
                   ))}
               </div>
