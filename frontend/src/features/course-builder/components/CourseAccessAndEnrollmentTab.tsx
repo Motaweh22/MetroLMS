@@ -66,7 +66,7 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
   course,
   onChange,
 }) => {
-  const { showToast } = useToast();
+  const toast = useToast();
   const accessMode: CourseAccessMode = course.accessMode || 'targeted';
 
   const [enrollments, setEnrollments] = useState<CourseEnrollmentMember[]>([]);
@@ -159,9 +159,9 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
       const res = await coursesApi.bulkAddCourseEnrollments(course.id, selectedUserIds);
       setEnrollments(res.enrollments);
       setIsAddMemberOpen(false);
-      showToast(`تمت إضافة ${res.addedCount} عضو(أعضاء) إلى المقرر بنجاح.`, 'success');
+      toast.success(`تمت إضافة ${res.addedCount} عضو(أعضاء) إلى المقرر بنجاح.`);
     } catch {
-      showToast('تعذر إضافة الأعضاء المحددين، يرجى المحاولة مرة أخرى.', 'error');
+      toast.error('تعذر إضافة الأعضاء المحددين، يرجى المحاولة مرة أخرى.');
     } finally {
       setIsAddingMembers(false);
     }
@@ -172,9 +172,9 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
       await coursesApi.revokeDirectCourseEnrollment(course.id, userId);
       const updated = await coursesApi.getCourseEnrollments(course.id);
       setEnrollments(updated);
-      showToast('تمت إزالة التسجيل المباشر للعضو.', 'success');
+      toast.success('تمت إزالة التسجيل المباشر للعضو.');
     } catch {
-      showToast('تعذر إزالة العضو.', 'error');
+      toast.error('تعذر إزالة العضو.');
     }
   };
 
@@ -197,9 +197,9 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
       setQrSettings(updated);
       setExpiresAtInput(toLocalDateTimeInput(updated.expiresAt));
       onChange({ ...course, qrSettings: updated });
-      showToast('تم حفظ إعدادات رمز QR بنجاح.', 'success');
+      toast.success('تم حفظ إعدادات رمز QR بنجاح.');
     } catch {
-      showToast('تعذر حفظ إعدادات رمز QR.', 'error');
+      toast.error('تعذر حفظ إعدادات رمز QR.');
     } finally {
       setIsSavingQr(false);
     }
@@ -211,9 +211,9 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
       const updated = await coursesApi.rotateCourseQrToken(course.id);
       setQrSettings(updated);
       onChange({ ...course, qrSettings: updated });
-      showToast('تم توليد رمز QR جديد وإبطال الرمز السابق.', 'success');
+      toast.success('تم توليد رمز QR جديد وإبطال الرمز السابق.');
     } catch {
-      showToast('تعذر إعادة توليد رمز QR.', 'error');
+      toast.error('تعذر إعادة توليد رمز QR.');
     } finally {
       setIsRotatingQr(false);
     }
@@ -226,9 +226,9 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
   const handleCopyQrUrl = async () => {
     try {
       await navigator.clipboard.writeText(qrJoinUrl);
-      showToast('تم نسخ رابط رمز QR.', 'success');
+      toast.success('تم نسخ رابط رمز QR.');
     } catch {
-      showToast('تعذر نسخ الرابط تلقائياً.', 'warning');
+      toast.warning('تعذر نسخ الرابط تلقائياً.');
     }
   };
 

@@ -11,7 +11,7 @@ import { useToast } from '@/shared/ui/Toast';
 export const CourseQrJoinPage: React.FC = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { showToast } = useToast();
+  const toast = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
@@ -67,7 +67,7 @@ export const CourseQrJoinPage: React.FC = () => {
     try {
       const res = await coursesApi.joinCourseByQr(token);
       if (res.enrolled) {
-        showToast('تم تسجيلك في المقرر بنجاح عبر رمز QR.', 'success');
+        toast.success('تم تسجيلك في المقرر بنجاح عبر رمز QR.');
       }
       navigate(`/courses/${encodeURIComponent(res.courseId)}`, { replace: true });
     } catch (err: any) {
