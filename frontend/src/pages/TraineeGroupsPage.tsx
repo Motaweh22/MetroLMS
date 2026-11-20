@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { groupsApi } from '@/features/groups/services/groupsApi';
 import type { TraineeGroupItemDTO } from '@/core/groups/dtos';
@@ -18,9 +18,11 @@ export const TraineeGroupsPage: React.FC = () => {
   const [groups, setGroups] = useState<TraineeGroupItemDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterTab, setFilterTab] = useState<'all' | 'active' | 'reminder' | 'scheduled' | 'expired'>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Scoped Assistant Lecturer: limit visible groups strictly to the assigned group
-  const visibleGroups = React.useMemo(() => {
+  const visibleGroups = useMemo(() => {
     if (previewRole === 'assistant_lecturer' && scopedAssignmentPreview?.groupId) {
       return groups.filter(
         (g) => g.id.toLowerCase() === scopedAssignmentPreview.groupId.toLowerCase()
@@ -28,6 +30,32 @@ export const TraineeGroupsPage: React.FC = () => {
     }
     return groups;
   }, [groups, previewRole, scopedAssignmentPreview]);
+
+  const tabCounts = useMemo(() => {
+    return {
+      all: visibleGroups.length,
+      active: visibleGroups.filter((g) => g.operationalStatus === 'active').length,
+      reminder: visibleGroups.filter((g) => g.groupType === 'reminder').length,
+      scheduled: visibleGroups.filter((g) => g.operationalStatus === 'scheduled').length,
+      expired: visibleGroups.filter((g) => g.operationalStatus === 'expired').length,
+    };
+  }, [visibleGroups]);
+
+  const filteredGroups = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return visibleGroups.filter((g) => {
+      if (filterTab === 'active' && g.operationalStatus !== 'active') return false;
+      if (filterTab === 'reminder' && g.groupType !== 'reminder') return false;
+      if (filterTab === 'scheduled' && g.operationalStatus !== 'scheduled') return false;
+      if (filterTab === 'expired' && g.operationalStatus !== 'expired') return false;
+      if (q) {
+        const matchName = g.name.toLowerCase().includes(q);
+        const matchDesc = (g.description || '').toLowerCase().includes(q);
+        if (!matchName && !matchDesc) return false;
+      }
+      return true;
+    });
+  }, [visibleGroups, filterTab, searchQuery]);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -75,6 +103,64 @@ export const TraineeGroupsPage: React.FC = () => {
           >
             {visibleGroups.length}
           </span>
+        </div>
+      </div>
+
+      {/* Unified Filter & Search Toolbar (always visible like MyCoursesPage) */}
+      <div
+        className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-surface p-3 rounded-xl border border-border shadow-xs"
+        data-testid="trainee-groups-toolbar"
+      >
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {[
+            { id: 'all', label: `الكل (${tabCounts.all})` },
+            { id: 'active', label: `نشطة (${tabCounts.active})` },
+            { id: 'reminder', label: `برامج تذكيرية (${tabCounts.reminder})` },
+            { id: 'scheduled', label: `مجدولة (${tabCounts.scheduled})` },
+            { id: 'expired', label: `منتهية (${tabCounts.expired})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() =>
+                setFilterTab(tab.id as 'all' | 'active' | 'reminder' | 'scheduled' | 'expired')
+              }
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                filterTab === tab.id
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'bg-bg text-text-muted hover:text-text hover:bg-bg-alt'
+              }`}
+              data-testid={`trainee-groups-filter-${tab.id}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative w-full md:w-72">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="بحث في المجموعات التدريبية..."
+            className="w-full text-xs pr-9 pl-8 py-2 bg-bg border border-border rounded-lg text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            data-testid="trainee-groups-search-input"
+          />
+          <Icon
+            name="search"
+            size="sm"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text cursor-pointer"
+              aria-label="مسح البحث"
+            >
+              <Icon name="close" size="sm" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -162,12 +248,30 @@ export const TraineeGroupsPage: React.FC = () => {
         </Card>
       )}
 
+      {/* Empty State: Filter Returned Zero */}
+      {!isLoading && !error && visibleGroups.length > 0 && filteredGroups.length === 0 && (
+        <Card variant="default" className="text-center py-10 px-4">
+          <p className="text-text-muted text-sm">لا توجد مجموعات تطابق معايير البحث أو التصفية الحالية.</p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setFilterTab('all');
+              setSearchQuery('');
+            }}
+            className="mt-2 text-primary font-bold"
+          >
+            إعادة تعيين الفلاتر
+          </Button>
+        </Card>
+      )}
+
       {/* Primary Content: 3 Sections in Canonical Order */}
-      {!isLoading && !error && visibleGroups.length > 0 && (
+      {!isLoading && !error && filteredGroups.length > 0 && (
         <div className="space-y-8" data-testid="trainee-groups-content">
           {/* Section 1: Persistent Groups Carousel */}
           <section aria-label="شريط المجموعات التدريبية" data-testid="section-carousel">
-            <TraineeGroupsCarousel groups={visibleGroups} />
+            <TraineeGroupsCarousel groups={filteredGroups} />
           </section>
 
           {/* Section 2: Three Summary Cards */}
@@ -188,7 +292,7 @@ export const TraineeGroupsPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <TraineeGroupsDetailedTable groups={visibleGroups} />
+            <TraineeGroupsDetailedTable groups={filteredGroups} />
           </section>
         </div>
       )}
