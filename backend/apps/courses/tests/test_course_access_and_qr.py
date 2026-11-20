@@ -296,3 +296,33 @@ class CourseAccessAndQrTests(APITestCase):
                 title__contains="تم سحب صلاحية الوصول إلى مقرر",
             ).exists()
         )
+
+    def test_delete_course_cascade_by_owner_or_admin(self) -> None:
+        from apps.courses.models import Course
+
+        temp_course = create_course(
+            actor=self.lecturer,
+            title="دورة مؤقتة للحذف",
+            description="وصف",
+            course_type="main",
+            primary_lecturer=self.lecturer,
+        )
+        save_course_draft(
+            actor=self.lecturer,
+            course=temp_course,
+            title_snapshot="دورة مؤقتة للحذف",
+            modules_payload=[{"title": "وحدة", "order": 1, "items": [{"title": "درس", "itemType": "video", "order": 1}]}],
+        )
+
+        # Non-owner trainee cannot delete
+        self.client.force_authenticate(user=self.trainee1)
+        self.assertEqual(
+            self.client.delete(f"/api/lecturer/courses/{temp_course.id}").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        # Owner lecturer can delete
+        self.client.force_authenticate(user=self.lecturer)
+        resp_del = self.client.delete(f"/api/lecturer/courses/{temp_course.id}")
+        self.assertEqual(resp_del.status_code, status.HTTP_200_OK)
+        self.assertFalse(Course.objects.filter(pk=temp_course.id).exists())

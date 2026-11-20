@@ -70,4 +70,16 @@ export const builderApi = {
       }
     );
   },
+
+  /**
+   * Permanently delete a course (Owner Lecturer or Admin)
+   */
+  async deleteCourse(courseId: string): Promise<{ deleted: boolean; message?: string }> {
+    return apiClient<{ deleted: boolean; message?: string }>(
+      `/api/lecturer/courses/${encodeURIComponent(courseId)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  },
 };

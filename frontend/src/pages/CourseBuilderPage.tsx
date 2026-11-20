@@ -102,6 +102,8 @@ export const CourseBuilderPage: React.FC = () => {
 
   // Confirmation dialogs
   const [isResetLabDialogOpen, setIsResetLabDialogOpen] = useState<boolean>(false);
+  const [isDeleteCourseDialogOpen, setIsDeleteCourseDialogOpen] = useState<boolean>(false);
+  const [isDeletingCourse, setIsDeletingCourse] = useState<boolean>(false);
 
   // Review Feedback & Dual-Snapshot Diff State (Phase 7 & Increment 9)
   const [isDiffModalOpen, setIsDiffModalOpen] = useState<boolean>(false);
@@ -537,6 +539,21 @@ export const CourseBuilderPage: React.FC = () => {
             معاينة الدورة
           </Button>
 
+          {!course.isTestLab && (isDirectPublisher || (user && course.lecturerId === user.id)) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon="trash"
+              onClick={() => setIsDeleteCourseDialogOpen(true)}
+              disabled={isDeletingCourse || isSaving}
+              className="text-xs font-semibold text-danger border-danger/40 hover:bg-danger/10"
+              data-testid="builder-delete-course-btn"
+            >
+              حذف الدورة
+            </Button>
+          )}
+
           {!isPendingReview && (
             <Button
               type="button"
@@ -922,6 +939,37 @@ export const CourseBuilderPage: React.FC = () => {
           isExternalResource={false}
         />
       )}
+
+      {/* Delete Course Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isDeleteCourseDialogOpen}
+        title="تأكيد حذف الدورة التدريبية"
+        message={`هل أنت متأكد من حذف الدورة «${course.title}» نهائياً؟ سيتم حذف محتوى الدورة والتسجيلات المرتبطة بها (ولا يمكن حذف دورة صدرت لها شهادات معتمدة).`}
+        confirmLabel="حذف الدورة نهائياً"
+        cancelLabel="إلغاء"
+        variant="danger"
+        isConfirming={isDeletingCourse}
+        testId="delete-course-confirm-dialog"
+        confirmTestId="confirm-delete-course-btn"
+        onCancel={() => setIsDeleteCourseDialogOpen(false)}
+        onConfirm={async () => {
+          setIsDeletingCourse(true);
+          try {
+            const res = await builderApi.deleteCourse(course.id);
+            setIsDeleteCourseDialogOpen(false);
+            toast.success(res?.message || 'تم حذف الدورة التدريبية بنجاح.');
+            navigate('/lecturer/courses', { replace: true });
+          } catch (err: unknown) {
+            const msg =
+              err instanceof Error && err.message
+                ? err.message
+                : 'تعذر حذف الدورة التدريبية.';
+            toast.error(msg);
+          } finally {
+            setIsDeletingCourse(false);
+          }
+        }}
+      />
 
       {/* Unified Unsaved Changes Leave Confirmation Dialog */}
       {guardDialog}

@@ -186,6 +186,98 @@ class LecturerCourseDetailView(APIView):
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعديل هذه الدورة.", status.HTTP_403_FORBIDDEN)
         return success_response({"course": CourseSerializer(course).data})
 
+    def delete(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_allowed = (
+            request.user.role_id in {"developer", "super_admin", "admin"}
+            or course.primary_lecturer_id == request.user.id
+        )
+        if not is_allowed:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية حذف هذه الدورة.", status.HTTP_403_FORBIDDEN)
+
+        from django.db import transaction
+        from django.db.models import Q
+        from apps.courses.models import (
+            CourseAssistantLecturer,
+            CourseDraft,
+            LessonItem,
+            Module,
+            PublishedCourseVersion,
+            QuizDefinition,
+            WorkingNote,
+        )
+        from apps.governance.services.governance_service import record_audit_log
+        from apps.groups.models import GroupCourseAssignment
+        from apps.learning.models import (
+            CertificateRecord,
+            CourseAttempt,
+            Enrollment,
+            EnrollmentSourceGrant,
+            LessonProgress,
+        )
+        from apps.media.models import MediaContentReference
+
+        if CertificateRecord.objects.filter(published_version__course=course).exists():
+            return error_response(
+                "COURSE_HAS_CERTIFICATES",
+                "لا يمكن حذف مقرر صدرت له شهادات معتمدة؛ يرجى أرشفته بدلاً من الحذف.",
+                status.HTTP_409_CONFLICT,
+            )
+        if Course.objects.filter(main_course=course).exists():
+            return error_response(
+                "COURSE_HAS_REMINDERS",
+                "لا يمكن حذف مقرر أساسي مرتبط به دورات تذكيرية؛ يرجى حذف الدورات التذكيرية أولاً.",
+                status.HTTP_409_CONFLICT,
+            )
+
+        with transaction.atomic():
+            LessonProgress.objects.filter(course_attempt__enrollment__course=course).delete()
+            CourseAttempt.objects.filter(enrollment__course=course).delete()
+            EnrollmentSourceGrant.objects.filter(enrollment__course=course).delete()
+            Enrollment.objects.filter(course=course).delete()
+            GroupCourseAssignment.objects.filter(course=course).delete()
+
+            CourseCommentReport.objects.filter(comment__course=course).delete()
+            CourseComment.objects.filter(course=course).delete()
+
+            lesson_q = Q(lesson_item__module__course_draft__course=course) | Q(
+                lesson_item__module__published_version__course=course
+            )
+            QuizDefinition.objects.filter(lesson_q).delete()
+
+            mod_q = Q(module__course_draft__course=course) | Q(module__published_version__course=course)
+            LessonItem.objects.filter(mod_q).delete()
+
+            draft_pub_q = Q(course_draft__course=course) | Q(published_version__course=course)
+            Module.objects.filter(draft_pub_q).delete()
+            MediaContentReference.objects.filter(draft_pub_q).delete()
+
+            WorkingNote.objects.filter(submission__course=course).delete()
+            StagedAdminEdit.objects.filter(submission__course=course).delete()
+            CourseReviewSubmission.objects.filter(course=course).delete()
+
+            CourseDraft.objects.filter(course=course).delete()
+            PublishedCourseVersion.objects.filter(course=course).delete()
+
+            CourseAudienceDepartment.objects.filter(course=course).delete()
+            CourseAudienceJobTitle.objects.filter(course=course).delete()
+            CourseAudienceMetroLine.objects.filter(course=course).delete()
+            CourseAssistantLecturer.objects.filter(course=course).delete()
+            CourseQrCode.objects.filter(course=course).delete()
+
+            course_title = course.title
+            Course.objects.filter(pk=course.pk).delete()
+            record_audit_log(
+                action="course.deleted",
+                actor=request.user,
+                target_entity_type="Course",
+                target_entity_id=str(course_id),
+                details_snapshot={"title": course_title},
+            )
+        return success_response({"deleted": True, "message": "تم حذف الدورة التدريبية بنجاح."})
+
 
 class LecturerCourseDraftView(APIView):
     """PUT /api/lecturer/courses/<course_id>/draft."""
