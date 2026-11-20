@@ -13,11 +13,8 @@ export const DataRouterBlockerBridge: React.FC<BlockerBridgeProps> = ({
   const shouldBlock = useCallback<BlockerFunction>(
     ({ currentLocation, nextLocation }) => {
       if (!isDirty) return false;
-      // Do not block internal query updates or identical destinations
-      return (
-        currentLocation.pathname !== nextLocation.pathname ||
-        currentLocation.search !== nextLocation.search
-      );
+      // Do not block internal query updates (e.g. ?tab=...) or identical destinations
+      return currentLocation.pathname !== nextLocation.pathname;
     },
     [isDirty]
   );
