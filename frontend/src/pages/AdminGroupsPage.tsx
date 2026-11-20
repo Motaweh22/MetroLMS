@@ -189,10 +189,16 @@ export const AdminGroupsPage: React.FC = () => {
   const stats = useMemo(() => {
     const total = groups.length;
     const active = groups.filter(
-      (g) => g.adminStatus === 'active' && g.timeStatus === 'active'
+      (g) => g.adminStatus === 'active' && (g.timeStatus || 'active') === 'active'
     ).length;
-    const totalTrainees = groups.reduce((sum, g) => sum + g.totalTraineesCount, 0);
-    const attention = groups.reduce((sum, g) => sum + g.attentionTraineesCount, 0);
+    const totalTrainees = groups.reduce(
+      (sum, g) => sum + (Number(g.totalTraineesCount ?? (g as any).traineeCount ?? 0) || 0),
+      0
+    );
+    const attention = groups.reduce(
+      (sum, g) => sum + (Number(g.attentionTraineesCount ?? 0) || 0),
+      0
+    );
     return { total, active, totalTrainees, attention };
   }, [groups]);
 
@@ -510,7 +516,7 @@ export const AdminGroupsPage: React.FC = () => {
 
                       {/* Courses count */}
                       <td className="py-3.5 px-3 whitespace-nowrap text-xs text-text font-medium">
-                        {g.totalCoursesCount} مقرر
+                        {Number(g.totalCoursesCount ?? (g as any).courseCount ?? 0) || 0} مقرر
                       </td>
 
                       {/* Dates */}
@@ -528,10 +534,10 @@ export const AdminGroupsPage: React.FC = () => {
                         <div className="flex items-center justify-between text-xs mb-1">
                           <span className="text-text-muted text-[10px]">التقدم</span>
                           <span className="font-bold text-text-heading">
-                            {g.averageProgressPercent}%
+                            {Number(g.averageProgressPercent ?? 0) || 0}%
                           </span>
                         </div>
-                        <ProgressBar value={g.averageProgressPercent} size="sm" />
+                        <ProgressBar value={Number(g.averageProgressPercent ?? 0) || 0} size="sm" />
                       </td>
 
                       {/* Actions */}

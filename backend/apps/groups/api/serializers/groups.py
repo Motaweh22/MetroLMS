@@ -78,6 +78,12 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField()
     traineeCount = serializers.SerializerMethodField()
     courseCount = serializers.SerializerMethodField()
+    totalTraineesCount = serializers.SerializerMethodField()
+    attentionTraineesCount = serializers.SerializerMethodField()
+    totalCoursesCount = serializers.SerializerMethodField()
+    averageProgressPercent = serializers.SerializerMethodField()
+    timeStatus = serializers.SerializerMethodField()
+    timeRemainingText = serializers.SerializerMethodField()
     renewalSchedule = serializers.SerializerMethodField()
     primaryInstructorId = serializers.SerializerMethodField()
     assistantLecturerIds = serializers.SerializerMethodField()
@@ -110,6 +116,12 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
             "postDeadlinePolicy",
             "traineeCount",
             "courseCount",
+            "totalTraineesCount",
+            "attentionTraineesCount",
+            "totalCoursesCount",
+            "averageProgressPercent",
+            "timeStatus",
+            "timeRemainingText",
             "renewalSchedule",
             "primaryInstructorId",
             "assistantLecturerIds",
@@ -150,6 +162,39 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
 
     def get_courseCount(self, obj: TrainingGroup) -> int:
         return GroupCourseAssignment.objects.filter(group_renewal_cycle__training_group=obj).count()
+
+    def get_totalTraineesCount(self, obj: TrainingGroup) -> int:
+        return self.get_traineeCount(obj)
+
+    def get_attentionTraineesCount(self, obj: TrainingGroup) -> int:
+        return 0
+
+    def get_totalCoursesCount(self, obj: TrainingGroup) -> int:
+        return self.get_courseCount(obj)
+
+    def get_averageProgressPercent(self, obj: TrainingGroup) -> int:
+        return 0
+
+    def get_timeStatus(self, obj: TrainingGroup) -> str:
+        from django.utils import timezone
+
+        now = timezone.now()
+        if obj.is_archived or (obj.deadline_datetime and obj.deadline_datetime < now):
+            return "expired"
+        return "active"
+
+    def get_timeRemainingText(self, obj: TrainingGroup) -> str:
+        if obj.is_archived:
+            return "مؤرشفة"
+        if not obj.deadline_datetime:
+            return "مستمرة"
+        from django.utils import timezone
+
+        now = timezone.now()
+        if obj.deadline_datetime < now:
+            return "منتهية الصلاحية"
+        days = max(0, (obj.deadline_datetime - now).days)
+        return f"متبقي {days} يوم" if days > 0 else "تنتهي اليوم"
 
     def get_renewalSchedule(self, obj: TrainingGroup) -> dict:
         return {
