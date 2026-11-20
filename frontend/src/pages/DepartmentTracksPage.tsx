@@ -685,7 +685,7 @@ export const DepartmentTracksPage: React.FC = () => {
         isOpen={Boolean(editingCourse)}
         onClose={() => !isSaving && setEditingCourse(null)}
         title={`تحديد ظهور الكورس: ${editingCourse?.title || ''}`}
-        size="lg"
+        size="2xl"
         dataTestId="edit-course-visibility-modal"
       >
         <div className="space-y-4" dir="rtl">
@@ -777,10 +777,10 @@ export const DepartmentTracksPage: React.FC = () => {
             )}
           </div>
 
-          {/* Spacious 2-Column Selectable Cards */}
-          <div className="max-h-72 overflow-y-auto pr-1">
+          {/* Spacious 3-Column Selectable Cards (no nested scrollbar) */}
+          <div>
             {modalActiveTab === 'departments' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {departments
                   .filter(
                     (d) =>
@@ -812,7 +812,7 @@ export const DepartmentTracksPage: React.FC = () => {
             )}
 
             {modalActiveTab === 'job_titles' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {jobTitles
                   .filter(
                     (j) =>
@@ -854,7 +854,7 @@ export const DepartmentTracksPage: React.FC = () => {
             )}
 
             {modalActiveTab === 'leadership' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {leadershipTitles
                   .filter(
                     (lt) =>
