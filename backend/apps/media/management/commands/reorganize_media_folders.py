@@ -56,11 +56,15 @@ class Command(BaseCommand):
                 chosen = next((r for r in refs if r.course_draft_id is not None), refs[0])
                 if chosen.course_draft_id is not None:
                     cid = chosen.course_draft.course_id
-                    if getattr(chosen.course_draft, "thumbnail_asset_id", None) == asset.id:
+                    from apps.courses.models import LessonItem, Module
+
+                    has_image_lesson = LessonItem.objects.filter(
+                        module__course_draft_id=chosen.course_draft_id,
+                        lesson_type="image",
+                    ).exists()
+                    if asset.mime_type.startswith("image/") and not has_image_lesson:
                         target_prefix = f"courses/course_{cid}/cover"
                     else:
-                        from apps.courses.models import Module
-
                         first_mod = (
                             Module.objects.filter(course_draft_id=chosen.course_draft_id)
                             .order_by("sort_order", "id")
@@ -72,11 +76,15 @@ class Command(BaseCommand):
                             target_prefix = f"courses/course_{cid}"
                 elif chosen.published_version_id is not None:
                     cid = chosen.published_version.course_id
-                    if getattr(chosen.published_version, "thumbnail_asset_id", None) == asset.id:
+                    from apps.courses.models import LessonItem, Module
+
+                    has_image_lesson = LessonItem.objects.filter(
+                        module__published_version_id=chosen.published_version_id,
+                        lesson_type="image",
+                    ).exists()
+                    if asset.mime_type.startswith("image/") and not has_image_lesson:
                         target_prefix = f"courses/course_{cid}/cover"
                     else:
-                        from apps.courses.models import Module
-
                         first_mod = (
                             Module.objects.filter(published_version_id=chosen.published_version_id)
                             .order_by("sort_order", "id")
