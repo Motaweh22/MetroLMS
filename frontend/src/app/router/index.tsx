@@ -26,6 +26,7 @@ import { MyCoursesPage } from '@/pages/MyCoursesPage';
 import { TraineeGroupsPage } from '@/pages/TraineeGroupsPage';
 import { GroupDetailPage } from '@/pages/GroupDetailPage';
 import { ProfilePage } from '@/pages/ProfilePage';
+import { MemberProfilePage } from '@/pages/MemberProfilePage';
 import { NotificationsPage } from '@/pages/NotificationsPage';
 import { LecturerCoursesPage } from '@/pages/LecturerCoursesPage';
 import { CourseBuilderPage } from '@/pages/CourseBuilderPage';
@@ -180,6 +181,7 @@ export const appRouteElements = (
       <Route path="groups/join" element={<JoinGroupPage />} />
       <Route path="groups/:groupId" element={<Navigate to="/my-groups/:groupId" replace />} />
       <Route path="profile" element={<ProfilePage />} />
+      <Route path="users/:userId" element={<MemberProfilePage />} />
       <Route path="notifications" element={<NotificationsPage />} />
       {/* Increment 10: Training Groups Management */}
       <Route

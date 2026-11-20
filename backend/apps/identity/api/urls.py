@@ -21,6 +21,7 @@ from apps.identity.api.views.users import (
     AdminUserStatusView,
     AdminUserTranscriptView,
     ProfileView,
+    PublicUserOverviewView,
 )
 
 urlpatterns = [
@@ -38,6 +39,7 @@ urlpatterns = [
         name="permissions-delegation",
     ),
     path("profile", ProfileView.as_view(), name="user-profile"),
+    path("users/<int:user_id>/overview", PublicUserOverviewView.as_view(), name="user-public-overview"),
     path("admin/users", AdminUserListView.as_view(), name="admin-user-list"),
     path("admin/users/<int:user_id>", AdminUserDeleteView.as_view(), name="admin-user-delete"),
     path("admin/users/<int:user_id>/role", AdminUserRoleView.as_view(), name="admin-user-role"),

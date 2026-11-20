@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from apps.identity.api.serializers.auth import AuthenticatedUserSerializer
 from apps.identity.models import User
 from apps.identity.services.user_deletion_service import UserDeletionError, delete_user_with_d01_cascade
+from apps.identity.services.user_overview_service import get_user_courses_and_groups_overview
 from apps.learning.models import Enrollment
 from apps.organization.models import (
     JobTitle,
@@ -76,15 +77,18 @@ class ProfileView(APIView):
             user.military_service_status.name_ar if user.military_service_status else ""
         )
         user_data["metroLine"] = user.metro_line.name_ar if user.metro_line else ""
-        enrolled = Enrollment.objects.filter(user=user).count()
+        enrolled = Enrollment.objects.filter(user=user, source_grants__isnull=False).distinct().count()
+        overview = get_user_courses_and_groups_overview(user)
+        completed_count = sum(1 for c in overview["enrolledCourses"] if c.get("isCompleted"))
         return success_response(
             {
                 "user": user_data,
                 "stats": {
                     "totalLearningHours": 0,
                     "enrolledCoursesCount": enrolled,
-                    "completedCoursesCount": 0,
+                    "completedCoursesCount": completed_count,
                 },
+                "overview": overview,
             }
         )
 
@@ -575,6 +579,55 @@ class AdminUserTranscriptView(APIView):
                 "userName": target.full_name,
                 "totalLearningHours": None,
                 "courses": courses,
+            }
+        )
+
+
+class PublicUserOverviewView(APIView):
+    """GET /api/users/<user_id>/overview — Non-sensitive public member profile + courses/groups overview."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, user_id: int):
+        target = User.objects.select_related("metro_line").filter(pk=user_id).first()
+        if target is None:
+            return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
+        if target.role_id == "developer" and request.user.role_id != "developer":
+            return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
+
+        dept_link = (
+            UserOrganizationalDepartment.objects.filter(user=target)
+            .select_related("department")
+            .order_by("id")
+            .first()
+        )
+        job_link = (
+            UserJobTitle.objects.filter(user=target)
+            .select_related("job_title", "department")
+            .order_by("id")
+            .first()
+        )
+        dept_name = (
+            job_link.department.name_ar
+            if job_link and job_link.department
+            else (dept_link.department.name_ar if dept_link and dept_link.department else "")
+        )
+        job_name = job_link.job_title.name_ar if job_link and job_link.job_title else ""
+
+        overview = get_user_courses_and_groups_overview(target)
+        return success_response(
+            {
+                "user": {
+                    "id": str(target.id),
+                    "name": target.full_name,
+                    "initials": target.full_name[:2] if target.full_name else "م",
+                    "role": "user" if target.role_id == "trainee" else target.role_id,
+                    "status": target.status.lower(),
+                    "department": dept_name,
+                    "jobTitle": job_name,
+                    "metroLine": target.metro_line.name_ar if target.metro_line else "",
+                },
+                "overview": overview,
             }
         )
 

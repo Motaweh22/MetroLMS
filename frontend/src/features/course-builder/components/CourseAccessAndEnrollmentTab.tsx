@@ -360,7 +360,12 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
                     return (
                       <tr key={enr.id} className="hover:bg-surface/40">
                         <td className="py-2.5 px-3 font-semibold text-text-heading">
-                          {enr.userName || `مستخدم #${enr.userId}`}
+                          <Link
+                            to={`/users/${encodeURIComponent(String(enr.userId))}`}
+                            className="hover:text-primary hover:underline"
+                          >
+                            {enr.userName || `مستخدم #${enr.userId}`}
+                          </Link>
                         </td>
                         <td className="py-2.5 px-3 text-text-muted font-mono">
                           {enr.userEmail || '—'}

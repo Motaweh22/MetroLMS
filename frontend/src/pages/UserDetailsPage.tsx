@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import type { UserTranscriptDTO, ManagedUserDTO, UserStatus } from '@/core/user-management/types';
 import { USER_ROLE_LABELS_AR, USER_STATUS_LABELS_AR } from '@/core/user-management/types';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
+import { profileApi, type UserOverviewData } from '@/features/profile/services/profileApi';
+import { UserCoursesAndGroupsPanel } from '@/features/user-management/components/UserCoursesAndGroupsPanel';
 import { UserTranscriptCard } from '@/features/user-management/components/UserTranscriptCard';
 import { UserCoursesHistoryList } from '@/features/user-management/components/UserCoursesHistoryList';
 import { SuspendUserModal } from '@/features/user-management/components/SuspendUserModal';
@@ -54,6 +56,7 @@ export const UserDetailsPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
 
   const [transcript, setTranscript] = useState<UserTranscriptDTO | null>(null);
+  const [overview, setOverview] = useState<UserOverviewData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState<boolean>(false);
@@ -75,8 +78,12 @@ export const UserDetailsPage: React.FC = () => {
     setNotFound(false);
 
     try {
-      const data = await userManagementApi.getUserTranscript(userId);
+      const [data, ov] = await Promise.all([
+        userManagementApi.getUserTranscript(userId),
+        profileApi.getPublicUserOverview(userId).catch(() => null),
+      ]);
       setTranscript(data);
+      setOverview(ov?.overview ?? null);
     } catch (err: unknown) {
       const status = (err as { status?: number })?.status;
       if (status === 404) {
@@ -356,6 +363,9 @@ export const UserDetailsPage: React.FC = () => {
 
       {/* Transcript Key Metric Summary Cards */}
       <UserTranscriptCard metrics={metrics} />
+
+      {/* Anti-clutter Enrolled, Assigned/Created & Supervised Groups Summary + Modal */}
+      {overview && <UserCoursesAndGroupsPanel overview={overview} memberName={user.name} />}
 
       {/* Course History List with expandable attempts */}
       <UserCoursesHistoryList courses={courses} />

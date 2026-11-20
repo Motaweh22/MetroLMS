@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { profileApi, type UserProfileResponse } from '@/features/profile/services/profileApi';
+import { UserCoursesAndGroupsPanel } from '@/features/user-management/components/UserCoursesAndGroupsPanel';
 import { Card, CardContent } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
@@ -314,6 +315,13 @@ export const ProfilePage: React.FC = () => {
               </Card>
             </div>
           </div>
+
+          {profileData.overview && (
+            <UserCoursesAndGroupsPanel
+              overview={profileData.overview}
+              memberName={profileData.user.name}
+            />
+          )}
 
           {/* Privacy Note */}
           <div className="p-4 rounded-xl bg-neutral-light/60 border border-border text-xs text-text-muted flex items-start gap-3">
