@@ -433,10 +433,11 @@ export const LecturerCoursesPage: React.FC = () => {
                       size="sm"
                       leftIcon="edit"
                       onClick={() => navigate(`/lecturer/builder/${encodeURIComponent(course.id)}`)}
-                      className="flex-1 min-w-0 px-2.5 font-bold text-xs whitespace-nowrap"
+                      className="flex-1 px-3 font-bold text-xs whitespace-nowrap"
+                      title="تعديل الدورة في المنشئ"
                       data-testid={`edit-builder-btn-${course.id}`}
                     >
-                      تعديل في المنشئ
+                      تعديل
                     </Button>
                   ) : (
                     <Button
@@ -444,7 +445,7 @@ export const LecturerCoursesPage: React.FC = () => {
                       size="sm"
                       leftIcon="eye"
                       onClick={() => navigate(`/courses/${encodeURIComponent(course.id)}?preview=true`)}
-                      className="flex-1 min-w-0 px-2.5 font-bold text-xs whitespace-nowrap"
+                      className="flex-1 px-3 font-bold text-xs whitespace-nowrap"
                       data-testid={`preview-course-btn-${course.id}`}
                     >
                       معاينة المقرر
@@ -457,11 +458,11 @@ export const LecturerCoursesPage: React.FC = () => {
                       size="sm"
                       leftIcon="barChart"
                       onClick={() => navigate(`/lecturer/performance/${encodeURIComponent(course.id)}`)}
-                      className="px-2.5 text-xs font-bold text-primary border-primary/30 hover:bg-primary/5 whitespace-nowrap shrink-0"
+                      className="px-2.5 text-xs font-bold !text-primary-dark !border-primary/35 hover:!bg-primary/10 whitespace-nowrap shrink-0"
                       title="استعراض تقرير أداء ومتابعة المتدربين"
                       data-testid={`course-performance-btn-${course.id}`}
                     >
-                      تقرير الأداء
+                      الأداء
                     </Button>
                   )}
 
@@ -469,7 +470,7 @@ export const LecturerCoursesPage: React.FC = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => setSelectedQrCourse(course)}
-                    className="px-2 text-xs text-primary shrink-0"
+                    className="px-2 text-xs !text-primary-dark !border-border hover:!bg-bg-alt shrink-0"
                     title="رمز QR للمقرر"
                     data-testid={`course-qr-btn-${course.id}`}
                   >
@@ -492,7 +493,7 @@ export const LecturerCoursesPage: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleOpenDeleteModal(course)}
-                      className="px-2 text-xs text-danger border-danger/30 hover:bg-danger/5 shrink-0"
+                      className="px-2 text-xs !text-danger-dark !border-danger/40 hover:!bg-danger/10 shrink-0"
                       title="حذف الدورة أو تفريغ مساحتها وأرشفتها"
                       data-testid={`delete-course-btn-${course.id}`}
                     >
