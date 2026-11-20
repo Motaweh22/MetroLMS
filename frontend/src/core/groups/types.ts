@@ -304,6 +304,7 @@ export interface TraineeGroupMetrics {
   userId: string;
   userName: string;
   email?: string;
+  phone?: string;
   department?: string;
   jobTitle?: string;
   joinedAt?: string;

@@ -21,6 +21,7 @@ import {
   ManageGroupAssistantsModal,
 } from '@/features/groups/components';
 import { formatMaterialDate } from '@/features/groups/utils/materialUtils';
+import { buildWhatsAppUrl } from '@/features/whatsapp';
 
 export const GroupMonitoringPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
@@ -46,13 +47,31 @@ export const GroupMonitoringPage: React.FC = () => {
   const [isForbidden, setIsForbidden] = useState<boolean>(false);
 
   // Tab & Filters State
-  const [activeTab, setActiveTab] = useState<'trainees' | 'courses' | 'requests'>(
-    tabParam === 'requests' ? 'requests' : tabParam === 'courses' ? 'courses' : 'trainees'
+  const [activeTab, setActiveTab] = useState<'trainees' | 'courses' | 'requests' | 'notifications'>(
+    tabParam === 'requests'
+      ? 'requests'
+      : tabParam === 'courses'
+        ? 'courses'
+        : tabParam === 'notifications'
+          ? 'notifications'
+          : 'trainees'
   );
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedTrainee, setSelectedTrainee] = useState<TraineeGroupMetrics | null>(null);
   const [isManageAssistantsOpen, setIsManageAssistantsOpen] = useState<boolean>(false);
+
+  // Notifications Tab State
+  const [notificationAudienceFilter, setNotificationAudienceFilter] = useState<
+    'behind' | 'not_started' | 'all'
+  >('behind');
+  const [notificationSearch, setNotificationSearch] = useState<string>('');
+  const [notificationTemplate, setNotificationTemplate] = useState<string>('');
+  const [notifiedTraineeIds, setNotifiedTraineeIds] = useState<Record<string, boolean>>({});
+  const [sendingNotifyId, setSendingNotifyId] = useState<string | null>(null);
+  const [isSendingBulkNotify, setIsSendingBulkNotify] = useState<boolean>(false);
+  const [notifyFeedback, setNotifyFeedback] = useState<string | null>(null);
+  const [notifyError, setNotifyError] = useState<string | null>(null);
 
   // Enrollment Requests State
   const [requests, setRequests] = useState<GroupJoinRequest[]>([]);
@@ -72,7 +91,12 @@ export const GroupMonitoringPage: React.FC = () => {
   }, [cycleIdParam, selectedCycleId]);
 
   useEffect(() => {
-    if (tabParam === 'requests' || tabParam === 'courses' || tabParam === 'trainees') {
+    if (
+      tabParam === 'requests' ||
+      tabParam === 'courses' ||
+      tabParam === 'trainees' ||
+      tabParam === 'notifications'
+    ) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -220,6 +244,174 @@ export const GroupMonitoringPage: React.FC = () => {
     if (requestFilter === 'all') return requests;
     return requests.filter((r) => r.status === requestFilter);
   }, [requests, requestFilter]);
+
+  // Notifications Mode & Helpers
+  const groupTimeMode = useMemo<'scheduled' | 'active' | 'expired'>(() => {
+    const g = metrics?.group;
+    if (!g) return 'active';
+    const startRaw = metrics?.selectedCycle?.startDateTime || g.startDateTime;
+    if (
+      g.timeStatus === 'scheduled' ||
+      (startRaw && new Date(startRaw).getTime() > Date.now())
+    ) {
+      return 'scheduled';
+    }
+    if (g.timeStatus === 'expired' || g.adminStatus === 'archived') {
+      return 'expired';
+    }
+    return 'active';
+  }, [metrics?.group, metrics?.selectedCycle?.startDateTime]);
+
+  const getDefaultNotificationTemplate = useCallback(
+    (mode: 'scheduled' | 'active' | 'expired') => {
+      if (mode === 'scheduled') {
+        return 'السلام عليكم يا {الاسم}، نود تنبيهكم بأن المجموعة التدريبية "{المجموعة}" ستبدأ يوم {تاريخ_البداية} الساعة {الوقت}. يرجى متابعة المنصة والاستعداد للبدء في الموعد المحدد.';
+      }
+      if (mode === 'expired') {
+        return 'السلام عليكم يا {الاسم}، نود إعلامكم بانتهاء المهلة الزمنية للمجموعة التدريبية "{المجموعة}" (نسبة إنجازك {النسبة}%). يرجى مراجعة المنصة أو التواصل مع الإدارة.';
+      }
+      return 'السلام عليكم يا {الاسم}، تذكير بمتابعة المجموعة التدريبية "{المجموعة}". نسبة إنجازك الحالية {النسبة}%، والموعد النهائي للانتهاء هو {تاريخ_الانتهاء}. يرجى الدخول على المنصة لاستكمال المنهج.';
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!metrics?.group) return;
+    setNotificationTemplate(getDefaultNotificationTemplate(groupTimeMode));
+    setNotificationAudienceFilter(groupTimeMode === 'scheduled' ? 'all' : 'behind');
+  }, [metrics?.group?.id, groupTimeMode, getDefaultNotificationTemplate]);
+
+  const notificationTrainees = useMemo(() => {
+    const list = metrics?.traineeMetricsList ?? [];
+    const q = notificationSearch.trim().toLowerCase();
+    return list.filter((t) => {
+      if (q) {
+        const matchName = t.userName.toLowerCase().includes(q);
+        const matchPhone = (t.phone || '').toLowerCase().includes(q);
+        const matchEmail = (t.email || '').toLowerCase().includes(q);
+        if (!matchName && !matchPhone && !matchEmail) return false;
+      }
+      if (groupTimeMode === 'scheduled') return true;
+      if (notificationAudienceFilter === 'not_started') {
+        return t.programPercent === 0;
+      }
+      if (notificationAudienceFilter === 'behind') {
+        return Boolean(t.worstAttention?.needsAttention) || t.programPercent < 100;
+      }
+      return true;
+    });
+  }, [metrics?.traineeMetricsList, notificationSearch, groupTimeMode, notificationAudienceFilter]);
+
+  const formatPersonalizedMessage = useCallback(
+    (template: string, trainee: TraineeGroupMetrics) => {
+      const g = metrics?.group;
+      const startRaw = metrics?.selectedCycle?.startDateTime || g?.startDateTime;
+      const deadlineRaw = metrics?.selectedCycle?.deadlineDateTime || g?.deadlineDateTime;
+      const startDateFormatted = startRaw
+        ? new Date(startRaw).toLocaleDateString('ar-EG', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        : 'قريباً';
+      const startTimeFormatted = startRaw
+        ? new Date(startRaw).toLocaleTimeString('ar-EG', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      const deadlineFormatted = deadlineRaw
+        ? new Date(deadlineRaw).toLocaleDateString('ar-EG', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        : 'غير محدد';
+
+      return template
+        .replace(/\{الاسم\}/g, trainee.userName)
+        .replace(/\{المجموعة\}/g, g?.name || '')
+        .replace(/\{النسبة\}/g, String(trainee.programPercent ?? 0))
+        .replace(/\{تاريخ_البداية\}/g, startDateFormatted)
+        .replace(/\{الوقت\}/g, startTimeFormatted)
+        .replace(/\{تاريخ_الانتهاء\}/g, deadlineFormatted);
+    },
+    [metrics?.group, metrics?.selectedCycle]
+  );
+
+  const getNotificationTitle = useCallback(
+    (mode: 'scheduled' | 'active' | 'expired', groupName: string) => {
+      if (mode === 'scheduled') return `تذكير بموعد بدء المجموعة: ${groupName}`;
+      if (mode === 'expired') return `متابعة انتهاء المجموعة: ${groupName}`;
+      return `تذكير بمتابعة المنهج: ${groupName}`;
+    },
+    []
+  );
+
+  const handleSendTraineeAlert = async (trainee: TraineeGroupMetrics) => {
+    if (!groupId || !metrics?.group) return;
+    const personalizedBody = formatPersonalizedMessage(
+      notificationTemplate.trim() || getDefaultNotificationTemplate(groupTimeMode),
+      trainee
+    );
+    const waUrl = trainee.phone ? buildWhatsAppUrl(trainee.phone, personalizedBody) : '';
+    if (waUrl) {
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    setSendingNotifyId(trainee.userId);
+    setNotifyError(null);
+    try {
+      await groupsApi.sendGroupNotifications(groupId, [
+        {
+          userId: trainee.userId,
+          title: getNotificationTitle(groupTimeMode, metrics.group.name),
+          body: personalizedBody,
+        },
+      ]);
+      setNotifiedTraineeIds((prev) => ({ ...prev, [trainee.userId]: true }));
+      setNotifyFeedback(
+        waUrl
+          ? `تم فتح واتساب وإرسال إشعار على المنصة إلى «${trainee.userName}».`
+          : `تم إرسال إشعار على المنصة إلى «${trainee.userName}» (لا يوجد رقم هاتف مسجل للواتساب).`
+      );
+      setTimeout(() => setNotifyFeedback(null), 5000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'تعذر إرسال الإشعار على المنصة.';
+      setNotifyError(msg);
+    } finally {
+      setSendingNotifyId(null);
+    }
+  };
+
+  const handleSendBulkPlatformNotifications = async () => {
+    if (!groupId || !metrics?.group || notificationTrainees.length === 0) return;
+    setIsSendingBulkNotify(true);
+    setNotifyError(null);
+    try {
+      const title = getNotificationTitle(groupTimeMode, metrics.group.name);
+      const baseTemplate =
+        notificationTemplate.trim() || getDefaultNotificationTemplate(groupTimeMode);
+      const payload = notificationTrainees.map((t) => ({
+        userId: t.userId,
+        title,
+        body: formatPersonalizedMessage(baseTemplate, t),
+      }));
+      const res = await groupsApi.sendGroupNotifications(groupId, payload);
+      setNotifiedTraineeIds((prev) => {
+        const next = { ...prev };
+        for (const t of notificationTrainees) next[t.userId] = true;
+        return next;
+      });
+      setNotifyFeedback(`تم إرسال إشعار على المنصة إلى ${res.sentCount} متدرب بنجاح.`);
+      setTimeout(() => setNotifyFeedback(null), 5000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'تعذر إرسال الإشعارات الجماعية.';
+      setNotifyError(msg);
+    } finally {
+      setIsSendingBulkNotify(false);
+    }
+  };
 
   const handleApproveRequest = async (req: GroupJoinRequest) => {
     if (!groupId) return;
@@ -693,6 +885,22 @@ export const GroupMonitoringPage: React.FC = () => {
           <span>طلبات الانضمام</span>
           <Badge variant={pendingRequestsCount > 0 ? 'warning' : 'neutral'} size="sm">
             {pendingRequestsCount > 0 ? `${pendingRequestsCount} معلق` : requests.length}
+          </Badge>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('notifications')}
+          className={`pb-3 px-2 text-sm font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${activeTab === 'notifications'
+            ? 'border-primary text-primary'
+            : 'border-transparent text-text-muted hover:text-text-heading'
+            }`}
+          data-testid="tab-notifications-view"
+        >
+          <Icon name="bell" size="sm" />
+          <span>التنبيهات</span>
+          <Badge variant={groupTimeMode === 'scheduled' ? 'primary' : 'warning'} size="sm">
+            {notificationTrainees.length}
           </Badge>
         </button>
       </div>
@@ -1214,6 +1422,250 @@ export const GroupMonitoringPage: React.FC = () => {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab 4: Notifications View ──────────────────────────────────── */}
+      {activeTab === 'notifications' && (
+        <div className="space-y-4" data-testid="group-notifications-tab">
+          {/* Context Banner */}
+          <Alert
+            variant={
+              groupTimeMode === 'scheduled'
+                ? 'info'
+                : groupTimeMode === 'expired'
+                  ? 'danger'
+                  : 'warning'
+            }
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full">
+              <div>
+                <div className="font-bold text-sm">
+                  {groupTimeMode === 'scheduled'
+                    ? 'المجموعة مجدولة — تنبيه المتدربين بموعد البداية'
+                    : groupTimeMode === 'expired'
+                      ? 'المجموعة منتهية — متابعة المتدربين'
+                      : 'المجموعة شغالة حالياً — تنبيه المتأخرين في المنهج'}
+                </div>
+                <p className="text-xs opacity-90 mt-0.5">
+                  عند الضغط على زر التنبيه يتم فتح محادثة واتساب بالرسالة المخصصة وإرسال إشعار فوري للمتدرب على المنصة.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                leftIcon="bell"
+                onClick={handleSendBulkPlatformNotifications}
+                isLoading={isSendingBulkNotify}
+                disabled={notificationTrainees.length === 0 || isArchived}
+                data-testid="send-bulk-platform-notify-btn"
+              >
+                إرسال إشعار على المنصة للجميع ({notificationTrainees.length})
+              </Button>
+            </div>
+          </Alert>
+
+          {notifyFeedback && (
+            <Alert variant="success" onClose={() => setNotifyFeedback(null)}>
+              {notifyFeedback}
+            </Alert>
+          )}
+          {notifyError && (
+            <Alert variant="danger" onClose={() => setNotifyError(null)}>
+              {notifyError}
+            </Alert>
+          )}
+
+          {/* Message Template Editor */}
+          <Card padding="md" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-text-heading">قالب رسالة التنبيه</h3>
+                <p className="text-xs text-text-muted">
+                  يمكنك تعديل النص، وسيتم استبدال المتغيرات تلقائياً ببيانات كل متدرب عند الإرسال.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setNotificationTemplate(getDefaultNotificationTemplate(groupTimeMode))}
+                data-testid="reset-notify-template-btn"
+              >
+                استعادة القالب الافتراضي
+              </Button>
+            </div>
+
+            <textarea
+              value={notificationTemplate}
+              onChange={(e) => setNotificationTemplate(e.target.value)}
+              rows={3}
+              className="w-full text-xs sm:text-sm p-3 rounded-xl bg-bg border border-border text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+              data-testid="notification-template-input"
+            />
+
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-text-muted">
+              <span>المتغيرات المتاحة:</span>
+              {[
+                '{الاسم}',
+                '{المجموعة}',
+                '{النسبة}',
+                '{تاريخ_البداية}',
+                '{الوقت}',
+                '{تاريخ_الانتهاء}',
+              ].map((token) => (
+                <button
+                  key={token}
+                  type="button"
+                  onClick={() => setNotificationTemplate((prev) => `${prev} ${token}`.trim())}
+                  className="px-2 py-0.5 rounded-md bg-surface border border-border text-primary font-mono hover:bg-primary/5 cursor-pointer"
+                >
+                  {token}
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {/* Filter & Search Bar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-surface p-3.5 rounded-xl border border-border shadow-xs">
+            <div className="w-full sm:w-72 relative">
+              <input
+                type="text"
+                placeholder="بحث بالاسم أو رقم الهاتف..."
+                value={notificationSearch}
+                onChange={(e) => setNotificationSearch(e.target.value)}
+                className="w-full text-xs pr-8 pl-3 py-2 rounded-lg bg-bg border border-border text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+                data-testid="notifications-search-input"
+              />
+              <Icon
+                name="search"
+                size="sm"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted"
+              />
+            </div>
+
+            {groupTimeMode !== 'scheduled' && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: 'behind', label: 'المتأخرون في المنهج' },
+                  { id: 'not_started', label: 'لم يبدأوا (0%)' },
+                  { id: 'all', label: 'جميع المتدربين' },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() =>
+                      setNotificationAudienceFilter(opt.id as 'behind' | 'not_started' | 'all')
+                    }
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                      notificationAudienceFilter === opt.id
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-bg text-text-muted border-border hover:border-primary/40'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Trainees Notification List */}
+          {notificationTrainees.length === 0 ? (
+            <Card padding="lg" className="text-center text-text-muted space-y-2">
+              <Icon name="checkCircle" size="lg" className="mx-auto text-success opacity-70" />
+              <div className="text-sm font-bold text-text-heading">
+                لا يوجد متدربون ضمن هذه التصفية حالياً
+              </div>
+              <p className="text-xs">
+                يمكنك تغيير الفلتر أعلاه إلى «جميع المتدربين» لعرض كل الأعضاء.
+              </p>
+            </Card>
+          ) : (
+            <div className="bg-surface rounded-xl border border-border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right border-collapse text-xs" data-testid="notifications-trainees-table">
+                  <thead className="bg-bg text-text-muted font-bold border-b border-border">
+                    <tr>
+                      <th className="py-3 px-4">المتدرب</th>
+                      <th className="py-3 px-3">رقم الهاتف</th>
+                      <th className="py-3 px-3">نسبة الإنجاز</th>
+                      <th className="py-3 px-3">حالة المتابعة</th>
+                      <th className="py-3 px-4 text-center">إرسال التنبيه</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {notificationTrainees.map((t) => {
+                      const hasPhone = Boolean(t.phone && buildWhatsAppUrl(t.phone, 'test'));
+                      const isNotified = Boolean(notifiedTraineeIds[t.userId]);
+                      const isSending = sendingNotifyId === t.userId;
+
+                      return (
+                        <tr key={t.userId} className="hover:bg-bg/50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-text-heading">{t.userName}</div>
+                            {t.email && (
+                              <div className="text-[11px] text-text-muted">{t.email}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {hasPhone ? (
+                              <span className="font-mono text-text" dir="ltr">
+                                {t.phone}
+                              </span>
+                            ) : (
+                              <Badge variant="neutral" size="sm">
+                                لا يوجد رقم هاتف
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap font-bold text-text-heading">
+                            {t.programPercent}%
+                          </td>
+                          <td className="py-3 px-3">
+                            {isNotified ? (
+                              <Badge variant="success" size="sm">
+                                تم التنبيه
+                              </Badge>
+                            ) : t.worstAttention?.needsAttention ? (
+                              <AttentionBadge
+                                needsAttention={t.worstAttention.needsAttention}
+                                level={t.worstAttention.level}
+                                reasonAr={t.worstAttention.reasonAr}
+                              />
+                            ) : (
+                              <span className="text-text-muted">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <Button
+                              type="button"
+                              variant={isNotified ? 'outline' : 'primary'}
+                              size="sm"
+                              leftIcon={hasPhone ? 'messageCircle' : 'bell'}
+                              onClick={() => handleSendTraineeAlert(t)}
+                              isLoading={isSending}
+                              disabled={isArchived}
+                              data-testid={`notify-trainee-btn-${t.userId}`}
+                            >
+                              {hasPhone
+                                ? isNotified
+                                  ? 'إعادة الإرسال (واتساب + إشعار)'
+                                  : 'تنبيه (واتساب + إشعار)'
+                                : isNotified
+                                  ? 'إعادة إرسال إشعار المنصة'
+                                  : 'إرسال إشعار على المنصة'}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

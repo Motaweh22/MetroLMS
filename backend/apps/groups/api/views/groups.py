@@ -1292,3 +1292,67 @@ class GroupQrToggleView(APIView):
             qr.save(update_fields=["is_enabled", "updated_at"])
         return success_response({"success": True, "isEnrollmentOpen": is_open})
 
+
+class AdminGroupNotifyTraineesView(APIView):
+    """POST /api/admin/groups/<group_id>/notify-trainees."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, group_id: int):
+        group = TrainingGroup.objects.filter(pk=group_id).first()
+        if group is None:
+            return error_response(
+                "RESOURCE_NOT_FOUND",
+                "المورد المطلوب غير موجود أو تم نقله.",
+                status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            check_group_write_permission(request.user, group, "groups.edit_config")
+        except GroupDomainError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+
+        raw_items = request.data.get("notifications")
+        if not isinstance(raw_items, list) or not raw_items:
+            return error_response(
+                "VALIDATION_ERROR",
+                "يجب تحديد متدرب واحد على الأقل لإرسال التنبيه.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        member_ids = set(
+            GroupMembership.objects.filter(training_group=group).values_list("user_id", flat=True)
+        )
+        from apps.communications.models import NotificationItem
+
+        now = timezone.now()
+        to_create: list[NotificationItem] = []
+        for entry in raw_items:
+            if not isinstance(entry, dict):
+                continue
+            raw_uid = entry.get("userId")
+            try:
+                uid = int(str(raw_uid))
+            except (TypeError, ValueError):
+                continue
+            if uid not in member_ids:
+                continue
+            body = str(entry.get("body") or "").strip()
+            if not body:
+                continue
+            title = str(entry.get("title") or f"تنبيه بخصوص المجموعة: {group.name}").strip()[:255]
+            to_create.append(
+                NotificationItem(
+                    user_id=uid,
+                    title=title,
+                    body=body,
+                    is_read=False,
+                    created_at=now,
+                )
+            )
+
+        if to_create:
+            NotificationItem.objects.bulk_create(to_create)
+
+        return success_response({"sentCount": len(to_create)})
+
+

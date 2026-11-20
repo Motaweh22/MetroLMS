@@ -421,6 +421,25 @@ export const groupsApi = {
   },
 
   /**
+   * Send in-platform notifications to selected trainees in a group
+   */
+  async sendGroupNotifications(
+    groupId: string,
+    notifications: Array<{ userId: string; title: string; body: string }>,
+    options?: RequestOptions
+  ): Promise<{ sentCount: number }> {
+    return apiClient<{ sentCount: number }>(
+      `/api/admin/groups/${encodeURIComponent(groupId)}/notify-trainees`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ notifications }),
+        ...options,
+      }
+    );
+  },
+  },
+
+  /**
    * List join requests for a group (Admin or Assigned Supervisor)
    */
   async getJoinRequests(

@@ -282,6 +282,7 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
                 "userId": str(m.user_id),
                 "userName": m.user.full_name,
                 "email": m.user.email or m.user.phone_e164,
+                "phone": m.user.phone_e164 or "",
                 "department": "",
                 "jobTitle": "متدرب",
                 "enrolledAt": m.joined_at.isoformat() if m.joined_at else "",
