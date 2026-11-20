@@ -423,7 +423,7 @@ export const LecturerCoursesPage: React.FC = () => {
                 </div>
 
                 {/* Card Actions */}
-                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
+                <div className="flex items-center gap-1.5 pt-3 border-t border-border">
                   {user?.role === 'lecturer' ||
                   user?.role === 'admin' ||
                   user?.role === 'super_admin' ||
@@ -433,7 +433,7 @@ export const LecturerCoursesPage: React.FC = () => {
                       size="sm"
                       leftIcon="edit"
                       onClick={() => navigate(`/lecturer/builder/${encodeURIComponent(course.id)}`)}
-                      className="flex-1 font-bold text-xs min-w-[120px]"
+                      className="flex-1 min-w-0 px-2.5 font-bold text-xs whitespace-nowrap"
                       data-testid={`edit-builder-btn-${course.id}`}
                     >
                       تعديل في المنشئ
@@ -444,7 +444,7 @@ export const LecturerCoursesPage: React.FC = () => {
                       size="sm"
                       leftIcon="eye"
                       onClick={() => navigate(`/courses/${encodeURIComponent(course.id)}?preview=true`)}
-                      className="flex-1 font-bold text-xs min-w-[120px]"
+                      className="flex-1 min-w-0 px-2.5 font-bold text-xs whitespace-nowrap"
                       data-testid={`preview-course-btn-${course.id}`}
                     >
                       معاينة المقرر
@@ -457,7 +457,7 @@ export const LecturerCoursesPage: React.FC = () => {
                       size="sm"
                       leftIcon="barChart"
                       onClick={() => navigate(`/lecturer/performance/${encodeURIComponent(course.id)}`)}
-                      className="text-xs font-bold text-primary border-primary/30 hover:bg-primary/5"
+                      className="px-2.5 text-xs font-bold text-primary border-primary/30 hover:bg-primary/5 whitespace-nowrap shrink-0"
                       title="استعراض تقرير أداء ومتابعة المتدربين"
                       data-testid={`course-performance-btn-${course.id}`}
                     >
@@ -469,7 +469,7 @@ export const LecturerCoursesPage: React.FC = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => setSelectedQrCourse(course)}
-                    className="px-2.5 text-xs text-primary shrink-0"
+                    className="px-2 text-xs text-primary shrink-0"
                     title="رمز QR للمقرر"
                     data-testid={`course-qr-btn-${course.id}`}
                   >
@@ -480,7 +480,7 @@ export const LecturerCoursesPage: React.FC = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => navigate(`/courses/${encodeURIComponent(course.id)}?preview=true`)}
-                    className="px-3 text-xs shrink-0"
+                    className="px-2.5 text-xs whitespace-nowrap shrink-0"
                     title="معاينة الدورة كما تظهر للمتدربين"
                     data-testid={`preview-course-btn-${course.id}`}
                   >
@@ -492,7 +492,7 @@ export const LecturerCoursesPage: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleOpenDeleteModal(course)}
-                      className="px-2.5 text-xs text-danger border-danger/30 hover:bg-danger/5 shrink-0"
+                      className="px-2 text-xs text-danger border-danger/30 hover:bg-danger/5 shrink-0"
                       title="حذف الدورة أو تفريغ مساحتها وأرشفتها"
                       data-testid={`delete-course-btn-${course.id}`}
                     >
