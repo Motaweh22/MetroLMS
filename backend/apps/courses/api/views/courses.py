@@ -651,7 +651,7 @@ class LecturerCourseGroupsView(APIView):
             {
                 "id": str(g.id),
                 "name": g.name,
-                "status": g.status,
+                "status": "archived" if g.is_archived else "active",
                 "memberCount": g.memberships.count(),
             }
             for g in groups
