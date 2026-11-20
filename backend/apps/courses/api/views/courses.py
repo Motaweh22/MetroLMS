@@ -435,6 +435,37 @@ class ApprovalsMySubmissionsView(APIView):
         return success_response({"items": items, "submissions": items, "totalCount": len(items), "counts": counts})
 
 
+class AdminCommentsListView(APIView):
+    """GET /api/admin/comments — List all comments with optional query, courseId, and reportedOnly filters."""
+
+    permission_classes = [IsAuthenticated, has_capability("comments.ignore_report")]
+
+    def get(self, request: Request):
+        qs = CourseComment.objects.select_related("author_user", "course").order_by("-id")
+        query_text = str(request.query_params.get("query") or "").strip()
+        course_id = str(request.query_params.get("courseId") or "").strip()
+        reported_only = str(request.query_params.get("reportedOnly") or "").lower() in {"1", "true", "yes"}
+
+        if course_id.isdigit():
+            qs = qs.filter(course_id=int(course_id))
+        if reported_only:
+            reported_ids = (
+                CourseCommentReport.objects.filter(status="Pending")
+                .values_list("comment_id", flat=True)
+                .distinct()
+            )
+            qs = qs.filter(id__in=reported_ids)
+        if query_text:
+            from django.db.models import Q
+
+            qs = qs.filter(
+                Q(body__icontains=query_text)
+                | Q(author_user__full_name__icontains=query_text)
+                | Q(course__title__icontains=query_text)
+            )
+        return success_response(CourseCommentSerializer(qs, many=True).data)
+
+
 class AdminCommentsReportedView(APIView):
     """GET /api/admin/comments/reported."""
 

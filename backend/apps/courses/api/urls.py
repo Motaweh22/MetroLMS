@@ -4,6 +4,7 @@ from django.urls import path
 from apps.courses.api.views.courses import (
     AdminCommentDeleteView,
     AdminCommentModerationView,
+    AdminCommentsListView,
     AdminCommentsReportedView,
     AdminCommentsSummaryView,
     AdminCourseCommentsToggleView,
@@ -113,6 +114,7 @@ urlpatterns = [
         name="course-comment-delete",
     ),
     path("comments/<int:comment_id>/report", CourseCommentReportView.as_view(), name="comment-report"),
+    path("admin/comments", AdminCommentsListView.as_view(), name="admin-comments-list"),
     path("admin/comments/reported", AdminCommentsReportedView.as_view(), name="admin-comments-reported"),
     path("admin/comments/summary", AdminCommentsSummaryView.as_view(), name="admin-comments-summary"),
     path("admin/comments/<int:comment_id>", AdminCommentDeleteView.as_view(), name="admin-comment-delete"),
