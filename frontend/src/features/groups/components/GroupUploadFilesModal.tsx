@@ -109,6 +109,9 @@ export const GroupUploadFilesModal: React.FC<GroupUploadFilesModalProps> = ({
           const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
           const formData = new FormData();
           formData.append('file', file);
+          if (groupId) {
+            formData.append('groupId', String(groupId));
+          }
           const upResp = await fetch('/api/media/assets/upload', {
             method: 'POST',
             credentials: 'same-origin',

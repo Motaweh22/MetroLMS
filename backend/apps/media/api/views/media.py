@@ -43,11 +43,24 @@ class MediaAssetUploadView(APIView):
         if uploaded is None:
             return error_response("VALIDATION_ERROR", "يرجى إرفاق الملف المطلوب.", status.HTTP_400_BAD_REQUEST)
         declared_mime = request.data.get("mimeType") or getattr(uploaded, "content_type", None)
+
+        def _parse_pos_int(val: object) -> int | None:
+            try:
+                num = int(str(val).strip())
+                return num if num > 0 else None
+            except (TypeError, ValueError):
+                return None
+
+        course_id = _parse_pos_int(request.data.get("courseId"))
+        group_id = _parse_pos_int(request.data.get("groupId"))
+
         try:
             asset = upload_media_asset(
                 actor=request.user,
                 uploaded_file=uploaded,
                 declared_mime_type=str(declared_mime) if declared_mime else None,
+                course_id=course_id,
+                group_id=group_id,
             )
         except MediaDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)

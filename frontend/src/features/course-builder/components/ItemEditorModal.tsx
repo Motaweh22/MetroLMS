@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import type {
   ChapterItem,
   ContentItemType,
@@ -122,6 +123,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { courseId } = useParams<{ courseId?: string }>();
   const [activeTab, setActiveTab] = useState<'content' | 'resources'>('content');
 
   const [title, setTitle] = useState(item?.title || '');
@@ -379,6 +381,9 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
         const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
         const formData = new FormData();
         formData.append('file', pendingFileRef.current);
+        if (courseId) {
+          formData.append('courseId', courseId);
+        }
         const uploadResp = await fetch('/api/media/assets/upload', {
           method: 'POST',
           credentials: 'same-origin',

@@ -39,7 +39,11 @@ ALLOWED_MEDIA_SPECS: dict[str, dict[str, object]] = {
     "image/jpeg": {"ext": ".jpg", "max_mb_env": "METROLMS_MAX_IMAGE_MB", "default_mb": 10},
 }
 
-_SAFE_KEY_RE = re.compile(r"\Aassets/\d{4}/\d{2}/[a-f0-9]{32}\.[a-z0-9]+\Z", re.ASCII)
+_SAFE_KEY_RE = re.compile(
+    r"\A(?:assets/\d{4}/\d{2}|courses/course_\d+|groups/group_\d+)/[a-f0-9]{32}\.[a-z0-9]+\Z",
+    re.ASCII,
+)
+_SCOPE_PREFIX_RE = re.compile(r"\A(?:courses/course_\d+|groups/group_\d+)\Z", re.ASCII)
 
 
 def validate_magic_bytes(mime_type: str, header: bytes) -> bool:
@@ -75,7 +79,13 @@ class LocalMediaStorage:
             raise MediaStorageError("PATH_TRAVERSAL_BLOCKED", "مسار التخزين غير مصرح به.", 403)
         return candidate
 
-    def save_uploaded_file(self, uploaded_file, mime_type: str) -> tuple[str, int, str]:
+    def save_uploaded_file(
+        self,
+        uploaded_file,
+        mime_type: str,
+        *,
+        scope_prefix: str | None = None,
+    ) -> tuple[str, int, str]:
         """Validate MIME, magic bytes, size limit, compute SHA-256, and store atomically."""
         spec = ALLOWED_MEDIA_SPECS.get(mime_type)
         if spec is None:
@@ -118,7 +128,10 @@ class LocalMediaStorage:
 
             now = timezone.now()
             ext = str(spec["ext"])
-            storage_key = f"assets/{now:%Y}/{now:%m}/{uuid.uuid4().hex}{ext}"
+            if scope_prefix and _SCOPE_PREFIX_RE.match(scope_prefix):
+                storage_key = f"{scope_prefix}/{uuid.uuid4().hex}{ext}"
+            else:
+                storage_key = f"assets/{now:%Y}/{now:%m}/{uuid.uuid4().hex}{ext}"
             final_path = self.resolve_safe_path(storage_key)
             final_path.parent.mkdir(parents=True, exist_ok=True)
             os.replace(temp_path, final_path)

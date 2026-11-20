@@ -341,6 +341,9 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
       const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
       const formData = new FormData();
       formData.append('file', file);
+      if (course?.id) {
+        formData.append('courseId', String(course.id));
+      }
       const resp = await fetch('/api/media/assets/upload', {
         method: 'POST',
         credentials: 'same-origin',

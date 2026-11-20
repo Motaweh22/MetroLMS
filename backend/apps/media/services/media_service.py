@@ -30,6 +30,8 @@ def upload_media_asset(
     actor: User,
     uploaded_file,
     declared_mime_type: str | None = None,
+    course_id: int | None = None,
+    group_id: int | None = None,
     storage: LocalMediaStorage | None = None,
 ) -> MediaAsset:
     """Step 1: Validate, checksum, store binary, and create immutable MediaAsset."""
@@ -49,8 +51,18 @@ def upload_media_asset(
         raise MediaDomainError("INVALID_MIME_TYPE", "صيغة MIME غير صالحة.", 400) from exc
 
     store = storage or LocalMediaStorage()
+    scope_prefix: str | None = None
+    if course_id is not None and int(course_id) > 0:
+        scope_prefix = f"courses/course_{int(course_id)}"
+    elif group_id is not None and int(group_id) > 0:
+        scope_prefix = f"groups/group_{int(group_id)}"
+
     try:
-        storage_key, size_bytes, checksum = store.save_uploaded_file(uploaded_file, mime_type)
+        storage_key, size_bytes, checksum = store.save_uploaded_file(
+            uploaded_file,
+            mime_type,
+            scope_prefix=scope_prefix,
+        )
     except MediaStorageError as exc:
         raise MediaDomainError(exc.code, exc.message, exc.status_code) from exc
 
