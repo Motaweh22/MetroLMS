@@ -103,25 +103,35 @@ export const PermissionsMatrixPage: React.FC = () => {
       className="container mx-auto px-4 py-6 sm:py-8 max-w-7xl space-y-6 text-right"
     >
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-border">
         <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl sm:text-2xl font-bold text-text flex items-center gap-2.5">
-              <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary-dark flex items-center justify-center shrink-0">
-                <Icon name="shield" size="lg" />
-              </span>
-              مرجع سياسة الصلاحيات والحوكمة المؤسسية
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary-dark flex items-center justify-center shrink-0">
+              <Icon name="shield" size="lg" />
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold text-text">
+              صلاحيات الأدوار والحوكمة
             </h1>
             <Badge variant="primary" size="sm">
               4 أدوار قياسية
             </Badge>
           </div>
           <p className="text-xs sm:text-sm text-text-muted">
-            تهيئة الصلاحيات الافتراضية وسقوف الأدوار القياسية الأربعة، وإدارة التفويض والرقابة الثنائية لمساعد مدير النظام
+            إدارة الصلاحيات الافتراضية لكل دور، وتفويضات المساعد الإداري وطلبات الموافقة.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/users')}
+            data-testid="navigate-to-users-btn"
+          >
+            <Icon name="users" size="sm" className="ml-1.5" />
+            تخصيص صلاحيات المستخدمين
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -129,75 +139,41 @@ export const PermissionsMatrixPage: React.FC = () => {
             onClick={loadData}
             isLoading={isLoading}
             data-testid="refresh-permissions-btn"
-            className="w-full sm:w-auto"
           >
             <Icon name="rotateCcw" size="sm" className="ml-1.5" />
-            تحديث البيانات
+            تحديث
           </Button>
         </div>
       </div>
 
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm space-y-1">
-          <div className="text-xs font-semibold text-text-muted">إجمالي الصلاحيات المعرفة</div>
-          <div className="text-2xl font-bold text-text-heading">
-            {PERMISSION_DEFINITIONS.length} صلاحية
-          </div>
-          <div className="text-[11px] text-text-muted">مقسمة على 5 قطاعات وظيفية</div>
+      {/* Compact Summary Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="bg-surface border border-border rounded-xl px-3.5 py-2.5 flex items-center justify-between">
+          <span className="text-xs text-text-muted">إجمالي الصلاحيات</span>
+          <strong className="text-sm font-bold text-text-heading">{PERMISSION_DEFINITIONS.length}</strong>
         </div>
-
-        <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm space-y-1">
-          <div className="text-xs font-semibold text-text-muted">الأدوار القياسية المعتمدة</div>
-          <div className="text-2xl font-bold text-primary-dark">
-            4 أدوار
-          </div>
-          <div className="text-[11px] text-text-muted">مدير، مدير مساعد، محاضر، متدرب</div>
+        <div className="bg-surface border border-border rounded-xl px-3.5 py-2.5 flex items-center justify-between">
+          <span className="text-xs text-text-muted">الأدوار القياسية</span>
+          <strong className="text-sm font-bold text-primary-dark">4 أدوار</strong>
         </div>
-
-        <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm space-y-1">
-          <div className="text-xs font-semibold text-text-muted">طلبات الاعتماد المعلقة</div>
-          <div className="text-2xl font-bold text-warning-dark">
-            {pendingApprovalsCount}
-          </div>
-          <div className="text-[11px] text-text-muted">تتطلب مراجعة واعتماد مدير النظام</div>
-        </div>
-
-        <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm space-y-1">
-          <div className="text-xs font-semibold text-text-muted">الحسابات المساعدة المؤهلة</div>
-          <div className="text-2xl font-bold text-success">
-            {assistantUsers.length}
-          </div>
-          <div className="text-[11px] text-text-muted">حسابات مساعد مدير النظام للتفويض</div>
-        </div>
-      </div>
-
-      {/* Notice & Direct Link to User Management */}
-      <div className="bg-surface border border-border rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary-dark flex items-center justify-center shrink-0">
-            <Icon name="users" size="md" />
-          </span>
-          <div>
-            <div className="text-sm font-bold text-text">
-              تخصيص الصلاحيات الفردية للمستخدمين
-            </div>
-            <div className="text-xs text-text-muted mt-0.5 leading-relaxed">
-              يتم منح أو سحب الصلاحيات الاستثنائية لكل مستخدم على حدة حصراً عبر شاشة إدارة المستخدمين وفق سقوف الأدوار المحددة.
-            </div>
-          </div>
-        </div>
-        <Button
+        <button
           type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => navigate('/admin/users')}
-          data-testid="navigate-to-users-btn"
-          className="shrink-0 w-full sm:w-auto"
+          onClick={() => setActiveTab('governance')}
+          className="bg-surface border border-border rounded-xl px-3.5 py-2.5 flex items-center justify-between hover:border-warning-dark/50 transition-colors cursor-pointer text-right"
         >
-          <Icon name="arrowLeft" size="sm" className="ml-1.5" />
-          الانتقال إلى إدارة المستخدمين
-        </Button>
+          <span className="text-xs text-text-muted">طلبات معلقة</span>
+          <Badge variant={pendingApprovalsCount > 0 ? 'warning' : 'neutral'} size="sm">
+            {pendingApprovalsCount}
+          </Badge>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('governance')}
+          className="bg-surface border border-border rounded-xl px-3.5 py-2.5 flex items-center justify-between hover:border-primary/40 transition-colors cursor-pointer text-right"
+        >
+          <span className="text-xs text-text-muted">المساعدون الإداريون</span>
+          <strong className="text-sm font-bold text-success">{assistantUsers.length}</strong>
+        </button>
       </div>
 
       {error && (
@@ -218,7 +194,7 @@ export const PermissionsMatrixPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('matrix')}
-          className={`py-3 px-4 font-semibold border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3 px-4 font-semibold border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'matrix'
               ? 'border-primary-dark text-primary-dark'
               : 'border-transparent text-text-muted hover:text-text hover:border-border'
@@ -226,13 +202,13 @@ export const PermissionsMatrixPage: React.FC = () => {
           data-testid="tab-matrix-btn"
         >
           <Icon name="grid" size="sm" />
-          الأدوار وسقوف الصلاحيات
+          صلاحيات الأدوار
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('governance')}
-          className={`py-3 px-4 font-semibold border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3 px-4 font-semibold border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'governance'
               ? 'border-primary-dark text-primary-dark'
               : 'border-transparent text-text-muted hover:text-text hover:border-border'
@@ -240,7 +216,7 @@ export const PermissionsMatrixPage: React.FC = () => {
           data-testid="tab-governance-btn"
         >
           <Icon name="checkSquare" size="sm" />
-          التفويض والرقابة الثنائية
+          التفويضات وطلبات الموافقة
           {pendingApprovalsCount > 0 && (
             <Badge variant="warning" size="sm" className="mr-1">
               {pendingApprovalsCount}

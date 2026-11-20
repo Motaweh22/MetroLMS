@@ -156,7 +156,10 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
 
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [filterQuery, setFilterQuery] = useState('');
-  const [selectedRoleView, setSelectedRoleView] = useState<'all' | UserRole>('all');
+  const [selectedRoleView, setSelectedRoleView] = useState<'all' | UserRole>('admin');
+  const [hideForbidden, setHideForbidden] = useState<boolean>(true);
+  const [showLegend, setShowLegend] = useState<boolean>(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   // Baseline permissions map per role derived from loaded configs or static defaults
   const baselineRoleState = useMemo<Record<UserRole, Set<SystemCapability>>>(() => {
@@ -321,63 +324,74 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
     return [selectedRoleView];
   }, [selectedRoleView]);
 
+  const groupedCategories = useMemo(() => {
+    return PERMISSION_CATEGORIES.map((cat) => {
+      const items = filteredDefinitions.filter((d) => d.category === cat.id);
+      return { category: cat, items };
+    }).filter((g) => g.items.length > 0);
+  }, [filteredDefinitions]);
+
+  const toggleCategoryCollapse = (catId: string) => {
+    setCollapsedCategories((prev) => ({ ...prev, [catId]: !prev[catId] }));
+  };
+
   return (
-    <div className="space-y-6" data-testid="role-permissions-matrix-container">
-      {/* Notice Banner: Fixed Baseline Policy / Configurable Role Defaults */}
-      <Alert
-        variant="info"
-        title="سياسة الصلاحيات الافتراضية وسقوف الأدوار القياسية"
-        data-testid="fixed-policy-notice"
-      >
-        {readOnly
-          ? 'هذا الجدول يُعرض للاطلاع المرجعي الصارم على الصلاحيات الافتراضية وسقوف الأدوار القياسية الأربعة. تعديل الصلاحيات الافتراضية مخصص لمدير النظام فقط، وتمنح الاستثناءات الفردية حصراً عبر إدارة المستخدمين.'
-          : 'يمكن لمدير النظام تهيئة الصلاحيات الافتراضية الممنوحة لكل دور قياسي ضمن سقوف الأمان الثابتة كودياً. يؤثر تعديل الصلاحيات الافتراضية على جميع مستخدمي الدور الذين لا يملكون تخصيصاً فردياً مسبقاً.'}
-      </Alert>
-
-      {/* Unsaved Changes Action Bar (when admin makes changes) */}
-      {!readOnly && dirtyRoles.length > 0 && (
+    <div className="space-y-4" data-testid="role-permissions-matrix-container">
+      {/* Compact Policy Notice + Legend Toggle */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface border border-border rounded-2xl px-4 py-3 shadow-xs">
         <div
-          className="bg-warning-light border border-warning-dark/30 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4"
-          data-testid="unsaved-role-changes-bar"
+          className="flex items-start sm:items-center gap-2.5 text-xs text-text-muted"
+          data-testid="fixed-policy-notice"
         >
-          <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-xl bg-warning/20 text-warning-dark flex items-center justify-center shrink-0">
-              <Icon name="alert" size="md" />
-            </span>
-            <div>
-              <div className="text-sm font-bold text-text-heading">
-                تعديلات غير محفوظة على الصلاحيات الافتراضية
-              </div>
-              <div className="text-xs text-text-muted mt-0.5">
-                الأدوار المعدلة: {dirtyRoles.map((r) => ROLE_DISPLAY_LABELS[r]).join('، ')}.
-                تطبيق هذه التعديلات سيؤثر على جميع مستخدمي هذه الأدوار الذين ليس لديهم استثناءات فردية.
-              </div>
-            </div>
-          </div>
+          <Icon name="info" size="sm" className="text-primary-dark shrink-0 mt-0.5 sm:mt-0" />
+          <span>
+            {readOnly
+              ? 'وضع العرض المرجعي فقط: التعديل مخصص لمدير النظام، والاستثناءات الفردية تتم عبر إدارة المستخدمين.'
+              : 'اختر الدور لتعديل صلاحياته الافتراضية بسهولة، أو اعرض جدول المقارنة الكامل.'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowLegend((prev) => !prev)}
+          className="text-xs font-semibold text-primary-dark hover:underline inline-flex items-center gap-1 shrink-0 cursor-pointer self-end lg:self-auto"
+        >
+          <Icon name="info" size="sm" />
+          <span>{showLegend ? 'إخفاء دليل الحالات' : 'دليل الحالات والرموز'}</span>
+        </button>
+      </div>
 
-          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleResetRole()}
-              data-testid="reset-role-defaults-btn"
-              className="w-full sm:w-auto"
-            >
-              <Icon name="rotateCcw" size="sm" className="ml-1.5" />
-              إلغاء التعديلات
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => handleInitiateSave()}
-              data-testid="save-role-defaults-btn"
-              className="w-full sm:w-auto"
-            >
-              <Icon name="save" size="sm" className="ml-1.5" />
-              حفظ التعديلات الافتراضية
-            </Button>
+      {/* Collapsible Legend Guide */}
+      {showLegend && (
+        <div className="bg-surface border border-border rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center gap-3 text-xs">
+          <div className="flex items-center gap-1.5">
+            <Badge variant="success" size="sm" icon="check">
+              مباشرة
+            </Badge>
+            <span className="text-text-muted">مفعّلة وتنفذ فوراً</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="warning" size="sm" icon="pending">
+              اعتماد / تفويض
+            </Badge>
+            <span className="text-text-muted">تتطلب موافقة أو تفويضاً</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="info" size="sm" icon="users">
+              نطاق مجموعة
+            </Badge>
+            <span className="text-text-muted">داخل المجموعة المخصصة</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="primary" size="sm" icon="plus">
+              قابلة للمنح الفردي
+            </Badge>
+            <span className="text-text-muted">معطلة افتراضياً وتُمنح فردياً</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="neutral" size="sm" icon="close">
+              محظورة نهائياً
+            </Badge>
+            <span className="text-text-muted">غير متاحة لهذا الدور</span>
           </div>
         </div>
       )}
@@ -393,103 +407,86 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
         </Alert>
       )}
 
-      {/* Legend Guide */}
-      <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-3 text-xs">
-        <span className="font-bold text-text ml-1">دليل حالات الصلاحيات:</span>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="success" size="sm" icon="check">
-            مباشرة
-          </Badge>
-          <span className="text-text-muted">ممنوحة افتراضياً وتنفذ فوراً</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="warning" size="sm" icon="pending">
-            اعتماد / تفويض
-          </Badge>
-          <span className="text-text-muted">تتطلب اعتماداً أو تفويضاً مسبقاً للمساعد</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="info" size="sm" icon="users">
-            نطاق مجموعة
-          </Badge>
-          <span className="text-text-muted">مقيدة بالمجموعة التدريبية المخصصة للمحاضر</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="primary" size="sm" icon="plus">
-            قابلة للمنح الفردي
-          </Badge>
-          <span className="text-text-muted">معطلة افتراضياً ومؤهلة للمنح الاستثنائي بإدارة المستخدمين</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="neutral" size="sm" icon="close">
-            محظورة نهائياً
-          </Badge>
-          <span className="text-text-muted">خارج السقف الأقصى للدور ولا يمكن تفعيلها</span>
-        </div>
-      </div>
+      {/* Role Selector & Filters */}
+      <div className="bg-surface border border-border rounded-2xl p-4 shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {ROLES.map((r) => {
+              const isDirty = dirtyRoles.includes(r);
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setSelectedRoleView(r)}
+                  className={`px-3.5 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    selectedRoleView === r
+                      ? 'bg-primary-dark text-white shadow-sm'
+                      : 'bg-bg-alt/70 text-text-muted hover:text-text hover:bg-bg-alt'
+                  }`}
+                  data-testid={`filter-role-${r}`}
+                >
+                  <span>{ROLE_DISPLAY_LABELS[r]}</span>
+                  {isDirty && (
+                    <span
+                      className="w-2 h-2 rounded-full bg-warning inline-block"
+                      title="تعديلات غير محفوظة"
+                    />
+                  )}
+                </button>
+              );
+            })}
 
-      {/* Role View Selector & Category Filters */}
-      <div className="bg-surface border border-border rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
-        {/* Role Selector Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-border text-xs">
-          <button
-            type="button"
-            onClick={() => setSelectedRoleView('all')}
-            className={`px-3 py-2 rounded-xl font-semibold transition-all ${
-              selectedRoleView === 'all'
-                ? 'bg-primary-dark text-white shadow-sm'
-                : 'bg-bg-alt/70 text-text-muted hover:text-text hover:bg-bg-alt transition-colors'
-            }`}
-            data-testid="filter-role-all"
-          >
-            عرض كافة الأدوار (مصفوفة المقارنة)
-          </button>
-          {ROLES.map((r) => {
-            const isDirty = dirtyRoles.includes(r);
-            return (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setSelectedRoleView(r)}
-                className={`px-3 py-2 rounded-xl font-semibold transition-all flex items-center gap-1.5 ${
-                  selectedRoleView === r
-                    ? 'bg-primary-dark text-white shadow-sm'
-                    : 'bg-bg-alt/70 text-text-muted hover:text-text hover:bg-bg-alt transition-colors'
-                }`}
-                data-testid={`filter-role-${r}`}
-              >
-                <span>{ROLE_DISPLAY_LABELS[r]}</span>
-                {isDirty && (
-                  <span className="w-2 h-2 rounded-full bg-warning-dark inline-block" title="تعديلات غير محفوظة" />
-                )}
-              </button>
-            );
-          })}
+            <button
+              type="button"
+              onClick={() => setSelectedRoleView('all')}
+              className={`px-3.5 py-2 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                selectedRoleView === 'all'
+                  ? 'bg-text-heading text-white border-text-heading shadow-sm'
+                  : 'bg-surface text-text-muted border-border hover:text-text'
+              }`}
+              data-testid="filter-role-all"
+            >
+              <Icon name="grid" size="sm" />
+              <span>مقارنة كل الأدوار</span>
+            </button>
+          </div>
+
+          {selectedRoleView !== 'all' && (
+            <label className="inline-flex items-center gap-2 text-xs text-text-muted cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hideForbidden}
+                onChange={(e) => setHideForbidden(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-border accent-primary-dark"
+              />
+              <span>إخفاء الصلاحيات المحظورة عن هذا الدور</span>
+            </label>
+          )}
         </div>
 
-        {/* Categories Bar & Search Input */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        {/* Category Filter Pills & Search */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
             <button
               type="button"
               onClick={() => setActiveCategory('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 activeCategory === 'all'
-                  ? 'bg-primary-dark text-white shadow-sm'
-                  : 'bg-bg-alt/70 text-text-muted hover:text-text hover:bg-bg-alt transition-colors'
+                  ? 'bg-primary text-white shadow-xs'
+                  : 'bg-bg-alt/70 text-text-muted hover:text-text hover:bg-bg-alt'
               }`}
             >
-              كل الفئات ({PERMISSION_DEFINITIONS.length})
+              الكل ({PERMISSION_DEFINITIONS.length})
             </button>
             {PERMISSION_CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeCategory === cat.id
-                    ? 'bg-primary-dark text-white shadow-sm'
-                    : 'bg-bg-alt/70 text-text-muted hover:text-text hover:bg-bg-alt transition-colors'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-bg-alt/70 text-text-muted hover:text-text hover:bg-bg-alt'
                 }`}
               >
                 {cat.labelAr}
@@ -497,12 +494,12 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
             ))}
           </div>
 
-          <div className="relative w-full md:w-80">
+          <div className="relative w-full md:w-72">
             <input
               type="text"
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="بحث في الصلاحيات والمسميات..."
+              placeholder="بحث في الصلاحيات..."
               className="w-full text-xs pr-9 pl-3 py-2 bg-bg-alt/50 border border-border rounded-xl text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             />
             <Icon
@@ -514,146 +511,88 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
         </div>
       </div>
 
-      {/* Permissions Matrix Table */}
-      <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse" data-testid="role-permissions-matrix-table">
-            <thead>
-              <tr className="bg-bg-alt/70 border-b border-border text-xs font-semibold text-text-muted select-none">
-                <th scope="col" className="py-3.5 px-4 font-bold min-w-[260px]">
-                  الصلاحية / الوصف الوظيفي
-                </th>
-                {visibleRoles.includes('admin') && (
-                  <th scope="col" className="py-3.5 px-3 font-bold text-center min-w-[140px]">
-                    <div className="flex flex-col items-center gap-1">
-                      <Badge variant="primary" size="md">
-                        {ROLE_DISPLAY_LABELS.admin}
-                      </Badge>
-                      {!readOnly && (
-                        <span className="text-[10px] text-text-muted font-normal">افتراضيات قابلة للإدارة</span>
-                      )}
-                    </div>
-                  </th>
-                )}
-                {visibleRoles.includes('assistant_admin') && (
-                  <th scope="col" className="py-3.5 px-3 font-bold text-center min-w-[150px]">
-                    <div className="flex flex-col items-center gap-1">
-                      <Badge variant="neutral" size="md">
-                        {ROLE_DISPLAY_LABELS.assistant_admin}
-                      </Badge>
-                      {!readOnly && (
-                        <span className="text-[10px] text-text-muted font-normal">افتراضيات قابلة للإدارة</span>
-                      )}
-                    </div>
-                  </th>
-                )}
-                {visibleRoles.includes('lecturer') && (
-                  <th scope="col" className="py-3.5 px-3 font-bold text-center min-w-[140px]">
-                    <div className="flex flex-col items-center gap-1">
-                      <Badge variant="success" size="md">
-                        {ROLE_DISPLAY_LABELS.lecturer}
-                      </Badge>
-                      {!readOnly && (
-                        <span className="text-[10px] text-text-muted font-normal">افتراضيات قابلة للإدارة</span>
-                      )}
-                    </div>
-                  </th>
-                )}
-                {visibleRoles.includes('user') && (
-                  <th scope="col" className="py-3.5 px-3 font-bold text-center min-w-[130px]">
-                    <div className="flex flex-col items-center gap-1">
-                      <Badge variant="neutral" size="md">
-                        {ROLE_DISPLAY_LABELS.user}
-                      </Badge>
-                      {!readOnly && (
-                        <span className="text-[10px] text-text-muted font-normal">افتراضيات قابلة للإدارة</span>
-                      )}
-                    </div>
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/70 text-sm">
-              {filteredDefinitions.map((def) => {
-                const categoryObj = PERMISSION_CATEGORIES.find((c) => c.id === def.category);
+      {/* Mode 1: Single-Role Clean Grouped Accordion View */}
+      {selectedRoleView !== 'all' ? (
+        <div className="space-y-3" data-testid="role-focused-permissions-view">
+          {groupedCategories.map(({ category, items }) => {
+            const role = selectedRoleView;
+            const ceiling = ROLE_CAPABILITY_CEILINGS[role];
+            const visibleItems = hideForbidden
+              ? items.filter((d) => ceiling?.has(d.key))
+              : items;
+            if (visibleItems.length === 0) return null;
 
-                return (
-                  <tr
-                    key={def.key}
-                    className="hover:bg-bg/60 transition-colors"
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text text-xs sm:text-sm">
-                        {def.labelAr}
-                      </div>
-                      <div className="text-xs text-text-muted mt-0.5 leading-relaxed">
-                        {def.descriptionAr}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="font-mono text-[10px] text-text-muted bg-bg-alt/60 px-1.5 py-0.5 rounded border border-border/50">
-                          {def.key}
-                        </span>
-                        {categoryObj && (
-                          <span className="text-[10px] text-text-muted bg-bg-alt/40 px-1.5 py-0.5 rounded border border-border/40">
-                            {categoryObj.labelAr}
-                          </span>
-                        )}
-                        {def.isSovereign && (
-                          <Badge variant="danger" size="sm">
-                            صلاحية سيادية
-                          </Badge>
-                        )}
-                      </div>
-                    </td>
+            const allowedCount = items.filter((d) => ceiling?.has(d.key)).length;
+            const grantedCount = items.filter(
+              (d) => ceiling?.has(d.key) && workingRoleState[role].has(d.key)
+            ).length;
+            const isCollapsed = Boolean(collapsedCategories[category.id]);
 
-                    {/* Columns for visible canonical roles */}
-                    {visibleRoles.map((role) => {
-                      const ceiling = ROLE_CAPABILITY_CEILINGS[role];
+            return (
+              <div
+                key={category.id}
+                className="bg-surface border border-border rounded-2xl overflow-hidden shadow-xs"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggleCategoryCollapse(category.id)}
+                  className="w-full px-4 py-3 bg-bg-alt/50 hover:bg-bg-alt/80 transition-colors flex items-center justify-between cursor-pointer text-right"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Icon
+                      name={isCollapsed ? 'chevronLeft' : 'chevronDown'}
+                      size="sm"
+                      className="text-text-muted"
+                    />
+                    <span className="text-sm font-bold text-text-heading">{category.labelAr}</span>
+                    <Badge variant={grantedCount > 0 ? 'primary' : 'neutral'} size="sm">
+                      {grantedCount} / {allowedCount} مفعّلة
+                    </Badge>
+                  </div>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="divide-y divide-border/60">
+                    {visibleItems.map((def) => {
                       const isWithinCeiling = ceiling ? ceiling.has(def.key) : false;
                       const isGranted = workingRoleState[role].has(def.key);
                       const status = resolveCapabilityStatus(role, def.key, isGranted);
-                      const isEssential = role === 'admin' && ESSENTIAL_ADMIN_CAPABILITIES.has(def.key);
+                      const isEssential =
+                        role === 'admin' && ESSENTIAL_ADMIN_CAPABILITIES.has(def.key);
 
                       return (
-                        <td
-                          key={role}
-                          className="py-3.5 px-2 text-center align-middle"
+                        <div
+                          key={def.key}
+                          className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                            !isWithinCeiling ? 'opacity-60 bg-bg/40' : 'hover:bg-bg/40'
+                          }`}
                         >
-                          {!readOnly && isWithinCeiling ? (
-                            <div className="flex flex-col items-center justify-center gap-1.5">
-                              <div className="inline-flex items-center gap-2 select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={isGranted}
-                                  disabled={isEssential}
-                                  onChange={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleCapability(role, def.key);
-                                  }}
-                                  className="h-4 w-4 rounded border-border text-primary-dark focus:ring-primary/20 accent-primary-dark cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                                  data-testid={`toggle-role-capability-${role}-${def.key}`}
-                                  aria-label={`تفعيل صلاحية ${def.labelAr} لدور ${ROLE_DISPLAY_LABELS[role]}`}
-                                />
-                                <Badge
-                                  variant={status.variant}
-                                  size="sm"
-                                  icon={status.icon}
-                                  title={status.tooltipText}
-                                  data-testid={`cell-status-${role}-${def.key}`}
-                                  className={!isEssential ? 'cursor-pointer hover:opacity-90' : undefined}
-                                  onClick={() => !isEssential && handleToggleCapability(role, def.key)}
-                                >
-                                  {status.badgeLabel}
+                          <div className="space-y-0.5 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className="font-semibold text-sm text-text-heading"
+                                title={def.key}
+                              >
+                                {def.labelAr}
+                              </span>
+                              {def.isSovereign && (
+                                <Badge variant="danger" size="sm">
+                                  صلاحية سيادية
                                 </Badge>
-                              </div>
+                              )}
                               {isEssential && (
-                                <span className="text-[10px] text-text-muted inline-flex items-center gap-0.5">
-                                  <Icon name="lock" size={10} />
-                                  محصنة
+                                <span className="text-[11px] text-text-muted inline-flex items-center gap-1">
+                                  <Icon name="lock" size={11} />
+                                  أساسية ومحصنة
                                 </span>
                               )}
                             </div>
-                          ) : (
+                            <p className="text-xs text-text-muted leading-relaxed">
+                              {def.descriptionAr}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
                             <Badge
                               variant={status.variant}
                               size="sm"
@@ -663,17 +602,203 @@ export const RolePermissionsMatrix: React.FC<RolePermissionsMatrixProps> = ({
                             >
                               {status.badgeLabel}
                             </Badge>
-                          )}
-                        </td>
+
+                            {!readOnly && isWithinCeiling && (
+                              <label
+                                className={`relative inline-flex items-center ${
+                                  isEssential ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isGranted}
+                                  disabled={isEssential}
+                                  onChange={() => handleToggleCapability(role, def.key)}
+                                  className="sr-only peer"
+                                  data-testid={`toggle-role-capability-${role}-${def.key}`}
+                                  aria-label={`تفعيل صلاحية ${def.labelAr} لدور ${ROLE_DISPLAY_LABELS[role]}`}
+                                />
+                                <div className="w-10 h-5 bg-border rounded-full peer peer-checked:bg-primary-dark transition-colors after:content-[''] after:absolute after:top-0.5 after:right-0.5 peer-checked:after:-translate-x-5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all shadow-inner" />
+                              </label>
+                            )}
+                          </div>
+                        </div>
                       );
                     })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      </div>
+      ) : (
+        /* Mode 2: 4-Role Comparison Table View */
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table
+              className="w-full text-right border-collapse"
+              data-testid="role-permissions-matrix-table"
+            >
+              <thead>
+                <tr className="bg-bg-alt/70 border-b border-border text-xs font-semibold text-text-muted select-none">
+                  <th scope="col" className="py-3 px-4 font-bold min-w-[240px]">
+                    الصلاحية
+                  </th>
+                  {visibleRoles.map((role) => (
+                    <th
+                      key={role}
+                      scope="col"
+                      className="py-3 px-2 font-bold text-center min-w-[125px]"
+                    >
+                      <Badge
+                        variant={
+                          role === 'admin'
+                            ? 'primary'
+                            : role === 'lecturer'
+                              ? 'success'
+                              : 'neutral'
+                        }
+                        size="sm"
+                      >
+                        {ROLE_DISPLAY_LABELS[role]}
+                      </Badge>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/70 text-sm">
+                {groupedCategories.map(({ category, items }) => (
+                  <React.Fragment key={category.id}>
+                    <tr className="bg-bg-alt/40">
+                      <td
+                        colSpan={1 + visibleRoles.length}
+                        className="py-2 px-4 text-xs font-bold text-primary-dark"
+                      >
+                        {category.labelAr} ({items.length})
+                      </td>
+                    </tr>
+                    {items.map((def) => (
+                      <tr key={def.key} className="hover:bg-bg/60 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-text text-xs sm:text-sm flex items-center gap-1.5">
+                            <span title={def.key}>{def.labelAr}</span>
+                            {def.isSovereign && (
+                              <Badge variant="danger" size="sm">
+                                سيادية
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-text-muted mt-0.5 line-clamp-1">
+                            {def.descriptionAr}
+                          </div>
+                        </td>
+
+                        {visibleRoles.map((role) => {
+                          const ceiling = ROLE_CAPABILITY_CEILINGS[role];
+                          const isWithinCeiling = ceiling ? ceiling.has(def.key) : false;
+                          const isGranted = workingRoleState[role].has(def.key);
+                          const status = resolveCapabilityStatus(role, def.key, isGranted);
+                          const isEssential =
+                            role === 'admin' && ESSENTIAL_ADMIN_CAPABILITIES.has(def.key);
+
+                          return (
+                            <td key={role} className="py-2.5 px-2 text-center align-middle">
+                              {!readOnly && isWithinCeiling ? (
+                                <div className="inline-flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isGranted}
+                                    disabled={isEssential}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleCapability(role, def.key);
+                                    }}
+                                    className="h-4 w-4 rounded border-border accent-primary-dark cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                                    data-testid={`toggle-role-capability-${role}-${def.key}`}
+                                    aria-label={`تفعيل صلاحية ${def.labelAr} لدور ${ROLE_DISPLAY_LABELS[role]}`}
+                                  />
+                                  <Badge
+                                    variant={status.variant}
+                                    size="sm"
+                                    icon={status.icon}
+                                    title={status.tooltipText}
+                                    data-testid={`cell-status-${role}-${def.key}`}
+                                    className={
+                                      !isEssential ? 'cursor-pointer hover:opacity-90' : undefined
+                                    }
+                                    onClick={() => !isEssential && handleToggleCapability(role, def.key)}
+                                  >
+                                    {status.badgeLabel}
+                                  </Badge>
+                                </div>
+                              ) : (
+                                <Badge
+                                  variant={status.variant}
+                                  size="sm"
+                                  icon={status.icon}
+                                  title={status.tooltipText}
+                                  data-testid={`cell-status-${role}-${def.key}`}
+                                >
+                                  {status.badgeLabel}
+                                </Badge>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky Unsaved Changes Action Bar */}
+      {!readOnly && dirtyRoles.length > 0 && (
+        <div
+          className="sticky bottom-4 z-30 bg-warning-light border border-warning-dark/40 rounded-2xl p-3.5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3"
+          data-testid="unsaved-role-changes-bar"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-xl bg-warning/20 text-warning-dark flex items-center justify-center shrink-0">
+              <Icon name="alert" size="sm" />
+            </span>
+            <div className="text-xs">
+              <div className="font-bold text-text-heading">
+                تعديلات غير محفوظة ({dirtyRoles.map((r) => ROLE_DISPLAY_LABELS[r]).join('، ')})
+              </div>
+              <div className="text-text-muted">اضغط حفظ لتطبيق التعديلات على الدور.</div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleResetRole()}
+              data-testid="reset-role-defaults-btn"
+              className="w-full sm:w-auto bg-surface"
+            >
+              <Icon name="rotateCcw" size="sm" className="ml-1" />
+              تراجع
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => handleInitiateSave()}
+              data-testid="save-role-defaults-btn"
+              className="w-full sm:w-auto"
+            >
+              <Icon name="save" size="sm" className="ml-1" />
+              حفظ التعديلات
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Dialog before saving role defaults */}
       <ConfirmDialog
