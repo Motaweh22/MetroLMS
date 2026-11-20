@@ -1011,3 +1011,184 @@ class CourseQrJoinView(APIView):
         )
 
 
+class AdminCourseVisibilityCatalogView(APIView):
+    """GET /api/admin/course-visibility — Courses, Departments, and Job Titles visibility matrix."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request):
+        if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
+            return error_response(
+                "PERMISSION_DENIED",
+                "هذه الصفحة مخصصة لمديري النظام والمساعدين الإداريين فقط.",
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        from apps.courses.models import CourseAudienceDepartment, CourseAudienceJobTitle
+        from apps.organization.models import JobTitle, OrganizationalDepartment
+
+        dept_map: dict[int, list[str]] = {}
+        for row in CourseAudienceDepartment.objects.all().values("course_id", "department_id"):
+            dept_map.setdefault(row["course_id"], []).append(str(row["department_id"]))
+
+        job_map: dict[int, list[str]] = {}
+        for row in CourseAudienceJobTitle.objects.all().values("course_id", "job_title_id"):
+            job_map.setdefault(row["course_id"], []).append(str(row["job_title_id"]))
+
+        courses_data = [
+            {
+                "id": str(c.id),
+                "title": c.title,
+                "lifecycleStatus": c.lifecycle_status,
+                "accessMode": c.access_mode,
+                "targetDepartmentIds": dept_map.get(c.id, []),
+                "targetJobTitleIds": job_map.get(c.id, []),
+            }
+            for c in Course.objects.exclude(lifecycle_status="Archived").order_by("id")
+        ]
+
+        departments_data = [
+            {
+                "id": str(d.id),
+                "nameAr": d.name_ar,
+                "nameEn": d.name_en or "",
+            }
+            for d in OrganizationalDepartment.objects.all().order_by("id")
+        ]
+
+        job_titles_data = [
+            {
+                "id": str(j.id),
+                "nameAr": j.name_ar,
+                "nameEn": j.name_en or "",
+                "departmentId": str(j.department_id) if j.department_id else None,
+                "departmentNameAr": j.department.name_ar if j.department else None,
+            }
+            for j in JobTitle.objects.select_related("department").all().order_by("id")
+        ]
+
+        return success_response(
+            {
+                "courses": courses_data,
+                "departments": departments_data,
+                "jobTitles": job_titles_data,
+            }
+        )
+
+
+class AdminCourseVisibilityUpdateView(APIView):
+    """PUT /api/admin/course-visibility/course/<course_id>."""
+
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request: Request, course_id: int):
+        if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
+            return error_response(
+                "PERMISSION_DENIED",
+                "ليس لديك صلاحية تعديل ظهور الدورات.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response(
+                "RESOURCE_NOT_FOUND",
+                "المورد المطلوب غير موجود أو تم نقله.",
+                status.HTTP_404_NOT_FOUND,
+            )
+
+        from django.db import transaction
+        from apps.courses.models import CourseAudienceDepartment, CourseAudienceJobTitle
+        from apps.governance.services.governance_service import record_audit_log
+
+        with transaction.atomic():
+            _sync_course_audience(course, request.data)
+            record_audit_log(
+                action="course.visibility_updated",
+                actor=request.user,
+                target_entity_type="Course",
+                target_entity_id=str(course.id),
+                details_snapshot={
+                    "targetDepartmentIds": request.data.get("targetDepartmentIds", []),
+                    "targetJobTitleIds": request.data.get("targetJobTitleIds", []),
+                },
+            )
+
+        dept_ids = [
+            str(x)
+            for x in CourseAudienceDepartment.objects.filter(course=course).values_list("department_id", flat=True)
+        ]
+        job_ids = [
+            str(x)
+            for x in CourseAudienceJobTitle.objects.filter(course=course).values_list("job_title_id", flat=True)
+        ]
+        return success_response(
+            {
+                "courseId": str(course.id),
+                "targetDepartmentIds": dept_ids,
+                "targetJobTitleIds": job_ids,
+                "message": f"تم تحديث قواعد ظهور الدورة «{course.title}» بنجاح.",
+            }
+        )
+
+
+class AdminScopeCourseVisibilityUpdateView(APIView):
+    """PUT /api/admin/course-visibility/scope — Assign courses to a department or job title."""
+
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request: Request):
+        if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
+            return error_response(
+                "PERMISSION_DENIED",
+                "ليس لديك صلاحية تعديل ظهور الدورات.",
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        scope_type = str(request.data.get("scopeType") or "").strip()
+        raw_scope_id = str(request.data.get("scopeId") or "").strip()
+        raw_course_ids = request.data.get("courseIds")
+        if scope_type not in {"department", "job_title"} or not raw_scope_id.isdigit() or not isinstance(raw_course_ids, list):
+            return error_response(
+                "VALIDATION_ERROR",
+                "بيانات التحديد غير صالحة.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
+        scope_id = int(raw_scope_id)
+        selected_course_ids = {int(str(cid)) for cid in raw_course_ids if str(cid).isdigit()}
+
+        from django.db import transaction
+        from apps.courses.models import CourseAudienceDepartment, CourseAudienceJobTitle
+        from apps.governance.services.governance_service import record_audit_log
+
+        with transaction.atomic():
+            if scope_type == "department":
+                CourseAudienceDepartment.objects.filter(department_id=scope_id).delete()
+                for cid in selected_course_ids:
+                    if Course.objects.filter(pk=cid).exists():
+                        CourseAudienceDepartment.objects.create(course_id=cid, department_id=scope_id)
+            else:
+                CourseAudienceJobTitle.objects.filter(job_title_id=scope_id).delete()
+                for cid in selected_course_ids:
+                    if Course.objects.filter(pk=cid).exists():
+                        CourseAudienceJobTitle.objects.create(course_id=cid, job_title_id=scope_id)
+
+            record_audit_log(
+                action="course.scope_visibility_updated",
+                actor=request.user,
+                target_entity_type="Department" if scope_type == "department" else "JobTitle",
+                target_entity_id=str(scope_id),
+                details_snapshot={"courseIds": [str(x) for x in selected_course_ids]},
+            )
+
+        return success_response(
+            {
+                "updated": True,
+                "scopeType": scope_type,
+                "scopeId": str(scope_id),
+                "courseIds": [str(x) for x in selected_course_ids],
+                "message": "تم حفظ تخصيص الكورسات بنجاح.",
+            }
+        )
+
+

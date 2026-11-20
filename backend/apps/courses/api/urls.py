@@ -12,7 +12,10 @@ from apps.courses.api.views.courses import (
     AdminCourseReviewDecideView,
     AdminCourseReviewSubmitView,
     AdminCourseStagedEditView,
+    AdminCourseVisibilityCatalogView,
+    AdminCourseVisibilityUpdateView,
     AdminCourseWorkingNotesView,
+    AdminScopeCourseVisibilityUpdateView,
     ApprovalsMySubmissionsView,
     ApprovalsQueueView,
     CourseCatalogDetailView,
@@ -124,5 +127,20 @@ urlpatterns = [
         "admin/comments/<int:comment_id>/ignore-report",
         AdminCommentModerationView.as_view(),
         name="admin-comment-ignore-report",
+    ),
+    path(
+        "admin/course-visibility",
+        AdminCourseVisibilityCatalogView.as_view(),
+        name="admin-course-visibility",
+    ),
+    path(
+        "admin/course-visibility/course/<int:course_id>",
+        AdminCourseVisibilityUpdateView.as_view(),
+        name="admin-course-visibility-update",
+    ),
+    path(
+        "admin/course-visibility/scope",
+        AdminScopeCourseVisibilityUpdateView.as_view(),
+        name="admin-scope-course-visibility-update",
     ),
 ]

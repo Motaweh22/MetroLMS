@@ -5,16 +5,16 @@ import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
 import { Badge } from '@/shared/ui/Badge';
+import { Modal } from '@/shared/ui/Modal';
 import { useToast } from '@/shared/ui/Toast';
 import {
   departmentTracksApi,
-  type DepartmentTracksCatalogResponse,
+  type CourseVisibilityItem,
+  type OrgDepartmentOption,
+  type OrgJobTitleOption,
 } from '@/features/permissions/services/departmentTracksApi';
-import type {
-  CanonicalDepartmentDTO,
-  CanonicalTrackDTO,
-  DepartmentPermissionDTO,
-} from '@/core/permissions/types';
+
+type VisibilityViewMode = 'by_course' | 'by_department' | 'by_job_title';
 
 export const DepartmentTracksPage: React.FC = () => {
   const { user } = useAuth();
@@ -24,44 +24,49 @@ export const DepartmentTracksPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Catalogs
-  const [departments, setDepartments] = useState<DepartmentPermissionDTO[]>([]);
-  const [canonicalDepartments, setCanonicalDepartments] = useState<CanonicalDepartmentDTO[]>([]);
-  const [tracks, setTracks] = useState<CanonicalTrackDTO[]>([]);
+  const [courses, setCourses] = useState<CourseVisibilityItem[]>([]);
+  const [departments, setDepartments] = useState<OrgDepartmentOption[]>([]);
+  const [jobTitles, setJobTitles] = useState<OrgJobTitleOption[]>([]);
 
-  // Selection & Editing
-  const [selectedDeptId, setSelectedDeptId] = useState<string>('DEPT-OPERATIONS');
-  const [editingAllowedTracks, setEditingAllowedTracks] = useState<string[]>([]);
-  const [searchDeptQuery, setSearchDeptQuery] = useState('');
-  const [justification, setJustification] = useState('');
+  const [viewMode, setViewMode] = useState<VisibilityViewMode>('by_course');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Modal 1: Edit visibility for a specific course
+  const [editingCourse, setEditingCourse] = useState<CourseVisibilityItem | null>(null);
+  const [modalDeptIds, setModalDeptIds] = useState<string[]>([]);
+  const [modalJobIds, setModalJobIds] = useState<string[]>([]);
+  const [modalScopeSearch, setModalScopeSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Modal 2: Edit courses for a specific department or job title
+  const [editingScope, setEditingScope] = useState<{
+    type: 'department' | 'job_title';
+    id: string;
+    label: string;
+  } | null>(null);
+  const [modalCourseIds, setModalCourseIds] = useState<string[]>([]);
+  const [modalCourseSearch, setModalCourseSearch] = useState('');
+
   const isAssistantAdmin = user?.role === 'assistant_admin';
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer';
+  const isAdmin =
+    user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer';
   const isAuthorized = isAdmin || isAssistantAdmin;
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data: DepartmentTracksCatalogResponse = await departmentTracksApi.getDepartmentTracksConfig();
-      setDepartments(data.departments);
-      setCanonicalDepartments(data.canonicalDepartments);
-      setTracks(data.tracks);
-
-      // Set initial selected department tracks
-      const initialDept = data.departments.find((d) => d.departmentId === selectedDeptId) || data.departments[0];
-      if (initialDept) {
-        setSelectedDeptId(initialDept.departmentId);
-        setEditingAllowedTracks([...initialDept.allowedTracks]);
-      }
+      const data = await departmentTracksApi.getCourseVisibilityCatalog();
+      setCourses(data.courses || []);
+      setDepartments(data.departments || []);
+      setJobTitles(data.jobTitles || []);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'تعذر تحميل إعدادات مسارات الإدارات';
+      const msg = err instanceof Error ? err.message : 'تعذر تحميل إعدادات ظهور الكورسات.';
       setError(msg);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDeptId]);
+  }, []);
 
   useEffect(() => {
     if (isAuthorized) {
@@ -69,110 +74,142 @@ export const DepartmentTracksPage: React.FC = () => {
     }
   }, [isAuthorized, loadData]);
 
-  // Current selected department config
-  const selectedDeptConfig = useMemo(() => {
-    return departments.find((d) => d.departmentId === selectedDeptId);
-  }, [departments, selectedDeptId]);
+  const deptNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of departments) map.set(d.id, d.nameAr);
+    return map;
+  }, [departments]);
 
-  // Current canonical department details
-  const selectedCanonicalDept = useMemo(() => {
-    return canonicalDepartments.find((d) => d.id === selectedDeptId);
-  }, [canonicalDepartments, selectedDeptId]);
+  const jobNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const j of jobTitles) map.set(j.id, j.nameAr);
+    return map;
+  }, [jobTitles]);
 
-  // Track changes vs saved state
-  const hasUnsavedChanges = useMemo(() => {
-    if (!selectedDeptConfig) return false;
-    const originalSet = new Set(selectedDeptConfig.allowedTracks);
-    const editingSet = new Set(editingAllowedTracks);
-    if (originalSet.size !== editingSet.size) return true;
-    for (const t of originalSet) {
-      if (!editingSet.has(t)) return true;
-    }
-    return false;
-  }, [selectedDeptConfig, editingAllowedTracks]);
+  const filteredCourses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return courses;
+    return courses.filter((c) => c.title.toLowerCase().includes(q));
+  }, [courses, searchQuery]);
 
-  // Select department
-  const handleSelectDepartment = (deptId: string) => {
-    if (deptId === selectedDeptId) return;
-    const target = departments.find((d) => d.departmentId === deptId);
-    setSelectedDeptId(deptId);
-    setEditingAllowedTracks(target ? [...target.allowedTracks] : []);
-    setJustification('');
+  const filteredDepartments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return departments;
+    return departments.filter(
+      (d) => d.nameAr.toLowerCase().includes(q) || d.nameEn.toLowerCase().includes(q)
+    );
+  }, [departments, searchQuery]);
+
+  const filteredJobTitles = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return jobTitles;
+    return jobTitles.filter(
+      (j) =>
+        j.nameAr.toLowerCase().includes(q) ||
+        j.nameEn.toLowerCase().includes(q) ||
+        (j.departmentNameAr || '').toLowerCase().includes(q)
+    );
+  }, [jobTitles, searchQuery]);
+
+  // Open Course Visibility Modal
+  const handleOpenCourseModal = (course: CourseVisibilityItem) => {
+    setEditingCourse(course);
+    setModalDeptIds([...course.targetDepartmentIds]);
+    setModalJobIds([...course.targetJobTitleIds]);
+    setModalScopeSearch('');
   };
 
-  // Toggle track selection
-  const handleToggleTrack = (trackId: string) => {
-    setEditingAllowedTracks((prev) => {
-      if (prev.includes(trackId)) {
-        return prev.filter((id) => id !== trackId);
-      } else {
-        return [...prev, trackId];
-      }
-    });
-  };
-
-  // Quick actions
-  const handleSelectAllTracks = () => {
-    setEditingAllowedTracks(tracks.map((t) => t.id));
-  };
-
-  const handleDeselectAllTracks = () => {
-    setEditingAllowedTracks([]);
-  };
-
-  const handleResetToSaved = () => {
-    if (selectedDeptConfig) {
-      setEditingAllowedTracks([...selectedDeptConfig.allowedTracks]);
-      setJustification('');
-    }
-  };
-
-  // Save changes
-  const handleSaveDepartmentTracks = async () => {
-    if (!selectedDeptId) return;
+  const handleSaveCourseModal = async () => {
+    if (!editingCourse) return;
     setIsSaving(true);
     try {
-      const res = await departmentTracksApi.updateDepartmentTracks(
-        selectedDeptId,
-        editingAllowedTracks,
-        justification.trim() || undefined
+      const res = await departmentTracksApi.updateCourseVisibility(
+        editingCourse.id,
+        modalDeptIds,
+        modalJobIds
       );
-
-      if (res.requiresApproval) {
-        toast.info(res.messageAr || 'تم إرسال طلب الاعتماد بنجاح إلى مدير النظام');
-      } else {
-        toast.success(res.messageAr || 'تم تحديث مسارات الإدارة بنجاح');
-      }
-
-      // Update local state
-      setDepartments((prev) =>
-        prev.map((d) => (d.departmentId === res.department.departmentId ? res.department : d))
+      setCourses((prev) =>
+        prev.map((c) =>
+          c.id === editingCourse.id
+            ? {
+                ...c,
+                targetDepartmentIds: res.targetDepartmentIds,
+                targetJobTitleIds: res.targetJobTitleIds,
+              }
+            : c
+        )
       );
-      setEditingAllowedTracks([...res.department.allowedTracks]);
-      setJustification('');
+      toast.success(res.message || 'تم تحديث قواعد ظهور الدورة بنجاح.');
+      setEditingCourse(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'فشل تحديث مسارات الإدارة';
-      toast.error(msg);
+      toast.error(err instanceof Error ? err.message : 'تعذر حفظ إعدادات الظهور.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Filtered departments for list
-  const filteredDepartments = useMemo(() => {
-    if (!searchDeptQuery.trim()) return canonicalDepartments;
-    const q = searchDeptQuery.trim().toLowerCase();
-    return canonicalDepartments.filter(
-      (d) =>
-        d.nameAr.toLowerCase().includes(q) ||
-        d.nameEn.toLowerCase().includes(q) ||
-        d.id.toLowerCase().includes(q)
-    );
-  }, [canonicalDepartments, searchDeptQuery]);
+  // Open Scope Courses Modal (by Department or Job Title)
+  const handleOpenScopeModal = (
+    type: 'department' | 'job_title',
+    id: string,
+    label: string
+  ) => {
+    const assigned = courses
+      .filter((c) =>
+        type === 'department'
+          ? c.targetDepartmentIds.includes(id)
+          : c.targetJobTitleIds.includes(id)
+      )
+      .map((c) => c.id);
+    setEditingScope({ type, id, label });
+    setModalCourseIds(assigned);
+    setModalCourseSearch('');
+  };
+
+  const handleSaveScopeModal = async () => {
+    if (!editingScope) return;
+    setIsSaving(true);
+    try {
+      const res = await departmentTracksApi.updateScopeCourseVisibility(
+        editingScope.type,
+        editingScope.id,
+        modalCourseIds
+      );
+      const selectedSet = new Set(res.courseIds);
+      setCourses((prev) =>
+        prev.map((c) => {
+          if (editingScope.type === 'department') {
+            const without = c.targetDepartmentIds.filter((x) => x !== editingScope.id);
+            return {
+              ...c,
+              targetDepartmentIds: selectedSet.has(c.id) ? [...without, editingScope.id] : without,
+            };
+          }
+          const without = c.targetJobTitleIds.filter((x) => x !== editingScope.id);
+          return {
+            ...c,
+            targetJobTitleIds: selectedSet.has(c.id) ? [...without, editingScope.id] : without,
+          };
+        })
+      );
+      toast.success(res.message || 'تم حفظ تخصيص الكورسات بنجاح.');
+      setEditingScope(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'تعذر حفظ التخصيص.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const toggleId = (list: string[], id: string) =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
   if (!isAuthorized) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl text-right" data-testid="unauthorized-department-tracks-view">
+      <div
+        className="container mx-auto p-6 max-w-4xl text-right"
+        data-testid="unauthorized-department-tracks-view"
+      >
         <Alert
           type="error"
           title="غير مصرح بالوصول"
@@ -186,66 +223,51 @@ export const DepartmentTracksPage: React.FC = () => {
     <div
       role="main"
       data-testid="department-tracks-page"
-      className="container mx-auto px-4 py-6 sm:py-8 max-w-7xl space-y-6 text-right"
+      className="container mx-auto px-4 py-6 sm:py-8 max-w-7xl space-y-5 text-right"
+      dir="rtl"
     >
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2.5">
-            <Button
-              variant="ghost"
-              size="sm"
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-text-muted">
+            <button
+              type="button"
               onClick={() => navigate('/admin/permissions')}
-              className="text-text-muted hover:text-text px-2"
-              aria-label="العودة لمصفوفة الصلاحيات والحوكمة"
+              className="hover:text-primary inline-flex items-center gap-1 cursor-pointer"
             >
-              <Icon name="arrowRight" size="sm" className="ml-1" />
-              سياسة الصلاحيات
-            </Button>
-            <span className="text-border">/</span>
-            <Badge variant="primary" size="sm" className="font-semibold">
-              المسارات التدريبية المعتمدة
-            </Badge>
+              <Icon name="arrowRight" size="sm" />
+              <span>الصلاحيات والحوكمة</span>
+            </button>
+            <span>/</span>
+            <span className="text-primary font-semibold">ظهور الكورسات للإدارات والوظائف</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text flex items-center gap-2.5">
+          <h1 className="text-xl sm:text-2xl font-bold text-text-heading flex items-center gap-2.5">
             <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary-dark flex items-center justify-center shrink-0">
               <Icon name="grid" size="lg" />
             </span>
-            تخصيص مسارات التدريب للإدارات
+            توجيه الكورسات للإدارات والمسميات الوظيفية
           </h1>
-          <p className="text-xs sm:text-sm text-text-muted max-w-3xl leading-relaxed">
-            تخصيص وحوكمة مسارات البرامج التدريبية المعتمدة لكل قطاع وإدارة تشغيلية بشركة مترو القاهرة لضمان استيفاء المعايير الفنية وتوثيق السياسات التشغيلية.
+          <p className="text-xs sm:text-sm text-text-muted">
+            حدد بوضوح الكورسات التي تظهر في دليل الكورسات لكل إدارة ولكل مسمى وظيفي. (أي كورس غير مقيد يظهر تلقائياً للجميع).
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={loadData}
-            isLoading={isLoading}
-            data-testid="refresh-dept-tracks-btn"
-          >
-            <Icon name="rotateCcw" size="sm" className="ml-1.5" />
-            تحديث البيانات
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={loadData}
+          isLoading={isLoading}
+          data-testid="refresh-dept-tracks-btn"
+        >
+          <Icon name="rotateCcw" size="sm" className="ml-1.5" />
+          تحديث
+        </Button>
       </div>
 
-      {/* Architectural Policy & Catalog Decoupling Alert */}
-      <Alert
-        type="info"
-        title="محددات الحوكمة المؤسسية وتوثيق المسارات"
-        message="تخصيص مسارات التدريب في هذه الصفحة يحدد ويوثق المسارات الفنية المعتمدة لكل إدارة تشغيلية فقط. حجب الدورات تلقائياً في دليل الدورات محجوز لمراحل لاحقة بموجب وثيقة التصميم، ولا يؤثر هذا التخصيص على إتاحة الكتالوج العام للمتدربين."
-      />
-
       {error && (
-        <Alert
-          variant="danger"
-          title="خطأ في تحميل البيانات"
-        >
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-1">
+        <Alert variant="danger" title="خطأ في تحميل البيانات">
+          <div className="flex items-center justify-between gap-3">
             <span>{error}</span>
             <Button variant="outline" size="sm" onClick={loadData}>
               إعادة المحاولة
@@ -254,246 +276,512 @@ export const DepartmentTracksPage: React.FC = () => {
         </Alert>
       )}
 
-      {/* Main Content Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Department Directory Selector (4 cols) */}
-        <div className="lg:col-span-4 bg-surface rounded-xl border border-border shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-border bg-bg-alt/40 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-text flex items-center gap-2">
-                <Icon name="trainingGroups" size="sm" className="text-primary-dark" />
-                قائمة القطاعات والإدارات
-              </span>
-              <Badge variant="neutral" size="sm">
-                {canonicalDepartments.length} إدارات
-              </Badge>
-            </div>
-            {/* Search Input */}
-            <div className="relative">
-              <input
-                type="text"
-                data-testid="dept-search-input"
-                value={searchDeptQuery}
-                onChange={(e) => setSearchDeptQuery(e.target.value)}
-                placeholder="بحث باسم الإدارة أو الرمز..."
-                className="w-full text-xs rounded-lg border border-border bg-surface px-3 py-2 pr-9 text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-right"
-              />
-              <span className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-text-muted">
-                <Icon name="search" size="sm" />
-              </span>
-            </div>
-          </div>
-
-          {/* Department List */}
-          <div className="divide-y divide-border/60 max-h-[600px] overflow-y-auto" data-testid="department-list">
-            {isLoading ? (
-              <div className="p-6 text-center text-text-muted text-xs">جاري تحميل الإدارات...</div>
-            ) : filteredDepartments.length === 0 ? (
-              <div className="p-6 text-center text-text-muted text-xs">لا توجد إدارات مطابقة للبحث</div>
-            ) : (
-              filteredDepartments.map((dept) => {
-                const config = departments.find((d) => d.departmentId === dept.id);
-                const trackCount = config?.allowedTracks.length || 0;
-                const isSelected = dept.id === selectedDeptId;
-
-                return (
-                  <button
-                    key={dept.id}
-                    type="button"
-                    data-testid={`dept-item-${dept.id}`}
-                    onClick={() => handleSelectDepartment(dept.id)}
-                    className={`w-full text-right p-3.5 transition-colors flex items-center justify-between gap-3 select-none ${
-                      isSelected
-                        ? 'bg-primary/10 border-r-4 border-r-primary-dark font-medium'
-                        : 'hover:bg-bg-alt/60'
-                    }`}
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="text-sm font-semibold text-text truncate">
-                        {dept.nameAr}
-                      </div>
-                      <div className="text-xs text-text-muted font-mono">{dept.id}</div>
-                    </div>
-                    <Badge
-                      variant={isSelected ? 'primary' : 'neutral'}
-                      size="sm"
-                      className="shrink-0 text-xs font-mono"
-                    >
-                      {trackCount} / {tracks.length} مسار
-                    </Badge>
-                  </button>
-                );
-              })
-            )}
-          </div>
+      {/* Full-Width View Tabs & Search Bar */}
+      <div className="bg-surface border border-border rounded-2xl p-3.5 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {[
+            { id: 'by_course', label: `حسب الكورس (${courses.length})`, icon: 'courses' as const },
+            {
+              id: 'by_department',
+              label: `حسب الإدارة (${departments.length})`,
+              icon: 'trainingGroups' as const,
+            },
+            {
+              id: 'by_job_title',
+              label: `حسب المسمى الوظيفي (${jobTitles.length})`,
+              icon: 'user' as const,
+            },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setViewMode(tab.id as VisibilityViewMode);
+                setSearchQuery('');
+              }}
+              className={`px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                viewMode === tab.id
+                  ? 'bg-primary-dark text-white shadow-xs'
+                  : 'bg-bg text-text-muted hover:text-text hover:bg-bg-alt'
+              }`}
+              data-testid={`visibility-tab-${tab.id}`}
+            >
+              <Icon name={tab.icon} size="sm" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Right Column: Track Configuration Panel (8 cols) */}
-        <div className="lg:col-span-8 bg-surface rounded-xl border border-border shadow-xs overflow-hidden space-y-0">
-          {/* Selected Department Header */}
-          <div className="p-5 border-b border-border bg-bg-alt/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Badge variant="primary" size="sm">
-                  {selectedCanonicalDept?.id || selectedDeptId}
-                </Badge>
-                {hasUnsavedChanges && (
-                  <Badge variant="warning" size="sm" data-testid="unsaved-changes-badge">
-                    تعديلات غير محفوظة
-                  </Badge>
-                )}
-                {isAssistantAdmin && (
-                  <Badge variant="neutral" size="sm">
-                    إجراء يتطلب اعتماد
-                  </Badge>
-                )}
-              </div>
-              <h2 className="text-lg font-bold text-text">
-                {selectedCanonicalDept?.nameAr || selectedDeptConfig?.departmentName || selectedDeptId}
-              </h2>
-              {selectedCanonicalDept?.descriptionAr && (
-                <p className="text-xs text-text-muted">{selectedCanonicalDept.descriptionAr}</p>
-              )}
-            </div>
-
-            {/* Quick Multi-select Controls */}
-            <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleSelectAllTracks}
-                disabled={isSaving}
-                className="text-xs"
-              >
-                تحديد الكل
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleDeselectAllTracks}
-                disabled={isSaving}
-                className="text-xs"
-              >
-                إلغاء التحديد
-              </Button>
-              {hasUnsavedChanges && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleResetToSaved}
-                  disabled={isSaving}
-                  className="text-xs text-text-muted hover:text-text"
-                >
-                  استعادة
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Tracks Matrix / Checkboxes */}
-          <div className="p-5 space-y-3" data-testid="tracks-checklist">
-            <div className="text-xs font-semibold text-text-muted flex items-center justify-between pb-1">
-              <span>المسارات التدريبية المعتمدة للإدارة ({editingAllowedTracks.length} من {tracks.length} محدد):</span>
-              <span className="text-[11px] text-text-muted">انقر على المسار لتفعيله أو إلغائه</span>
-            </div>
-
-            {tracks.map((track) => {
-              const isChecked = editingAllowedTracks.includes(track.id);
-
-              return (
-                <div
-                  key={track.id}
-                  data-testid={`track-row-${track.id}`}
-                  onClick={() => handleToggleTrack(track.id)}
-                  className={`p-3.5 rounded-lg border transition-all cursor-pointer select-none flex items-start gap-3.5 ${
-                    isChecked
-                      ? 'border-primary/40 bg-primary/5 shadow-xs'
-                      : 'border-border bg-surface hover:bg-bg-alt/50'
-                  }`}
-                >
-                  <div className="pt-0.5 shrink-0">
-                    <input
-                      type="checkbox"
-                      id={`checkbox-${track.id}`}
-                      data-testid={`track-checkbox-${track.id}`}
-                      checked={isChecked}
-                      onChange={() => {}} // Controlled via row click
-                      className="w-4 h-4 rounded text-primary-dark focus:ring-primary cursor-pointer accent-primary-dark"
-                    />
-                  </div>
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-text">{track.nameAr}</span>
-                      <Badge variant="neutral" size="sm" className="font-mono text-[11px]">
-                        {track.id}
-                      </Badge>
-                      <Badge variant="neutral" size="sm" className="font-mono text-[11px]">
-                        {track.code}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-text-muted leading-relaxed">{track.descriptionAr}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Save / Approval Footer Panel */}
-          <div className="p-5 border-t border-border bg-bg-alt/40 space-y-4">
-            {isAssistantAdmin && (
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="justification-input"
-                  className="block text-xs font-medium text-text"
-                >
-                  مبرر التعديل المقترح (يتم إرفاقه بطلب الاعتماد إلى مدير النظام):
-                </label>
-                <input
-                  id="justification-input"
-                  data-testid="justification-input"
-                  type="text"
-                  value={justification}
-                  onChange={(e) => setJustification(e.target.value)}
-                  placeholder="مثال: إضافة مسار السلامة المهنية طبقاً لخطة التدريب السنوية المعتمدة..."
-                  className="w-full text-xs rounded-lg border border-border bg-surface px-3 py-2 text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-right"
-                />
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="text-xs text-text-muted">
-                {selectedDeptConfig?.updatedAt ? (
-                  <span>
-                    آخر تحديث محفوظ: {new Date(selectedDeptConfig.updatedAt).toLocaleDateString('ar-EG')}
-                    {selectedDeptConfig.updatedBy && ` (${selectedDeptConfig.updatedBy})`}
-                  </span>
-                ) : (
-                  <span>لم يتم حفظ إعدادات سابقة لهذه الإدارة</span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="md"
-                  onClick={handleSaveDepartmentTracks}
-                  isLoading={isSaving}
-                  disabled={!hasUnsavedChanges || isSaving}
-                  data-testid="save-dept-tracks-btn"
-                  className="w-full sm:w-auto"
-                >
-                  <Icon name="save" size="sm" className="ml-1.5" />
-                  {isAssistantAdmin ? 'إرسال طلب الاعتماد' : 'حفظ مسارات الإدارة'}
-                </Button>
-              </div>
-            </div>
-          </div>
+        <div className="relative w-full md:w-80">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={
+              viewMode === 'by_course'
+                ? 'بحث باسم الكورس...'
+                : viewMode === 'by_department'
+                  ? 'بحث باسم الإدارة...'
+                  : 'بحث بالمسمى الوظيفي أو الإدارة...'
+            }
+            className="w-full text-xs pr-9 pl-3 py-2 bg-bg border border-border rounded-xl text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            data-testid="dept-search-input"
+          />
+          <Icon
+            name="search"
+            size="sm"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+          />
         </div>
       </div>
+
+      {/* Main Full-Width Table Content */}
+      {isLoading ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center text-sm text-text-muted">
+          جاري تحميل بيانات الكورسات والإدارات والمسميات الوظيفية...
+        </div>
+      ) : viewMode === 'by_course' ? (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right border-collapse text-xs sm:text-sm" data-testid="visibility-by-course-table">
+              <thead className="bg-bg-alt/60 border-b border-border text-xs text-text-muted font-bold">
+                <tr>
+                  <th className="py-3.5 px-4">الكورس</th>
+                  <th className="py-3.5 px-3">الحالة</th>
+                  <th className="py-3.5 px-3">الإدارات المسموح لها</th>
+                  <th className="py-3.5 px-3">المسميات الوظيفية المسموح لها</th>
+                  <th className="py-3.5 px-4 text-center">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/70">
+                {filteredCourses.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-text-muted text-xs">
+                      لا توجد كورسات مطابقة للبحث.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCourses.map((c) => (
+                    <tr key={c.id} className="hover:bg-bg/40 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-text-heading">{c.title}</td>
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <Badge
+                          variant={c.lifecycleStatus === 'Published' ? 'success' : 'neutral'}
+                          size="sm"
+                        >
+                          {c.lifecycleStatus === 'Published' ? 'منشور' : 'مسودة'}
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        {c.targetDepartmentIds.length === 0 ? (
+                          <Badge variant="primary" size="sm">
+                            متاح لجميع الإدارات
+                          </Badge>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {c.targetDepartmentIds.map((did) => (
+                              <Badge key={did} variant="neutral" size="sm">
+                                {deptNameMap.get(did) || did}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3">
+                        {c.targetJobTitleIds.length === 0 ? (
+                          <Badge variant="primary" size="sm">
+                            متاح لجميع المسميات
+                          </Badge>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {c.targetJobTitleIds.map((jid) => (
+                              <Badge key={jid} variant="info" size="sm">
+                                {jobNameMap.get(jid) || jid}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          leftIcon="edit"
+                          onClick={() => handleOpenCourseModal(c)}
+                          data-testid={`edit-course-visibility-btn-${c.id}`}
+                        >
+                          تحديد الظهور
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : viewMode === 'by_department' ? (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right border-collapse text-xs sm:text-sm" data-testid="visibility-by-department-table">
+              <thead className="bg-bg-alt/60 border-b border-border text-xs text-text-muted font-bold">
+                <tr>
+                  <th className="py-3.5 px-4">الإدارة / القطاع</th>
+                  <th className="py-3.5 px-3">الكورسات المخصصة لهذه الإدارة</th>
+                  <th className="py-3.5 px-4 text-center">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/70">
+                {filteredDepartments.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="py-10 text-center text-text-muted text-xs">
+                      لا توجد إدارات مطابقة للبحث.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDepartments.map((dept) => {
+                    const assignedCourses = courses.filter((c) =>
+                      c.targetDepartmentIds.includes(dept.id)
+                    );
+                    return (
+                      <tr key={dept.id} className="hover:bg-bg/40 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-text-heading">{dept.nameAr}</td>
+                        <td className="py-3.5 px-3">
+                          {assignedCourses.length === 0 ? (
+                            <span className="text-xs text-text-muted">
+                              لا توجد كورسات مخصصة خصيصاً (تظهر لها الكورسات العامة المفتوحة للجميع)
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              <Badge variant="success" size="sm">
+                                {assignedCourses.length} كورس مخصص
+                              </Badge>
+                              {assignedCourses.slice(0, 4).map((c) => (
+                                <Badge key={c.id} variant="neutral" size="sm">
+                                  {c.title}
+                                </Badge>
+                              ))}
+                              {assignedCourses.length > 4 && (
+                                <Badge variant="neutral" size="sm">
+                                  +{assignedCourses.length - 4} أخرى
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon="edit"
+                            onClick={() =>
+                              handleOpenScopeModal('department', dept.id, dept.nameAr)
+                            }
+                            data-testid={`edit-dept-courses-btn-${dept.id}`}
+                          >
+                            تعديل كورسات الإدارة
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right border-collapse text-xs sm:text-sm" data-testid="visibility-by-job-table">
+              <thead className="bg-bg-alt/60 border-b border-border text-xs text-text-muted font-bold">
+                <tr>
+                  <th className="py-3.5 px-4">المسمى الوظيفي</th>
+                  <th className="py-3.5 px-3">الإدارة التابعة</th>
+                  <th className="py-3.5 px-3">الكورسات المخصصة لهذا المسمى</th>
+                  <th className="py-3.5 px-4 text-center">الإجراء</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/70">
+                {filteredJobTitles.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-10 text-center text-text-muted text-xs">
+                      لا توجد مسميات وظيفية مطابقة للبحث.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredJobTitles.map((job) => {
+                    const assignedCourses = courses.filter((c) =>
+                      c.targetJobTitleIds.includes(job.id)
+                    );
+                    return (
+                      <tr key={job.id} className="hover:bg-bg/40 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-text-heading">{job.nameAr}</td>
+                        <td className="py-3.5 px-3 text-xs text-text-muted">
+                          {job.departmentNameAr || 'عام / غير مقيد بإدارة'}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          {assignedCourses.length === 0 ? (
+                            <span className="text-xs text-text-muted">
+                              لا توجد كورسات مخصصة خصيصاً (تظهر له الكورسات العامة)
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              <Badge variant="info" size="sm">
+                                {assignedCourses.length} كورس مخصص
+                              </Badge>
+                              {assignedCourses.slice(0, 4).map((c) => (
+                                <Badge key={c.id} variant="neutral" size="sm">
+                                  {c.title}
+                                </Badge>
+                              ))}
+                              {assignedCourses.length > 4 && (
+                                <Badge variant="neutral" size="sm">
+                                  +{assignedCourses.length - 4} أخرى
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            leftIcon="edit"
+                            onClick={() => handleOpenScopeModal('job_title', job.id, job.nameAr)}
+                            data-testid={`edit-job-courses-btn-${job.id}`}
+                          >
+                            تعديل كورسات الوظيفة
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 1: Edit Departments & Job Titles for a Course */}
+      <Modal
+        isOpen={Boolean(editingCourse)}
+        onClose={() => !isSaving && setEditingCourse(null)}
+        title={`تحديد ظهور الكورس: ${editingCourse?.title || ''}`}
+        size="lg"
+        dataTestId="edit-course-visibility-modal"
+      >
+        <div className="space-y-4" dir="rtl">
+          <div className="relative">
+            <input
+              type="text"
+              value={modalScopeSearch}
+              onChange={(e) => setModalScopeSearch(e.target.value)}
+              placeholder="بحث داخل الإدارات أو المسميات الوظيفية..."
+              className="w-full text-xs pr-9 pl-3 py-2 bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <Icon
+              name="search"
+              size="sm"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Departments Section */}
+            <div className="border border-border rounded-xl p-3 space-y-2 bg-bg/30">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <span className="text-xs font-bold text-text-heading">
+                  الإدارات المستهدفة ({modalDeptIds.length === 0 ? 'الكل' : modalDeptIds.length})
+                </span>
+                {modalDeptIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setModalDeptIds([])}
+                    className="text-[11px] text-primary hover:underline cursor-pointer"
+                  >
+                    إتاحة لكل الإدارات
+                  </button>
+                )}
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-1.5">
+                {departments
+                  .filter(
+                    (d) =>
+                      !modalScopeSearch.trim() ||
+                      d.nameAr.toLowerCase().includes(modalScopeSearch.toLowerCase())
+                  )
+                  .map((dept) => (
+                    <label
+                      key={dept.id}
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-surface cursor-pointer text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={modalDeptIds.includes(dept.id)}
+                        onChange={() => setModalDeptIds((prev) => toggleId(prev, dept.id))}
+                        className="h-4 w-4 rounded border-border accent-primary-dark"
+                      />
+                      <span className="text-text">{dept.nameAr}</span>
+                    </label>
+                  ))}
+              </div>
+            </div>
+
+            {/* Job Titles Section */}
+            <div className="border border-border rounded-xl p-3 space-y-2 bg-bg/30">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <span className="text-xs font-bold text-text-heading">
+                  المسميات الوظيفية ({modalJobIds.length === 0 ? 'الكل' : modalJobIds.length})
+                </span>
+                {modalJobIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setModalJobIds([])}
+                    className="text-[11px] text-primary hover:underline cursor-pointer"
+                  >
+                    إتاحة لكل المسميات
+                  </button>
+                )}
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-1.5">
+                {jobTitles
+                  .filter(
+                    (j) =>
+                      !modalScopeSearch.trim() ||
+                      j.nameAr.toLowerCase().includes(modalScopeSearch.toLowerCase())
+                  )
+                  .map((job) => (
+                    <label
+                      key={job.id}
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-surface cursor-pointer text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={modalJobIds.includes(job.id)}
+                        onChange={() => setModalJobIds((prev) => toggleId(prev, job.id))}
+                        className="h-4 w-4 rounded border-border accent-primary-dark"
+                      />
+                      <div>
+                        <div className="text-text">{job.nameAr}</div>
+                        {job.departmentNameAr && (
+                          <div className="text-[10px] text-text-muted">{job.departmentNameAr}</div>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-3 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingCourse(null)}
+              disabled={isSaving}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              leftIcon="check"
+              onClick={handleSaveCourseModal}
+              isLoading={isSaving}
+              data-testid="save-course-visibility-modal-btn"
+            >
+              حفظ قواعد الظهور
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal 2: Edit Courses for a Department or Job Title */}
+      <Modal
+        isOpen={Boolean(editingScope)}
+        onClose={() => !isSaving && setEditingScope(null)}
+        title={`تحديد الكورسات لـ: ${editingScope?.label || ''}`}
+        size="md"
+        dataTestId="edit-scope-courses-modal"
+      >
+        <div className="space-y-4" dir="rtl">
+          <div className="relative">
+            <input
+              type="text"
+              value={modalCourseSearch}
+              onChange={(e) => setModalCourseSearch(e.target.value)}
+              placeholder="بحث باسم الكورس..."
+              className="w-full text-xs pr-9 pl-3 py-2 bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <Icon
+              name="search"
+              size="sm"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+            />
+          </div>
+
+          <div className="max-h-72 overflow-y-auto divide-y divide-border/60 border border-border rounded-xl">
+            {courses
+              .filter(
+                (c) =>
+                  !modalCourseSearch.trim() ||
+                  c.title.toLowerCase().includes(modalCourseSearch.toLowerCase())
+              )
+              .map((course) => {
+                const isSelected = modalCourseIds.includes(course.id);
+                return (
+                  <label
+                    key={course.id}
+                    className="flex items-center justify-between gap-3 p-3 hover:bg-bg/40 cursor-pointer text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-text-heading">{course.title}</div>
+                      <div className="text-[11px] text-text-muted">
+                        {course.lifecycleStatus === 'Published' ? 'منشور' : 'مسودة'}
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => setModalCourseIds((prev) => toggleId(prev, course.id))}
+                      className="h-4 w-4 rounded border-border accent-primary-dark"
+                    />
+                  </label>
+                );
+              })}
+          </div>
+
+          <div className="flex items-center justify-between pt-3 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingScope(null)}
+              disabled={isSaving}
+            >
+              إلغاء
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              leftIcon="check"
+              onClick={handleSaveScopeModal}
+              isLoading={isSaving}
+              data-testid="save-scope-courses-modal-btn"
+            >
+              حفظ التخصيص ({modalCourseIds.length} كورس)
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
