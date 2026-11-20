@@ -74,6 +74,65 @@ function getPolicyLabel(policy: GroupEnrollmentPolicy): string {
   }
 }
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function isExpiringSoonGroup(g: GroupSummaryDTO): boolean {
+  if (g.adminStatus === 'archived' || g.adminStatus === 'draft') return false;
+  if (!g.deadlineDateTime) return false;
+  const diff = new Date(g.deadlineDateTime).getTime() - Date.now();
+  return diff > 0 && diff <= SEVEN_DAYS_MS;
+}
+
+function isDueForRenewalGroup(g: GroupSummaryDTO): boolean {
+  if (g.groupType !== 'reminder' || g.adminStatus === 'archived') return false;
+  if (!g.deadlineDateTime) return false;
+  return new Date(g.deadlineDateTime).getTime() <= Date.now();
+}
+
+function getRenewalCountdownMeta(g: GroupSummaryDTO): {
+  label: string;
+  tone: 'danger' | 'warning' | 'success' | 'neutral';
+} | null {
+  if (g.groupType !== 'reminder') return null;
+  if (g.adminStatus === 'archived') {
+    return { label: 'التجديد متوقف (مؤرشفة)', tone: 'neutral' };
+  }
+  if (!g.deadlineDateTime) {
+    return { label: 'تذكيرية مفتوحة (بدون موعد تجديد)', tone: 'neutral' };
+  }
+
+  const now = Date.now();
+  const autoEnabled = Boolean(g.renewalSchedule?.autoRenewalEnabled);
+  const nextIso = g.renewalSchedule?.nextScheduledRenewalDate;
+
+  if (autoEnabled && nextIso) {
+    const diff = new Date(nextIso).getTime() - now;
+    if (diff <= 0) {
+      return { label: 'مستحقة للتجديد الآن', tone: 'danger' };
+    }
+    if (diff < ONE_DAY_MS) {
+      const hours = Math.max(1, Math.ceil(diff / (60 * 60 * 1000)));
+      return { label: `تتجدد اليوم (بعد ${hours} ساعة)`, tone: 'danger' };
+    }
+    const days = Math.ceil(diff / ONE_DAY_MS);
+    if (days <= 7) {
+      return { label: `تتجدد خلال ${days} يوم`, tone: 'warning' };
+    }
+    return { label: `تتجدد خلال ${days} يوم (${formatDateAr(nextIso)})`, tone: 'success' };
+  }
+
+  const deadlineDiff = new Date(g.deadlineDateTime).getTime() - now;
+  if (deadlineDiff <= 0) {
+    return { label: 'جاهزة للتجديد اليدوي', tone: 'warning' };
+  }
+  const daysLeft = Math.ceil(deadlineDiff / ONE_DAY_MS);
+  return {
+    label: `تجديد يدوي • باقي ${daysLeft} يوم على انتهاء الدورة`,
+    tone: daysLeft <= 7 ? 'warning' : 'neutral',
+  };
+}
+
 export const AdminGroupsPage: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -83,16 +142,20 @@ export const AdminGroupsPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters & Search
+  // Filters, Sort & Search
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [policyFilter, setPolicyFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'urgency' | 'newest' | 'name'>('urgency');
 
-  // Archive & Delete modal state
+  // Archive, Delete & Renewal modal state
   const [archiveTarget, setArchiveTarget] = useState<GroupSummaryDTO | null>(null);
   const [isArchiving, setIsArchiving] = useState<boolean>(false);
   const [deleteTarget, setDeleteTarget] = useState<GroupSummaryDTO | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [renewTarget, setRenewTarget] = useState<GroupSummaryDTO | null>(null);
+  const [isRenewing, setIsRenewing] = useState<boolean>(false);
+  const [isRunningBatchRenewal, setIsRunningBatchRenewal] = useState<boolean>(false);
   const [manageAssistantsGroup, setManageAssistantsGroup] = useState<GroupSummaryDTO | null>(null);
 
   const { previewRole } = useRolePreview();
@@ -174,15 +237,52 @@ export const AdminGroupsPage: React.FC = () => {
     }
   };
 
-  // Filtered groups
+  // Handle Manual Cycle Renewal Confirmation
+  const handleConfirmRenew = async () => {
+    if (!renewTarget) return;
+    setIsRenewing(true);
+    try {
+      const res = await groupsApi.renewCycle(renewTarget.id, {});
+      toast.success(`تم تجديد «${renewTarget.name}» بنجاح إلى الدورة #${res.newCycle?.cycleNumber || ''}`);
+      setRenewTarget(null);
+      await loadGroups();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'تعذر تجديد الدورة التدريبية';
+      toast.error(message);
+    } finally {
+      setIsRenewing(false);
+    }
+  };
+
+  // Run batch due automatic renewals
+  const handleRunBatchRenewals = async () => {
+    setIsRunningBatchRenewal(true);
+    try {
+      const res = await groupsApi.checkAllDueRenewals();
+      if (res.renewedCount > 0) {
+        toast.success(`تم تجديد ${res.renewedCount} مجموعة تذكيرية مستحقة تلقائياً.`);
+        await loadGroups();
+      } else {
+        toast.info('لا توجد مجموعات تذكيرية وصلت لموعد التجديد التلقائي بعد.');
+      }
+    } catch {
+      toast.error('تعذر تشغيل فحص التجديد التلقائي.');
+    } finally {
+      setIsRunningBatchRenewal(false);
+    }
+  };
+
+  // Filtered & sorted groups
   const filteredGroups = useMemo(() => {
-    return groups.filter((g) => {
+    const list = groups.filter((g) => {
       // Status filter
       if (statusFilter !== 'all') {
         if (statusFilter === 'archived' && g.adminStatus !== 'archived') return false;
         if (statusFilter === 'draft' && g.adminStatus !== 'draft') return false;
         if (statusFilter === 'active' && (g.adminStatus !== 'active' || g.timeStatus !== 'active'))
           return false;
+        if (statusFilter === 'expiring_soon' && !isExpiringSoonGroup(g)) return false;
+        if (statusFilter === 'reminder' && g.groupType !== 'reminder') return false;
         if (statusFilter === 'scheduled' && g.timeStatus !== 'scheduled') return false;
         if (statusFilter === 'expired' && g.timeStatus !== 'expired') return false;
       }
@@ -203,7 +303,49 @@ export const AdminGroupsPage: React.FC = () => {
 
       return true;
     });
-  }, [groups, statusFilter, policyFilter, searchQuery]);
+
+    const sorted = [...list];
+    if (sortBy === 'name') {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+    } else if (sortBy === 'newest') {
+      sorted.sort((a, b) => Number(b.id) - Number(a.id));
+    } else {
+      // 'urgency': due for renewal / expiring soon first -> active with deadline -> ongoing -> expired/archived
+      const rank = (g: GroupSummaryDTO) => {
+        if (g.adminStatus === 'archived') return 4;
+        if (isDueForRenewalGroup(g)) return 0;
+        if (isExpiringSoonGroup(g)) return 1;
+        if (g.timeStatus === 'active' && g.deadlineDateTime) return 2;
+        if (g.timeStatus === 'active') return 3;
+        return 4;
+      };
+      sorted.sort((a, b) => {
+        const ra = rank(a);
+        const rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        if (a.deadlineDateTime && b.deadlineDateTime) {
+          return new Date(a.deadlineDateTime).getTime() - new Date(b.deadlineDateTime).getTime();
+        }
+        return a.name.localeCompare(b.name, 'ar');
+      });
+    }
+    return sorted;
+  }, [groups, statusFilter, policyFilter, searchQuery, sortBy]);
+
+  // Live tab counts
+  const tabCounts = useMemo(() => {
+    return {
+      all: groups.length,
+      active: groups.filter((g) => g.adminStatus === 'active' && g.timeStatus === 'active').length,
+      expiring_soon: groups.filter(isExpiringSoonGroup).length,
+      reminder: groups.filter((g) => g.groupType === 'reminder').length,
+      due_renewal: groups.filter(isDueForRenewalGroup).length,
+      scheduled: groups.filter((g) => g.timeStatus === 'scheduled').length,
+      expired: groups.filter((g) => g.timeStatus === 'expired').length,
+      draft: groups.filter((g) => g.adminStatus === 'draft').length,
+      archived: groups.filter((g) => g.adminStatus === 'archived').length,
+    };
+  }, [groups]);
 
   // Aggregate stats
   const stats = useMemo(() => {
@@ -377,6 +519,24 @@ export const AdminGroupsPage: React.FC = () => {
             />
           </div>
 
+          {/* Sort Selector */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="sort-filter" className="text-xs text-text-muted font-medium whitespace-nowrap">
+              الترتيب:
+            </label>
+            <select
+              id="sort-filter"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'urgency' | 'newest' | 'name')}
+              className="text-xs bg-bg border border-border rounded-xl px-3 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+              data-testid="sort-filter-select"
+            >
+              <option value="urgency">الأقرب انتهاءً / تجديداً</option>
+              <option value="newest">الأحدث إنشاءً</option>
+              <option value="name">أبجدياً</option>
+            </select>
+          </div>
+
           {/* Enrollment Policy Selector */}
           <div className="flex items-center gap-2">
             <label htmlFor="policy-filter" className="text-xs text-text-muted font-medium whitespace-nowrap">
@@ -397,15 +557,17 @@ export const AdminGroupsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Lifecycle Status Tabs */}
+        {/* Lifecycle Status Tabs with Live Counts */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 border-t border-border/60">
           {[
-            { id: 'all', label: 'الكل' },
-            { id: 'active', label: 'نشطة' },
-            { id: 'scheduled', label: 'مجدولة' },
-            { id: 'expired', label: 'منتهية' },
-            { id: 'draft', label: 'مسودة' },
-            { id: 'archived', label: 'مؤرشفة' },
+            { id: 'all', label: `الكل (${tabCounts.all})` },
+            { id: 'active', label: `نشطة (${tabCounts.active})` },
+            { id: 'expiring_soon', label: `قاربت على الانتهاء (${tabCounts.expiring_soon})` },
+            { id: 'reminder', label: `برامج تذكيرية (${tabCounts.reminder})` },
+            { id: 'scheduled', label: `مجدولة (${tabCounts.scheduled})` },
+            { id: 'expired', label: `منتهية (${tabCounts.expired})` },
+            { id: 'draft', label: `مسودة (${tabCounts.draft})` },
+            { id: 'archived', label: `مؤرشفة (${tabCounts.archived})` },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -414,6 +576,8 @@ export const AdminGroupsPage: React.FC = () => {
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap ${
                 statusFilter === tab.id
                   ? 'bg-primary text-white shadow-sm'
+                  : tab.id === 'expiring_soon' && tabCounts.expiring_soon > 0
+                  ? 'bg-warning/15 text-warning-dark hover:bg-warning/25'
                   : 'bg-bg text-text-muted hover:bg-neutral-light hover:text-text'
               }`}
               data-testid={`status-filter-${tab.id}`}
@@ -423,6 +587,48 @@ export const AdminGroupsPage: React.FC = () => {
           ))}
         </div>
       </Card>
+
+      {/* Proactive Alert Banner for Expiring & Due Renewal Groups */}
+      {(tabCounts.expiring_soon > 0 || tabCounts.due_renewal > 0) && (
+        <div
+          className="p-3.5 rounded-xl border border-warning/40 bg-warning/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+          data-testid="groups-proactive-alert"
+        >
+          <div className="flex items-center gap-2 text-text-heading font-semibold">
+            <Icon name="clock" size="sm" className="text-warning-dark shrink-0" />
+            <span>
+              {tabCounts.expiring_soon > 0 && `يوجد ${tabCounts.expiring_soon} مجموعة قاربت على الانتهاء (خلال 7 أيام)`}
+              {tabCounts.expiring_soon > 0 && tabCounts.due_renewal > 0 && ' • '}
+              {tabCounts.due_renewal > 0 && `${tabCounts.due_renewal} برنامج تذكيري مستحق للتجديد الآن`}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {tabCounts.expiring_soon > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setStatusFilter('expiring_soon')}
+                className="text-xs"
+              >
+                عرض القريبة من الانتهاء
+              </Button>
+            )}
+            {isOperationalAdmin && tabCounts.due_renewal > 0 && (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={handleRunBatchRenewals}
+                isLoading={isRunningBatchRenewal}
+                className="text-xs"
+              >
+                فحص وتجديد المستحق تلقائياً
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Groups Table / List */}
       {filteredGroups.length === 0 ? (
@@ -472,6 +678,10 @@ export const AdminGroupsPage: React.FC = () => {
                 {filteredGroups.map((g) => {
                   const statusBadge = getStatusBadgeConfig(g.timeStatus, g.adminStatus);
                   const isArchived = g.adminStatus === 'archived';
+                  const renewalMeta = getRenewalCountdownMeta(g);
+                  const expiringSoon = isExpiringSoonGroup(g);
+                  const dueForRenewal = isDueForRenewalGroup(g);
+                  const cycleNum = g.currentCycleNumber ?? g.currentCycle?.cycleNumber;
 
                   return (
                     <tr
@@ -479,19 +689,39 @@ export const AdminGroupsPage: React.FC = () => {
                       className="hover:bg-bg/50 transition-colors"
                       data-testid={`group-row-${g.id}`}
                     >
-                      {/* Name & ID */}
+                      {/* Name, ID & Reminder Countdown */}
                       <td className="py-3.5 px-4 max-w-xs">
                         <div className="font-bold text-text-heading text-sm line-clamp-1">
                           {g.name}
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
                           <span className="text-[10px] font-mono bg-bg px-1.5 py-0.5 rounded text-text-muted border border-border">
                             {g.id}
                           </span>
+                          {g.groupType === 'reminder' && (
+                            <Badge variant="primary" size="sm">
+                              تذكيري
+                            </Badge>
+                          )}
                           <span className="text-[11px] text-text-muted/80">
                             {getPolicyLabel(g.enrollmentPolicy)}
                           </span>
                         </div>
+                        {renewalMeta && (
+                          <div
+                            className={`text-[11px] font-semibold mt-1 ${
+                              renewalMeta.tone === 'danger'
+                                ? 'text-danger'
+                                : renewalMeta.tone === 'warning'
+                                ? 'text-warning-dark'
+                                : renewalMeta.tone === 'success'
+                                ? 'text-success'
+                                : 'text-text-muted'
+                            }`}
+                          >
+                            {renewalMeta.label}
+                          </div>
+                        )}
                       </td>
 
                       {/* Status */}
@@ -503,9 +733,9 @@ export const AdminGroupsPage: React.FC = () => {
 
                       {/* Current Cycle */}
                       <td className="py-3.5 px-3 whitespace-nowrap">
-                        {g.currentCycleNumber ? (
+                        {cycleNum ? (
                           <span className="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
-                            الدورة {g.currentCycleNumber}
+                            الدورة #{cycleNum}
                           </span>
                         ) : (
                           <span className="text-xs text-text-muted">—</span>
@@ -546,7 +776,17 @@ export const AdminGroupsPage: React.FC = () => {
                             ? `إلى ${formatDateAr(g.deadlineDateTime)}`
                             : 'مفتوحة (بدون موعد انتهاء)'}
                         </div>
-                        <div className="text-[10px] text-text-muted/80">{g.timeRemainingText}</div>
+                        <div
+                          className={`text-[10px] font-semibold ${
+                            expiringSoon
+                              ? 'text-warning-dark'
+                              : g.timeStatus === 'expired'
+                              ? 'text-danger'
+                              : 'text-text-muted/80'
+                          }`}
+                        >
+                          {g.timeRemainingText}
+                        </div>
                       </td>
 
                       {/* Average Progress */}
@@ -563,6 +803,19 @@ export const AdminGroupsPage: React.FC = () => {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
+                          {isOperationalAdmin && dueForRenewal && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              leftIcon="refresh"
+                              onClick={() => setRenewTarget(g)}
+                              data-testid={`renew-group-btn-${g.id}`}
+                              title="تجديد الدورة التذكيرية الآن"
+                            >
+                              تجديد الدورة
+                            </Button>
+                          )}
+
                           <Button
                             variant="outline"
                             size="sm"
@@ -698,6 +951,23 @@ export const AdminGroupsPage: React.FC = () => {
           onCancel={() => setDeleteTarget(null)}
           testId="delete-group-confirm-dialog"
           confirmTestId="confirm-delete-group-btn"
+        />
+      )}
+
+      {/* Manual Renewal Confirmation Modal */}
+      {renewTarget && (
+        <ConfirmDialog
+          isOpen={Boolean(renewTarget)}
+          title="تأكيد تجديد الدورة التذكيرية"
+          message={`هل تريد بدء دورة تجديد جديدة للمجموعة «${renewTarget.name}» الآن؟ سيتم إغلاق الدورة الحالية وبدء محاولات جديدة للمتدربين في الدورة القادمة مع الحفاظ على السجلات والشهادات السابقة.`}
+          variant="warning"
+          isConfirming={isRenewing}
+          confirmLabel="تجديد الدورة الآن"
+          cancelLabel="إلغاء"
+          onConfirm={handleConfirmRenew}
+          onCancel={() => setRenewTarget(null)}
+          testId="renew-group-confirm-dialog"
+          confirmTestId="confirm-renew-group-btn"
         />
       )}
 

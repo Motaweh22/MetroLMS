@@ -197,11 +197,21 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
         return f"متبقي {days} يوم" if days > 0 else "تنتهي اليوم"
 
     def get_renewalSchedule(self, obj: TrainingGroup) -> dict:
+        from datetime import timedelta
+
+        next_renewal = obj.next_scheduled_renewal_date
+        if (
+            next_renewal is None
+            and obj.auto_renewal_enabled
+            and obj.deadline_datetime is not None
+            and obj.interval_days
+        ):
+            next_renewal = obj.deadline_datetime + timedelta(days=obj.interval_days)
         return {
             "autoRenewalEnabled": obj.auto_renewal_enabled,
             "intervalDays": obj.interval_days,
             "renewalIntervalDays": obj.interval_days,
-            "nextScheduledRenewalDate": obj.next_scheduled_renewal_date,
+            "nextScheduledRenewalDate": next_renewal,
             "recurrenceType": "custom" if obj.auto_renewal_enabled else "none",
         }
 
