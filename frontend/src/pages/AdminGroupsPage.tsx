@@ -88,9 +88,11 @@ export const AdminGroupsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [policyFilter, setPolicyFilter] = useState<string>('all');
 
-  // Archive modal state
+  // Archive & Delete modal state
   const [archiveTarget, setArchiveTarget] = useState<GroupSummaryDTO | null>(null);
   const [isArchiving, setIsArchiving] = useState<boolean>(false);
+  const [deleteTarget, setDeleteTarget] = useState<GroupSummaryDTO | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [manageAssistantsGroup, setManageAssistantsGroup] = useState<GroupSummaryDTO | null>(null);
 
   const { previewRole } = useRolePreview();
@@ -151,6 +153,24 @@ export const AdminGroupsPage: React.FC = () => {
       toast.error(message);
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  // Handle Permanent Delete Confirmation
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setIsDeleting(true);
+    try {
+      const result = await groupsApi.deleteGroup(deleteTarget.id, { force: true });
+      toast.success(result.message || 'تم حذف المجموعة التدريبية نهائياً');
+      setDeleteTarget(null);
+      await loadGroups();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'تعذر حذف المجموعة التدريبية';
+      toast.error(message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -590,13 +610,27 @@ export const AdminGroupsPage: React.FC = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-text-muted hover:text-danger hover:bg-danger/10 p-1.5"
+                              className="text-text-muted hover:text-warning-dark hover:bg-warning/10 p-1.5"
                               onClick={() => setArchiveTarget(g)}
                               data-testid={`archive-group-btn-${g.id}`}
                               aria-label={`أرشفة المجموعة ${g.name}`}
                               title="أرشفة المجموعة"
                             >
                               <Icon name="archive" size="md" />
+                            </Button>
+                          )}
+
+                          {isOperationalAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-text-muted hover:text-danger hover:bg-danger/10 p-1.5"
+                              onClick={() => setDeleteTarget(g)}
+                              data-testid={`delete-group-btn-${g.id}`}
+                              aria-label={`حذف المجموعة ${g.name} نهائياً`}
+                              title="حذف المجموعة نهائياً"
+                            >
+                              <Icon name="trash" size="md" />
                             </Button>
                           )}
                         </div>
@@ -647,6 +681,23 @@ export const AdminGroupsPage: React.FC = () => {
               </div>
             </div>
           }
+        />
+      )}
+
+      {/* Permanent Delete Confirmation Modal */}
+      {deleteTarget && (
+        <ConfirmDialog
+          isOpen={Boolean(deleteTarget)}
+          title="تأكيد الحذف النهائي للمجموعة"
+          message={`هل أنت متأكد من الحذف النهائي للمجموعة «${deleteTarget.name}»؟ سيتم إزالة المجموعة ودوراتها وارتباطات الأعضاء بها نهائياً (مع الإبقاء على الشهادات الصادرة للمتدربين).`}
+          variant="danger"
+          isConfirming={isDeleting}
+          confirmLabel="حذف نهائي"
+          cancelLabel="إلغاء"
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          testId="delete-group-confirm-dialog"
+          confirmTestId="confirm-delete-group-btn"
         />
       )}
 

@@ -106,3 +106,8 @@ class GroupNoDeadlineTests(APITestCase):
         # 3. Manual renewal rejected when deadline is missing
         resp_renew = self.client.post(f"/api/admin/groups/{rem.id}/renew")
         self.assertEqual(resp_renew.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # 4. Force delete permanently removes the group and its cycles
+        resp_force_del = self.client.delete(f"/api/admin/groups/{rem.id}?force=true")
+        self.assertEqual(resp_force_del.status_code, status.HTTP_200_OK)
+        self.assertFalse(TrainingGroup.objects.filter(pk=rem.id).exists())

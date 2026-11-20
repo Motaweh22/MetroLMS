@@ -160,15 +160,16 @@ export const groupsApi = {
    */
   async deleteGroup(
     groupId: string,
-    options?: RequestOptions
+    options?: RequestOptions & { force?: boolean }
   ): Promise<{ success: boolean; message: string; archivedInstead?: boolean }> {
-    return apiClient<{ success: boolean; message: string; archivedInstead?: boolean }>(
-      `/api/admin/groups/${encodeURIComponent(groupId)}`,
-      {
-        method: 'DELETE',
-        ...options,
-      }
-    );
+    const { force, ...reqOptions } = options || {};
+    const url = force
+      ? `/api/admin/groups/${encodeURIComponent(groupId)}?force=true`
+      : `/api/admin/groups/${encodeURIComponent(groupId)}`;
+    return apiClient<{ success: boolean; message: string; archivedInstead?: boolean }>(url, {
+      method: 'DELETE',
+      ...reqOptions,
+    });
   },
 
   // ── 3. Renewal Cycles & Course Assignments ───────────────────────────

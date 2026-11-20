@@ -183,6 +183,34 @@ class AdminGroupDetailView(APIView):
         except GroupDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
 
+        force_delete = str(request.query_params.get("force", "")).lower() in {"1", "true", "yes"}
+        if force_delete:
+            if request.user.role_id not in {"developer", "super_admin", "admin"}:
+                return error_response(
+                    "PERMISSION_DENIED",
+                    "الحذف النهائي للمجموعات متاح لمدير النظام فقط.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+            from django.db import transaction
+            from apps.groups.models import GroupQrCode
+            from apps.learning.models import CourseAttempt, EnrollmentSourceGrant
+
+            with transaction.atomic():
+                CourseAttempt.objects.filter(group_renewal_cycle__training_group=group).update(
+                    group_renewal_cycle=None
+                )
+                EnrollmentSourceGrant.objects.filter(training_group=group).delete()
+                GroupCourseAssignment.objects.filter(group_renewal_cycle__training_group=group).delete()
+                GroupRenewalCycle.objects.filter(training_group=group).delete()
+                GroupMembership.objects.filter(training_group=group).delete()
+                GroupJoinRequest.objects.filter(training_group=group).delete()
+                GroupAssistantAssignment.objects.filter(training_group=group).delete()
+                GroupQrCode.objects.filter(training_group=group).delete()
+                TrainingGroup.objects.filter(pk=group.pk).delete()
+            return success_response(
+                {"success": True, "message": "تم حذف المجموعة التدريبية نهائياً.", "archivedInstead": False}
+            )
+
         has_refs = (
             GroupMembership.objects.filter(training_group=group).exists()
             or GroupRenewalCycle.objects.filter(training_group=group).exists()
