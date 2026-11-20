@@ -24,6 +24,7 @@ import {
 
 export interface ItemEditorModalProps {
   isOpen: boolean;
+  chapterId?: string;
   chapterTitle: string;
   item?: ChapterItem | null; // null if creating a new item
   onClose: () => void;
@@ -118,6 +119,7 @@ const CONTENT_TYPE_CONFIG: Record<
 
 export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   isOpen,
+  chapterId,
   chapterTitle,
   item,
   onClose,
@@ -385,6 +387,9 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
         formData.append('file', pendingFileRef.current);
         if (courseId) {
           formData.append('courseId', courseId);
+        }
+        if (chapterId) {
+          formData.append('chapterId', chapterId);
         }
         const uploadResp = await fetch('/api/media/assets/upload', {
           method: 'POST',

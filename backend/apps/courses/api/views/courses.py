@@ -412,6 +412,13 @@ class LecturerCourseDraftView(APIView):
             if m_thumb:
                 thumb_asset_id = int(m_thumb.group(1))
         try:
+            from apps.media.models import MediaContentReference
+
+            previous_draft_asset_ids = list(
+                MediaContentReference.objects.filter(course_draft__course=course).values_list(
+                    "media_asset_id", flat=True
+                )
+            )
             draft = save_course_draft(
                 actor=request.user,
                 course=course,
@@ -419,6 +426,7 @@ class LecturerCourseDraftView(APIView):
                 modules_payload=modules_payload,
                 thumbnail_asset_id=thumb_asset_id,
             )
+            _purge_unreferenced_course_media(previous_draft_asset_ids)
             if course.lifecycle_status == "Draft":
                 new_desc = request.data.get("description")
                 course.title = draft.title_snapshot

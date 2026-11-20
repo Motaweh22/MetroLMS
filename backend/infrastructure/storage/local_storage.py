@@ -40,10 +40,13 @@ ALLOWED_MEDIA_SPECS: dict[str, dict[str, object]] = {
 }
 
 _SAFE_KEY_RE = re.compile(
-    r"\A(?:assets/\d{4}/\d{2}|courses/course_\d+|groups/group_\d+)/[a-f0-9]{32}\.[a-z0-9]+\Z",
+    r"\A(?:assets/\d{4}/\d{2}|courses/course_\d+(?:/cover|/chapter_[A-Za-z0-9_-]{1,64})?|groups/group_\d+)/[a-f0-9]{32}\.[a-z0-9]+\Z",
     re.ASCII,
 )
-_SCOPE_PREFIX_RE = re.compile(r"\A(?:courses/course_\d+|groups/group_\d+)\Z", re.ASCII)
+_SCOPE_PREFIX_RE = re.compile(
+    r"\A(?:courses/course_\d+(?:/cover|/chapter_[A-Za-z0-9_-]{1,64})?|groups/group_\d+)\Z",
+    re.ASCII,
+)
 
 
 def validate_magic_bytes(mime_type: str, header: bytes) -> bool:

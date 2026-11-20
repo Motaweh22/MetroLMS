@@ -1314,6 +1314,7 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
       {!isRefresherMode && editingItemInfo && (
         <ItemEditorModal
           isOpen={true}
+          chapterId={editingItemInfo.chapterId}
           chapterTitle={editingItemInfo.chapterTitle}
           item={editingItemInfo.item}
           onClose={() => setEditingItemInfo(null)}

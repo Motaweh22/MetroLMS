@@ -53,6 +53,8 @@ class MediaAssetUploadView(APIView):
 
         course_id = _parse_pos_int(request.data.get("courseId"))
         group_id = _parse_pos_int(request.data.get("groupId"))
+        chapter_id = str(request.data.get("chapterId") or "").strip() or None
+        media_role = str(request.data.get("mediaRole") or "").strip() or None
 
         try:
             asset = upload_media_asset(
@@ -60,6 +62,8 @@ class MediaAssetUploadView(APIView):
                 uploaded_file=uploaded,
                 declared_mime_type=str(declared_mime) if declared_mime else None,
                 course_id=course_id,
+                chapter_id=chapter_id,
+                media_role=media_role,
                 group_id=group_id,
             )
         except MediaDomainError as exc:

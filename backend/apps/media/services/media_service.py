@@ -31,6 +31,8 @@ def upload_media_asset(
     uploaded_file,
     declared_mime_type: str | None = None,
     course_id: int | None = None,
+    chapter_id: str | None = None,
+    media_role: str | None = None,
     group_id: int | None = None,
     storage: LocalMediaStorage | None = None,
 ) -> MediaAsset:
@@ -53,7 +55,18 @@ def upload_media_asset(
     store = storage or LocalMediaStorage()
     scope_prefix: str | None = None
     if course_id is not None and int(course_id) > 0:
-        scope_prefix = f"courses/course_{int(course_id)}"
+        if media_role == "cover":
+            scope_prefix = f"courses/course_{int(course_id)}/cover"
+        elif chapter_id:
+            import re as _re
+
+            safe_chap = _re.sub(r"[^A-Za-z0-9_-]", "", str(chapter_id).strip())[:64]
+            if safe_chap:
+                scope_prefix = f"courses/course_{int(course_id)}/chapter_{safe_chap}"
+            else:
+                scope_prefix = f"courses/course_{int(course_id)}"
+        else:
+            scope_prefix = f"courses/course_{int(course_id)}"
     elif group_id is not None and int(group_id) > 0:
         scope_prefix = f"groups/group_{int(group_id)}"
 

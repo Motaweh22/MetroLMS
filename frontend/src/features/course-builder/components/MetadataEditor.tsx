@@ -343,6 +343,7 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
       formData.append('file', file);
       if (course?.id) {
         formData.append('courseId', String(course.id));
+        formData.append('mediaRole', 'cover');
       }
       const resp = await fetch('/api/media/assets/upload', {
         method: 'POST',
