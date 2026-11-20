@@ -89,6 +89,24 @@ def upload_media_asset(
     except MediaStorageError as exc:
         raise MediaDomainError(exc.code, exc.message, exc.status_code) from exc
 
+    if scope_prefix:
+        existing = (
+            MediaAsset.objects.filter(
+                checksum_sha256=checksum,
+                mime_type=mime_type,
+                storage_key__startswith=f"{scope_prefix}/",
+            )
+            .order_by("id")
+            .first()
+        )
+        if existing is not None:
+            try:
+                if store.resolve_safe_path(existing.storage_key).exists():
+                    store.delete_stored_file(storage_key)
+                    return existing
+            except Exception:
+                pass
+
     asset = MediaAsset.objects.create(
         storage_key=storage_key,
         file_name=file_name,

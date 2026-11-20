@@ -127,6 +127,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
 }) => {
   const { courseId } = useParams<{ courseId?: string }>();
   const [activeTab, setActiveTab] = useState<'content' | 'resources'>('content');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [title, setTitle] = useState(item?.title || '');
   const [type, setType] = useState<ContentItemType>(item?.type || 'video');
@@ -333,6 +334,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setFileError(null);
 
     if (!title.trim()) {
@@ -380,6 +382,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
 
     // Upload pending file to Django Backend (/api/media/assets/upload)
     if ((type !== 'video' || videoSourceType === 'upload') && pendingFileRef.current) {
+      setIsSubmitting(true);
       try {
         const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
         const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
@@ -410,6 +413,8 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
       } catch {
         setFileError('تعذر الاتصال بخادم رفع الوسائط. يرجى المحاولة مرة أخرى.');
         return;
+      } finally {
+        setIsSubmitting(false);
       }
     }
 
@@ -1066,18 +1071,19 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               * لن يتم تطبيق أي تعديلات على مسودة المقرر حتى تضغط على "حفظ الدرس"
             </span>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={handleCancel} data-testid="item-cancel-btn">
+              <Button type="button" variant="outline" size="sm" onClick={handleCancel} disabled={isSubmitting} data-testid="item-cancel-btn">
                 إلغاء
               </Button>
               <Button
                 type="submit"
                 variant="primary"
                 size="sm"
-                disabled={!title.trim()}
+                isLoading={isSubmitting}
+                disabled={!title.trim() || isSubmitting}
                 className="px-5 font-bold"
                 data-testid="item-save-btn"
               >
-                حفظ الدرس
+                {isSubmitting ? 'جاري الرفع والحفظ...' : 'حفظ الدرس'}
               </Button>
             </div>
           </div>
