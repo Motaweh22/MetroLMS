@@ -437,7 +437,6 @@ export const groupsApi = {
       }
     );
   },
-  },
 
   /**
    * List join requests for a group (Admin or Assigned Supervisor)

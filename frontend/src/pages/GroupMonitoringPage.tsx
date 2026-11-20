@@ -251,16 +251,16 @@ export const GroupMonitoringPage: React.FC = () => {
     if (!g) return 'active';
     const startRaw = metrics?.selectedCycle?.startDateTime || g.startDateTime;
     if (
-      g.timeStatus === 'scheduled' ||
+      metrics?.status === 'scheduled' ||
       (startRaw && new Date(startRaw).getTime() > Date.now())
     ) {
       return 'scheduled';
     }
-    if (g.timeStatus === 'expired' || g.adminStatus === 'archived') {
+    if (metrics?.status === 'expired' || g.adminStatus === 'archived') {
       return 'expired';
     }
     return 'active';
-  }, [metrics?.group, metrics?.selectedCycle?.startDateTime]);
+  }, [metrics?.group, metrics?.status, metrics?.selectedCycle?.startDateTime]);
 
   const getDefaultNotificationTemplate = useCallback(
     (mode: 'scheduled' | 'active' | 'expired') => {
@@ -693,7 +693,7 @@ export const GroupMonitoringPage: React.FC = () => {
               <Icon name="clock" size="sm" className="text-danger" />
               <span className="text-text-muted">الموعد النهائي:</span>
               <strong className="text-text-heading font-semibold">
-                {formatMaterialDate(effectiveDeadlineDate)}
+                {effectiveDeadlineDate ? formatMaterialDate(effectiveDeadlineDate) : 'مفتوحة (بدون موعد انتهاء)'}
               </strong>
             </div>
             <Badge
@@ -897,7 +897,7 @@ export const GroupMonitoringPage: React.FC = () => {
             }`}
           data-testid="tab-notifications-view"
         >
-          <Icon name="bell" size="sm" />
+          <Icon name="notifications" size="sm" />
           <span>التنبيهات</span>
           <Badge variant={groupTimeMode === 'scheduled' ? 'primary' : 'warning'} size="sm">
             {notificationTrainees.length}
@@ -1457,7 +1457,7 @@ export const GroupMonitoringPage: React.FC = () => {
                 type="button"
                 variant="primary"
                 size="sm"
-                leftIcon="bell"
+                leftIcon="notifications"
                 onClick={handleSendBulkPlatformNotifications}
                 isLoading={isSendingBulkNotify}
                 disabled={notificationTrainees.length === 0 || isArchived}
@@ -1480,7 +1480,7 @@ export const GroupMonitoringPage: React.FC = () => {
           )}
 
           {/* Message Template Editor */}
-          <Card padding="md" className="space-y-3">
+          <Card className="p-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-bold text-text-heading">قالب رسالة التنبيه</h3>
@@ -1575,7 +1575,7 @@ export const GroupMonitoringPage: React.FC = () => {
 
           {/* Trainees Notification List */}
           {notificationTrainees.length === 0 ? (
-            <Card padding="lg" className="text-center text-text-muted space-y-2">
+            <Card className="p-6 text-center text-text-muted space-y-2">
               <Icon name="checkCircle" size="lg" className="mx-auto text-success opacity-70" />
               <div className="text-sm font-bold text-text-heading">
                 لا يوجد متدربون ضمن هذه التصفية حالياً
@@ -1632,9 +1632,8 @@ export const GroupMonitoringPage: React.FC = () => {
                               </Badge>
                             ) : t.worstAttention?.needsAttention ? (
                               <AttentionBadge
-                                needsAttention={t.worstAttention.needsAttention}
-                                level={t.worstAttention.level}
-                                reasonAr={t.worstAttention.reasonAr}
+                                attention={t.worstAttention}
+                                isCompleted={t.isAllCoreCompleted}
                               />
                             ) : (
                               <span className="text-text-muted">—</span>
@@ -1645,7 +1644,7 @@ export const GroupMonitoringPage: React.FC = () => {
                               type="button"
                               variant={isNotified ? 'outline' : 'primary'}
                               size="sm"
-                              leftIcon={hasPhone ? 'messageCircle' : 'bell'}
+                              leftIcon={hasPhone ? 'link' : 'notifications'}
                               onClick={() => handleSendTraineeAlert(t)}
                               isLoading={isSending}
                               disabled={isArchived}
