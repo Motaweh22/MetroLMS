@@ -25,6 +25,7 @@ export interface GoogleDrivePlayerProps {
   onComplete?: (itemId: string) => Promise<boolean> | void;
   onLocalProgressUpdate?: (itemId: string, activity: Partial<LessonProgress>) => void;
   previewMode?: boolean;
+  isReadOnly?: boolean;
   /** Legacy / experimental props preserved for backward compatibility */
   embedPolicy?: VideoEmbedPolicy;
   cropTopPixels?: number;
@@ -60,6 +61,7 @@ export const GoogleDrivePlayer: React.FC<GoogleDrivePlayerProps> = ({
   onComplete,
   onLocalProgressUpdate,
   previewMode = false,
+  isReadOnly = false,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [hasCompleted, setHasCompleted] = useState<boolean>(isCompleted);
@@ -123,8 +125,10 @@ export const GoogleDrivePlayer: React.FC<GoogleDrivePlayerProps> = ({
   courseIdRef.current = courseId;
 
   // Background progress sync helper to persist accumulated eligible time without touching playback positions
+  const effectiveReadOnly = previewMode || isReadOnly;
+
   const syncServerActivity = useCallback(async (seconds: number) => {
-    if (!courseIdRef.current || !itemIdRef.current) return;
+    if (effectiveReadOnly || !courseIdRef.current || !itemIdRef.current) return;
     try {
       await learningApi.recordActivity(courseIdRef.current, {
         itemId: itemIdRef.current,
@@ -134,13 +138,13 @@ export const GoogleDrivePlayer: React.FC<GoogleDrivePlayerProps> = ({
     } catch {
       // Background sync errors are safely suppressed
     }
-  }, [targetDurationSeconds]);
+  }, [effectiveReadOnly, targetDurationSeconds]);
 
   // Foreground active page timer
   useEffect(() => {
-    // Skip timer in preview mode, when already completed, or when requirement is disabled
+    // Skip timer in preview/read-only mode, when already completed, or when requirement is disabled
     if (
-      previewMode ||
+      effectiveReadOnly ||
       hasCompleted ||
       isCompleted ||
       !isTimeRequirementEnabled ||
@@ -223,7 +227,7 @@ export const GoogleDrivePlayer: React.FC<GoogleDrivePlayerProps> = ({
       syncServerActivity(accumulatedRef.current);
     };
   }, [
-    previewMode,
+    effectiveReadOnly,
     hasCompleted,
     isCompleted,
     isTimeRequirementEnabled,
@@ -286,7 +290,7 @@ export const GoogleDrivePlayer: React.FC<GoogleDrivePlayerProps> = ({
       </div>
 
       {/* 2. Completion Action Container: Located cleanly outside the video viewport */}
-      {previewMode ? (
+      {effectiveReadOnly ? (
         <div
           className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-text-muted"
           data-testid="drive-preview-info-bar"

@@ -374,6 +374,7 @@ export const LearningPlayerPage: React.FC = () => {
                   embedPolicy={currentItem.embedPolicy}
                   cropTopPixels={currentItem.embedPolicy?.cropTopPixels}
                   blockPopups={currentItem.embedPolicy?.blockPopups}
+                  isReadOnly={progress?.accessMode === 'review_only'}
                   onComplete={handleComplete}
                   onLocalProgressUpdate={updateLocalActivity}
                 />

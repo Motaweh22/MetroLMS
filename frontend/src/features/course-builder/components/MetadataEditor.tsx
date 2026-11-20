@@ -405,7 +405,7 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
             {course.id}
           </Badge>
           <span className="text-text-muted">المحاضر المسؤول:</span>
-          <strong className="text-text-heading">{course.lecturerName}</strong>
+          <strong className="text-text-heading">{course.lecturerName || 'غير معين'}</strong>
         </div>
         <div className="flex items-center gap-4 text-text-muted">
           <span>المسجلين: <strong className="text-text-heading">{course.enrollmentCount || 0}</strong></span>

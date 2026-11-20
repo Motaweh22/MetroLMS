@@ -201,7 +201,7 @@ export interface Course {
   thumbnail?: string;
   coverType?: 'image' | 'color' | 'default';
   coverColor?: string;
-  lecturerId: string;
+  lecturerId: string | null;
   lecturerName: string;
   coLecturers?: string[];
   assistants?: string[];
@@ -510,7 +510,7 @@ export interface ReviewQueueItemDTO {
   thumbnail?: string;
   coverType?: 'image' | 'color' | 'default';
   coverColor?: string;
-  lecturerId: string;
+  lecturerId: string | null;
   lecturerName: string;
   submittedAt?: string | null;
   submissionType: 'new' | 'update';
