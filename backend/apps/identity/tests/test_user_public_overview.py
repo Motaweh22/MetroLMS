@@ -52,6 +52,7 @@ class UserPublicOverviewTests(APITestCase):
             )
 
         self.dev = make_user("+201088000001", "29501010108001", "developer", "المطور")
+        self.admin = make_user("+201088000004", "29501010108004", "admin", "المدير")
         self.lecturer = make_user("+201088000002", "29501010108002", "lecturer", "المحاضر أحمد")
         self.trainee = make_user("+201088000003", "29501010108003", "trainee", "المتدرب علي")
 
@@ -121,3 +122,13 @@ class UserPublicOverviewTests(APITestCase):
         ov = resp.data["data"]["overview"]
         self.assertEqual(len(ov["memberGroups"]), 1)
         self.assertEqual(ov["memberGroups"][0]["name"], "مجموعة صيانة الخط الأول")
+
+    def test_admin_transcript_returns_full_user_and_metrics_for_user_details_page(self) -> None:
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.get(f"/api/admin/users/{self.trainee.id}/transcript")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        data = resp.data["data"]
+        self.assertEqual(data["user"]["name"], "المتدرب علي")
+        self.assertEqual(data["user"]["nationalId"], "29501010108003")
+        self.assertIn("enrolledCoursesCount", data["metrics"])
+        self.assertIsInstance(data["courses"], list)

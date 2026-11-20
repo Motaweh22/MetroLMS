@@ -562,22 +562,139 @@ class AdminUserTranscriptView(APIView):
         target = get_visible_user_or_none(request.user, user_id)
         if target is None:
             return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
-        enrollments = Enrollment.objects.filter(user=target).select_related("course").order_by("id")
-        courses = [
-            {
-                "courseId": str(e.course_id),
-                "courseTitle": e.course.title,
-                "enrolledAt": e.enrolled_at,
-                "progressPercent": 0,
-                "mostWatchedLessonTitle": None,
-            }
-            for e in enrollments
-        ]
+
+        target = (
+            User.objects.select_related("marital_status", "military_service_status", "metro_line")
+            .filter(pk=target.pk)
+            .first()
+            or target
+        )
+        dept_link = (
+            UserOrganizationalDepartment.objects.filter(user=target)
+            .select_related("department")
+            .order_by("id")
+            .first()
+        )
+        job_link = (
+            UserJobTitle.objects.filter(user=target)
+            .select_related("job_title", "department")
+            .order_by("id")
+            .first()
+        )
+        dept_name = (
+            job_link.department.name_ar
+            if job_link and job_link.department
+            else (dept_link.department.name_ar if dept_link and dept_link.department else "")
+        )
+        job_name = job_link.job_title.name_ar if job_link and job_link.job_title else ""
+
+        from apps.learning.models import CourseAttempt
+        from apps.learning.services.learning_service import compute_course_progress
+
+        enrollments = (
+            Enrollment.objects.filter(user=target, source_grants__isnull=False)
+            .select_related("course")
+            .distinct()
+            .order_by("id")
+        )
+        courses = []
+        total_attempts = 0
+        completed_attempts = 0
+        completed_courses = 0
+        progress_sum = 0
+
+        for e in enrollments:
+            attempts_qs = CourseAttempt.objects.filter(enrollment=e).order_by("-id")
+            att_list = []
+            best_pct = 0
+            for att in attempts_qs:
+                prog = compute_course_progress(att)
+                pct = int(prog.get("percentage", 0) or 0)
+                if pct > best_pct:
+                    best_pct = pct
+                total_attempts += 1
+                if pct >= 100:
+                    completed_attempts += 1
+                att_list.append(
+                    {
+                        "id": str(att.id),
+                        "courseId": str(e.course_id),
+                        "userId": str(target.id),
+                        "attemptNumber": att.id,
+                        "status": "completed" if pct >= 100 else ("in_progress" if pct > 0 else "not_started"),
+                        "progressPercent": pct,
+                        "startedAt": e.enrolled_at.isoformat() if e.enrolled_at else None,
+                    }
+                )
+            if best_pct >= 100:
+                completed_courses += 1
+            progress_sum += best_pct
+            c_status = "completed" if best_pct >= 100 else ("in_progress" if best_pct > 0 else "not_started")
+            courses.append(
+                {
+                    "courseId": str(e.course_id),
+                    "courseTitle": e.course.title,
+                    "title": e.course.title,
+                    "description": e.course.description or "",
+                    "level": "تذكيرية" if e.course.course_type == "reminder" else "مبتدئ",
+                    "progressPercent": best_pct,
+                    "status": c_status,
+                    "enrolledAt": e.enrolled_at.isoformat() if e.enrolled_at else "",
+                    "lastActivityAt": None,
+                    "timesOpened": None,
+                    "mostWatchedLessonTitle": None,
+                    "mostWatchedCount": None,
+                    "attemptsCount": len(att_list),
+                    "attempts": att_list,
+                }
+            )
+
+        enrolled_count = len(courses)
+        avg_rate = round(progress_sum / enrolled_count) if enrolled_count > 0 else 0
+
+        user_payload = {
+            "id": str(target.id),
+            "name": target.full_name,
+            "username": target.phone_e164,
+            "phoneE164": target.phone_e164,
+            "phone": target.phone_e164,
+            "email": target.email or target.phone_e164,
+            "role": "user" if target.role_id == "trainee" else target.role_id,
+            "status": target.status.lower(),
+            "department": dept_name,
+            "jobTitle": job_name,
+            "nationalId": target.national_id,
+            "dateOfBirth": target.date_of_birth.isoformat() if target.date_of_birth else None,
+            "appointmentDate": target.appointment_date.isoformat() if target.appointment_date else None,
+            "serviceEndDate": target.service_end_date.isoformat() if target.service_end_date else None,
+            "address": target.address or "",
+            "educationalQualification": target.educational_qualification or "",
+            "maritalStatus": target.marital_status.name_ar if target.marital_status else "",
+            "militaryServiceStatus": (
+                target.military_service_status.name_ar if target.military_service_status else ""
+            ),
+            "metroLine": target.metro_line.name_ar if target.metro_line else "",
+            "metroLineId": target.metro_line_id,
+            "maritalStatusId": target.marital_status_id,
+            "militaryServiceStatusId": target.military_service_status_id,
+            "createdAt": target.created_at.isoformat() if target.created_at else None,
+            "lastLogin": target.last_login.isoformat() if target.last_login else None,
+        }
+
         return success_response(
             {
                 "userId": str(target.id),
                 "userName": target.full_name,
                 "totalLearningHours": None,
+                "user": user_payload,
+                "metrics": {
+                    "totalLearningHours": None,
+                    "averageCompletionRate": avg_rate,
+                    "enrolledCoursesCount": enrolled_count,
+                    "completedCoursesCount": completed_courses,
+                    "totalAttemptsCount": total_attempts,
+                    "completedAttemptsCount": completed_attempts,
+                },
                 "courses": courses,
             }
         )
