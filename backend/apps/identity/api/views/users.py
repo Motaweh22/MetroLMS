@@ -282,6 +282,21 @@ class AdminUserListView(APIView):
             job_obj, _ = JobTitle.objects.get_or_create(name_ar=job_name)
             UserJobTitle.objects.get_or_create(user=user, department=dept_obj, job_title=job_obj)
 
+        from apps.governance.services.governance_service import record_audit_log
+
+        record_audit_log(
+            action="user.created",
+            actor=request.user,
+            target_entity_type="User",
+            target_entity_id=str(user.id),
+            details_snapshot={
+                "role": user.role_id,
+                "department": dept_name,
+                "jobTitle": job_name,
+                "leadershipTitle": user.leadership_title or "",
+            },
+        )
+
         return success_response(
             {
                 "id": str(user.id),
@@ -442,6 +457,19 @@ class AdminUserDeleteView(APIView):
             else (dept_link.department.name_ar if dept_link and dept_link.department else "")
         )
         job_out = job_link.job_title.name_ar if job_link and job_link.job_title else ""
+
+        from apps.governance.services.governance_service import record_audit_log
+
+        record_audit_log(
+            action="user.updated",
+            actor=request.user,
+            target_entity_type="User",
+            target_entity_id=str(target.id),
+            details_snapshot={
+                "updatedFields": sorted(str(k) for k in data.keys()),
+                "leadershipTitle": target.leadership_title or "",
+            },
+        )
 
         return success_response(
             {

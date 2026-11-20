@@ -1352,6 +1352,18 @@ class AdminGroupNotifyTraineesView(APIView):
 
         if to_create:
             NotificationItem.objects.bulk_create(to_create)
+            from apps.governance.services.governance_service import record_audit_log
+
+            record_audit_log(
+                action="group.trainees_notified",
+                actor=request.user,
+                target_entity_type="TrainingGroup",
+                target_entity_id=str(group.id),
+                details_snapshot={
+                    "sentCount": len(to_create),
+                    "userIds": [str(item.user_id) for item in to_create],
+                },
+            )
 
         return success_response({"sentCount": len(to_create)})
 
