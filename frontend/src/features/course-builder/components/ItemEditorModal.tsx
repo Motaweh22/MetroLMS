@@ -128,7 +128,9 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
 
   const [title, setTitle] = useState(item?.title || '');
   const [type, setType] = useState<ContentItemType>(item?.type || 'video');
-  const [duration, setDuration] = useState(item?.duration || '');
+  const [duration, setDuration] = useState<string>(
+    item?.duration != null ? String(item.duration) : ''
+  );
   const [downloadPolicy, setDownloadPolicy] = useState<ItemDownloadPolicy>(
     item?.downloadPolicy || (item?.type === 'video' ? 'never' : 'immediate')
   );
