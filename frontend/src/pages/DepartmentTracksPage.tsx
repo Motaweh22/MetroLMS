@@ -47,6 +47,7 @@ export const DepartmentTracksPage: React.FC = () => {
   const [modalJobIds, setModalJobIds] = useState<string[]>([]);
   const [modalLeadershipTitles, setModalLeadershipTitles] = useState<string[]>([]);
   const [modalScopeSearch, setModalScopeSearch] = useState('');
+  const [modalActiveTab, setModalActiveTab] = useState<'departments' | 'job_titles' | 'leadership'>('departments');
   const [isSaving, setIsSaving] = useState(false);
 
   // Modal 2: Edit courses for a specific department, job title, or leadership title
@@ -132,6 +133,7 @@ export const DepartmentTracksPage: React.FC = () => {
     setModalJobIds([...course.targetJobTitleIds]);
     setModalLeadershipTitles([...(course.targetLeadershipTitles || [])]);
     setModalScopeSearch('');
+    setModalActiveTab('departments');
   };
 
   const handleSaveCourseModal = async () => {
@@ -678,7 +680,7 @@ export const DepartmentTracksPage: React.FC = () => {
         </div>
       )}
 
-      {/* Modal 1: Edit Departments & Job Titles for a Course */}
+      {/* Modal 1: Edit Departments, Job Titles & Leadership Titles for a Course */}
       <Modal
         isOpen={Boolean(editingCourse)}
         onClose={() => !isSaving && setEditingCourse(null)}
@@ -687,148 +689,216 @@ export const DepartmentTracksPage: React.FC = () => {
         dataTestId="edit-course-visibility-modal"
       >
         <div className="space-y-4" dir="rtl">
-          <div className="relative">
-            <input
-              type="text"
-              value={modalScopeSearch}
-              onChange={(e) => setModalScopeSearch(e.target.value)}
-              placeholder="بحث داخل الإدارات أو المسميات الوظيفية..."
-              className="w-full text-xs pr-9 pl-3 py-2 bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <Icon
-              name="search"
-              size="sm"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
-            />
+          {/* Clean Horizontal Tabs inside Modal */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+            {[
+              {
+                id: 'departments' as const,
+                label: 'الإدارات المستهدفة',
+                count: modalDeptIds.length,
+              },
+              {
+                id: 'job_titles' as const,
+                label: 'المسميات الوظيفية',
+                count: modalJobIds.length,
+              },
+              {
+                id: 'leadership' as const,
+                label: 'الصفات القيادية',
+                count: modalLeadershipTitles.length,
+              },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setModalActiveTab(t.id);
+                  setModalScopeSearch('');
+                }}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  modalActiveTab === t.id
+                    ? 'bg-primary-dark text-white shadow-xs'
+                    : 'bg-bg text-text-muted hover:text-text hover:bg-bg-alt'
+                }`}
+              >
+                <span>{t.label}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    modalActiveTab === t.id
+                      ? 'bg-white/20 text-white'
+                      : 'bg-surface border border-border text-text-heading'
+                  }`}
+                >
+                  {t.count === 0 ? 'الكل' : t.count}
+                </span>
+              </button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Departments Section */}
-            <div className="border border-border rounded-xl p-3 space-y-2 bg-bg/30">
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <span className="text-xs font-bold text-text-heading">
-                  الإدارات المستهدفة ({modalDeptIds.length === 0 ? 'الكل' : modalDeptIds.length})
-                </span>
-                {modalDeptIds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setModalDeptIds([])}
-                    className="text-[11px] text-primary hover:underline cursor-pointer"
-                  >
-                    إتاحة لكل الإدارات
-                  </button>
-                )}
-              </div>
-              <div className="max-h-60 overflow-y-auto space-y-1.5">
+          {/* Search & Reset Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={modalScopeSearch}
+                onChange={(e) => setModalScopeSearch(e.target.value)}
+                placeholder={
+                  modalActiveTab === 'departments'
+                    ? 'بحث باسم الإدارة...'
+                    : modalActiveTab === 'job_titles'
+                      ? 'بحث بالمسمى الوظيفي أو الإدارة...'
+                      : 'بحث بالصفة القيادية...'
+                }
+                className="w-full text-xs pr-9 pl-3 py-2 bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <Icon
+                name="search"
+                size="sm"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+              />
+            </div>
+
+            {((modalActiveTab === 'departments' && modalDeptIds.length > 0) ||
+              (modalActiveTab === 'job_titles' && modalJobIds.length > 0) ||
+              (modalActiveTab === 'leadership' && modalLeadershipTitles.length > 0)) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (modalActiveTab === 'departments') setModalDeptIds([]);
+                  else if (modalActiveTab === 'job_titles') setModalJobIds([]);
+                  else setModalLeadershipTitles([]);
+                }}
+                className="text-xs shrink-0"
+              >
+                إتاحة للكل في هذا القسم
+              </Button>
+            )}
+          </div>
+
+          {/* Spacious 2-Column Selectable Cards */}
+          <div className="max-h-72 overflow-y-auto pr-1">
+            {modalActiveTab === 'departments' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {departments
                   .filter(
                     (d) =>
                       !modalScopeSearch.trim() ||
                       d.nameAr.toLowerCase().includes(modalScopeSearch.toLowerCase())
                   )
-                  .map((dept) => (
-                    <label
-                      key={dept.id}
-                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-surface cursor-pointer text-xs"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={modalDeptIds.includes(dept.id)}
-                        onChange={() => setModalDeptIds((prev) => toggleId(prev, dept.id))}
-                        className="h-4 w-4 rounded border-border accent-primary-dark"
-                      />
-                      <span className="text-text">{dept.nameAr}</span>
-                    </label>
-                  ))}
+                  .map((dept) => {
+                    const checked = modalDeptIds.includes(dept.id);
+                    return (
+                      <label
+                        key={dept.id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-xs transition-all ${
+                          checked
+                            ? 'border-primary bg-primary/5 text-text-heading font-semibold'
+                            : 'border-border bg-bg/30 hover:bg-surface text-text'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setModalDeptIds((prev) => toggleId(prev, dept.id))}
+                          className="h-4 w-4 rounded border-border accent-primary-dark shrink-0"
+                        />
+                        <span className="leading-snug">{dept.nameAr}</span>
+                      </label>
+                    );
+                  })}
               </div>
-            </div>
+            )}
 
-            {/* Job Titles Section */}
-            <div className="border border-border rounded-xl p-3 space-y-2 bg-bg/30">
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <span className="text-xs font-bold text-text-heading">
-                  المسميات الوظيفية ({modalJobIds.length === 0 ? 'الكل' : modalJobIds.length})
-                </span>
-                {modalJobIds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setModalJobIds([])}
-                    className="text-[11px] text-primary hover:underline cursor-pointer"
-                  >
-                    إتاحة لكل المسميات
-                  </button>
-                )}
-              </div>
-              <div className="max-h-60 overflow-y-auto space-y-1.5">
+            {modalActiveTab === 'job_titles' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {jobTitles
                   .filter(
                     (j) =>
                       !modalScopeSearch.trim() ||
-                      j.nameAr.toLowerCase().includes(modalScopeSearch.toLowerCase())
+                      j.nameAr.toLowerCase().includes(modalScopeSearch.toLowerCase()) ||
+                      (j.departmentNameAr || '')
+                        .toLowerCase()
+                        .includes(modalScopeSearch.toLowerCase())
                   )
-                  .map((job) => (
-                    <label
-                      key={job.id}
-                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-surface cursor-pointer text-xs"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={modalJobIds.includes(job.id)}
-                        onChange={() => setModalJobIds((prev) => toggleId(prev, job.id))}
-                        className="h-4 w-4 rounded border-border accent-primary-dark"
-                      />
-                      <div>
-                        <div className="text-text">{job.nameAr}</div>
-                        {job.departmentNameAr && (
-                          <div className="text-[10px] text-text-muted">{job.departmentNameAr}</div>
-                        )}
-                      </div>
-                    </label>
-                  ))}
+                  .map((job) => {
+                    const checked = modalJobIds.includes(job.id);
+                    return (
+                      <label
+                        key={job.id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-xs transition-all ${
+                          checked
+                            ? 'border-primary bg-primary/5 text-text-heading font-semibold'
+                            : 'border-border bg-bg/30 hover:bg-surface text-text'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setModalJobIds((prev) => toggleId(prev, job.id))}
+                          className="h-4 w-4 rounded border-border accent-primary-dark shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="leading-snug">{job.nameAr}</div>
+                          {job.departmentNameAr && (
+                            <div className="text-[11px] text-text-muted mt-0.5">
+                              {job.departmentNameAr}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
               </div>
-            </div>
+            )}
 
-            {/* Leadership Titles Section */}
-            <div className="border border-border rounded-xl p-3 space-y-2 bg-bg/30">
-              <div className="flex items-center justify-between pb-2 border-b border-border">
-                <span className="text-xs font-bold text-text-heading">
-                  الصفات القيادية ({modalLeadershipTitles.length === 0 ? 'الكل' : modalLeadershipTitles.length})
-                </span>
-                {modalLeadershipTitles.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setModalLeadershipTitles([])}
-                    className="text-[11px] text-primary hover:underline cursor-pointer"
-                  >
-                    إتاحة للجميع
-                  </button>
-                )}
-              </div>
-              <div className="max-h-60 overflow-y-auto space-y-1.5">
+            {modalActiveTab === 'leadership' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {leadershipTitles
                   .filter(
                     (lt) =>
                       !modalScopeSearch.trim() ||
                       lt.toLowerCase().includes(modalScopeSearch.toLowerCase())
                   )
-                  .map((lt) => (
-                    <label
-                      key={lt}
-                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-surface cursor-pointer text-xs"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={modalLeadershipTitles.includes(lt)}
-                        onChange={() =>
-                          setModalLeadershipTitles((prev) => toggleId(prev, lt))
-                        }
-                        className="h-4 w-4 rounded border-border accent-primary-dark"
-                      />
-                      <span className="text-text">{lt}</span>
-                    </label>
-                  ))}
+                  .map((lt) => {
+                    const checked = modalLeadershipTitles.includes(lt);
+                    return (
+                      <label
+                        key={lt}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-xs transition-all ${
+                          checked
+                            ? 'border-primary bg-primary/5 text-text-heading font-semibold'
+                            : 'border-border bg-bg/30 hover:bg-surface text-text'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setModalLeadershipTitles((prev) => toggleId(prev, lt))
+                          }
+                          className="h-4 w-4 rounded border-border accent-primary-dark shrink-0"
+                        />
+                        <span className="leading-snug">{lt}</span>
+                      </label>
+                    );
+                  })}
               </div>
-            </div>
+            )}
+          </div>
+
+          {/* Selection Summary */}
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-muted bg-bg/50 px-3 py-2 rounded-xl border border-border">
+            <span className="font-semibold text-text-heading">الملخص الحالي:</span>
+            <span>الإدارات: {modalDeptIds.length === 0 ? 'الكل' : `${modalDeptIds.length} محددة`}</span>
+            <span>·</span>
+            <span>المسميات: {modalJobIds.length === 0 ? 'الكل' : `${modalJobIds.length} محددة`}</span>
+            <span>·</span>
+            <span>
+              الصفات القيادية:{' '}
+              {modalLeadershipTitles.length === 0 ? 'الكل' : `${modalLeadershipTitles.length} محددة`}
+            </span>
           </div>
 
           <div className="flex items-center justify-between pt-3 border-t border-border">
