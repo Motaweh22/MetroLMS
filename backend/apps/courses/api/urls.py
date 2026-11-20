@@ -20,6 +20,7 @@ from apps.courses.api.views.courses import (
     CourseCommentListView,
     CourseCommentReportView,
     CourseInstructorsView,
+    CoursePurgeAndArchiveView,
     CourseQrJoinInfoView,
     CourseQrJoinView,
     CourseReviewDataView,
@@ -34,6 +35,7 @@ from apps.courses.api.views.courses import (
 urlpatterns = [
     path("courses", CourseCatalogListView.as_view(), name="courses-catalog"),
     path("courses/<int:course_id>", CourseCatalogDetailView.as_view(), name="courses-detail"),
+    path("courses/<int:course_id>/purge-and-archive", CoursePurgeAndArchiveView.as_view(), name="course-purge-and-archive"),
     path("courses/<int:course_id>/instructors", CourseInstructorsView.as_view(), name="course-instructors"),
     path("courses/<int:course_id>/review-data", CourseReviewDataView.as_view(), name="course-review-data"),
     path("courses/<int:course_id>/submit", AdminCourseReviewSubmitView.as_view(), name="course-submit"),

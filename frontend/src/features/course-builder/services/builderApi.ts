@@ -82,4 +82,20 @@ export const builderApi = {
       }
     );
   },
+
+  /**
+   * Purge course media files from storage and archive the course (preserves certificates)
+   */
+  async purgeAndArchiveCourse(
+    courseId: string
+  ): Promise<{ archived: boolean; purgedFilesCount: number; freedBytes: number; message?: string }> {
+    return apiClient<{
+      archived: boolean;
+      purgedFilesCount: number;
+      freedBytes: number;
+      message?: string;
+    }>(`/api/courses/${encodeURIComponent(courseId)}/purge-and-archive`, {
+      method: 'POST',
+    });
+  },
 };

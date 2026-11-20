@@ -252,7 +252,14 @@ class LecturerCourseDetailView(APIView):
 
             draft_pub_q = Q(course_draft__course=course) | Q(published_version__course=course)
             Module.objects.filter(draft_pub_q).delete()
+            asset_ids = list(
+                MediaContentReference.objects.filter(draft_pub_q).values_list("media_asset_id", flat=True)
+            )
             MediaContentReference.objects.filter(draft_pub_q).delete()
+
+            from apps.communications.models import WhatsAppContact
+
+            WhatsAppContact.objects.filter(course=course).delete()
 
             WorkingNote.objects.filter(submission__course=course).delete()
             StagedAdminEdit.objects.filter(submission__course=course).delete()
@@ -269,6 +276,7 @@ class LecturerCourseDetailView(APIView):
 
             course_title = course.title
             Course.objects.filter(pk=course.pk).delete()
+            _purge_unreferenced_course_media(asset_ids)
             record_audit_log(
                 action="course.deleted",
                 actor=request.user,
@@ -277,6 +285,94 @@ class LecturerCourseDetailView(APIView):
                 details_snapshot={"title": course_title},
             )
         return success_response({"deleted": True, "message": "تم حذف الدورة التدريبية بنجاح."})
+
+
+def _purge_unreferenced_course_media(asset_ids: list[int]) -> tuple[int, int]:
+    """Delete unreferenced MediaAsset records and stored files after course deletion/purge."""
+    if not asset_ids:
+        return 0, 0
+    from apps.media.models import MediaAsset, MediaContentReference
+    from apps.media.services.media_service import LocalMediaStorage
+
+    storage = LocalMediaStorage()
+    purged_count = 0
+    freed_bytes = 0
+    for asset_id in set(asset_ids):
+        if MediaContentReference.objects.filter(media_asset_id=asset_id).exists():
+            continue
+        asset = MediaAsset.objects.filter(pk=asset_id).first()
+        if asset is None:
+            continue
+        storage_key = asset.storage_key
+        size_bytes = int(asset.size_bytes or 0)
+        asset.delete()
+        try:
+            storage.delete_stored_file(storage_key)
+        except Exception:
+            pass
+        purged_count += 1
+        freed_bytes += size_bytes
+    return purged_count, freed_bytes
+
+
+class CoursePurgeAndArchiveView(APIView):
+    """POST /api/courses/<course_id>/purge-and-archive."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_allowed = (
+            request.user.role_id in {"developer", "super_admin", "admin"}
+            or course.primary_lecturer_id == request.user.id
+        )
+        if not is_allowed:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية أرشفة وتفريغ هذه الدورة.", status.HTTP_403_FORBIDDEN)
+
+        from django.db import transaction
+        from django.db.models import Q
+        from apps.governance.services.governance_service import record_audit_log
+        from apps.media.models import MediaContentReference
+
+        with transaction.atomic():
+            course.lifecycle_status = "Archived"
+            course.save(update_fields=["lifecycle_status"])
+
+            draft_pub_q = Q(course_draft__course=course) | Q(published_version__course=course)
+            asset_ids = list(
+                MediaContentReference.objects.filter(draft_pub_q).values_list("media_asset_id", flat=True)
+            )
+            MediaContentReference.objects.filter(draft_pub_q).delete()
+            purged_count, freed_bytes = _purge_unreferenced_course_media(asset_ids)
+
+            record_audit_log(
+                action="course.purged_and_archived",
+                actor=request.user,
+                target_entity_type="Course",
+                target_entity_id=str(course_id),
+                details_snapshot={
+                    "title": course.title,
+                    "purgedFilesCount": purged_count,
+                    "freedBytes": freed_bytes,
+                },
+            )
+
+        freed_mb = round(freed_bytes / (1024 * 1024), 2) if freed_bytes > 0 else 0
+        msg = (
+            f"تم تفريغ {purged_count} ملف ({freed_mb} MB) وأرشفة الدورة «{course.title}» مع الحفاظ على سجل الشهادات."
+            if purged_count > 0
+            else f"تمت أرشفة الدورة «{course.title}» بنجاح مع الحفاظ على سجل الشهادات."
+        )
+        return success_response(
+            {
+                "archived": True,
+                "purgedFilesCount": purged_count,
+                "freedBytes": freed_bytes,
+                "message": msg,
+            }
+        )
 
 
 class LecturerCourseDraftView(APIView):

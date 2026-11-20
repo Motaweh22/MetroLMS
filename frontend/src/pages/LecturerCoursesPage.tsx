@@ -12,6 +12,7 @@ import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
 import { QRCodeModal } from '@/shared/ui/QRCodeModal';
+import { Modal } from '@/shared/ui/Modal';
 
 export const LecturerCoursesPage: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -33,6 +34,13 @@ export const LecturerCoursesPage: React.FC = () => {
   // Course Creation Modal state
   const [isCreationModalOpen, setIsCreationModalOpen] = useState<boolean>(false);
   const [isCreatingCourse, setIsCreatingCourse] = useState<boolean>(false);
+
+  // Course Delete / Purge & Archive Modal state
+  const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState<boolean>(false);
+  const [deleteBlockedReason, setDeleteBlockedReason] = useState<'certificates' | 'other' | null>(null);
+  const [deleteModalError, setDeleteModalError] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   // Check URL query param to open creation modal directly if routed from /lecturer/builder/new
   useEffect(() => {
@@ -117,6 +125,72 @@ export const LecturerCoursesPage: React.FC = () => {
     },
     [user]
   );
+
+  const canDeleteCourse = useCallback(
+    (course: Course) => {
+      if (!user) return false;
+      if (user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer') {
+        return true;
+      }
+      return Boolean(course.lecturerId && course.lecturerId.toLowerCase() === user.id.toLowerCase());
+    },
+    [user]
+  );
+
+  const handleOpenDeleteModal = (course: Course) => {
+    setCourseToDelete(course);
+    setDeleteBlockedReason(null);
+    setDeleteModalError(null);
+  };
+
+  const handleConfirmDeleteCourse = async () => {
+    if (!courseToDelete) return;
+    setIsDeletingCourse(true);
+    setDeleteModalError(null);
+    try {
+      const res = await builderApi.deleteCourse(courseToDelete.id);
+      setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
+      setActionFeedback(res?.message || `تم حذف الدورة «${courseToDelete.title}» بنجاح.`);
+      setCourseToDelete(null);
+      setTimeout(() => setActionFeedback(null), 6000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'تعذر حذف الدورة التدريبية.';
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: string }).code || '')
+          : '';
+      if (code === 'COURSE_HAS_CERTIFICATES' || msg.includes('شهادات معتمدة')) {
+        setDeleteBlockedReason('certificates');
+        setDeleteModalError(msg);
+      } else {
+        setDeleteBlockedReason('other');
+        setDeleteModalError(msg);
+      }
+    } finally {
+      setIsDeletingCourse(false);
+    }
+  };
+
+  const handleConfirmPurgeAndArchive = async () => {
+    if (!courseToDelete) return;
+    setIsDeletingCourse(true);
+    setDeleteModalError(null);
+    try {
+      const res = await builderApi.purgeAndArchiveCourse(courseToDelete.id);
+      setCourses((prev) =>
+        prev.map((c) => (c.id === courseToDelete.id ? { ...c, status: 'archived' as Course['status'] } : c))
+      );
+      setActionFeedback(res?.message || `تم تفريغ ملفات الدورة «${courseToDelete.title}» وأرشفتها بنجاح.`);
+      setCourseToDelete(null);
+      setDeleteBlockedReason(null);
+      setTimeout(() => setActionFeedback(null), 6000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'تعذر تفريغ الملفات وأرشفة الدورة.';
+      setDeleteModalError(msg);
+    } finally {
+      setIsDeletingCourse(false);
+    }
+  };
 
   // 1. Unauthenticated, Trainee, or Scoped Assistant Lecturer Guard
   if (!authLoading && (!isAuthenticated || user?.role === 'user' || previewRole === 'assistant_lecturer')) {
@@ -412,6 +486,19 @@ export const LecturerCoursesPage: React.FC = () => {
                   >
                     معاينة
                   </Button>
+
+                  {canDeleteCourse(course) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenDeleteModal(course)}
+                      className="px-2.5 text-xs text-danger border-danger/30 hover:bg-danger/5 shrink-0"
+                      title="حذف الدورة أو تفريغ مساحتها وأرشفتها"
+                      data-testid={`delete-course-btn-${course.id}`}
+                    >
+                      <Icon name="trash" size="sm" />
+                    </Button>
+                  )}
                 </div>
               </Card>
             );
@@ -439,6 +526,104 @@ export const LecturerCoursesPage: React.FC = () => {
           downloadFilename={`course-${selectedQrCourse.id}-qr.png`}
           isExternalResource={false}
         />
+      )}
+
+      {/* Course Delete / Purge & Archive Modal */}
+      <Modal
+        isOpen={Boolean(courseToDelete)}
+        onClose={() => {
+          if (!isDeletingCourse) {
+            setCourseToDelete(null);
+            setDeleteBlockedReason(null);
+            setDeleteModalError(null);
+          }
+        }}
+        title={
+          deleteBlockedReason === 'certificates'
+            ? 'تعذر الحذف النهائي — خيار تفريغ المساحة والأرشفة'
+            : 'تأكيد حذف الدورة التدريبية'
+        }
+        size="md"
+        dataTestId="lecturer-delete-course-modal"
+      >
+        <div className="space-y-4" dir="rtl">
+          {deleteBlockedReason === 'certificates' ? (
+            <Alert variant="warning">
+              <div className="space-y-1 text-xs">
+                <div className="font-bold">هذه الدورة صدرت لها شهادات معتمدة ولا يمكن حذفها نهائياً.</div>
+                <p>
+                  يمكنك بدلاً من ذلك <strong>تفريغ الملفات وأرشفة الدورة</strong> لحذف الفيديوهات والملفات الثقيلة من مساحة السيرفر مع الحفاظ على سجل الشهادات والدرجات سليماً 100%.
+                </p>
+              </div>
+            </Alert>
+          ) : (
+            <div className="space-y-2 text-xs text-text-muted leading-relaxed">
+              <p>
+                هل أنت متأكد من حذف الدورة <strong className="text-text-heading">«{courseToDelete?.title}»</strong> نهائياً؟ سيتم حذف محتوى الدورة وملفاتها غير المشتركة والتسجيلات المرتبطة بها.
+              </p>
+              <p className="text-[11px] bg-bg p-2.5 rounded-lg border border-border">
+                <strong>خيار توفير المساحة فقط:</strong> إذا أردت الاحتفاظ بسجل الدورة والشهادات وحذف الفيديوهات والملفات الثقيلة من السيرفر فقط، يمكنك اختيار <strong>«تفريغ الملفات والأرشفة»</strong>.
+              </p>
+            </div>
+          )}
+
+          {deleteModalError && deleteBlockedReason !== 'certificates' && (
+            <Alert variant="danger">{deleteModalError}</Alert>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCourseToDelete(null);
+                setDeleteBlockedReason(null);
+                setDeleteModalError(null);
+              }}
+              disabled={isDeletingCourse}
+            >
+              إلغاء
+            </Button>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={deleteBlockedReason === 'certificates' ? 'primary' : 'outline'}
+                size="sm"
+                leftIcon="archive"
+                onClick={handleConfirmPurgeAndArchive}
+                isLoading={isDeletingCourse}
+                data-testid="purge-and-archive-course-btn"
+              >
+                تفريغ الملفات والأرشفة
+              </Button>
+
+              {deleteBlockedReason !== 'certificates' && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  leftIcon="trash"
+                  onClick={handleConfirmDeleteCourse}
+                  isLoading={isDeletingCourse}
+                  className="bg-danger hover:bg-danger-dark border-danger text-white"
+                  data-testid="confirm-delete-course-btn"
+                >
+                  حذف نهائي
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {actionFeedback && (
+        <div className="fixed bottom-4 left-4 z-50 max-w-md" dir="rtl">
+          <Alert variant="success" onClose={() => setActionFeedback(null)}>
+            {actionFeedback}
+          </Alert>
+        </div>
       )}
     </div>
   );
