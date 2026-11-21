@@ -422,6 +422,19 @@ class AdminUserDeleteView(APIView):
         if "leadershipTitle" in data:
             target.leadership_title = str(data.get("leadershipTitle") or "").strip() or None
 
+        password_changed = False
+        if "password" in data:
+            raw_pw = str(data.get("password") or "").strip()
+            if raw_pw:
+                if len(raw_pw) < 6:
+                    return error_response(
+                        "VALIDATION_ERROR",
+                        "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.",
+                        status.HTTP_400_BAD_REQUEST,
+                    )
+                target.set_password(raw_pw)
+                password_changed = True
+
         try:
             target.full_clean()
             target.save()
@@ -466,7 +479,8 @@ class AdminUserDeleteView(APIView):
             target_entity_type="User",
             target_entity_id=str(target.id),
             details_snapshot={
-                "updatedFields": sorted(str(k) for k in data.keys()),
+                "updatedFields": sorted(str(k) for k in data.keys() if k != "password"),
+                "passwordChanged": password_changed,
                 "leadershipTitle": target.leadership_title or "",
             },
         )

@@ -46,8 +46,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const [metroLineId, setMetroLineId] = useState('');
   const [department, setDepartment] = useState('');
   const [jobTitle, setJobTitle] = useState('');
+  const [leadershipTitle, setLeadershipTitle] = useState('');
   const [appointmentDate, setAppointmentDate] = useState('');
   const [serviceEndDate, setServiceEndDate] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [maritalStatuses, setMaritalStatuses] = useState<CatalogItem[]>([]);
   const [militaryStatuses, setMilitaryStatuses] = useState<CatalogItem[]>([]);
@@ -82,8 +86,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     setEducationalQualification(user.educationalQualification || '');
     setDepartment(user.department || '');
     setJobTitle(user.jobTitle || '');
+    setLeadershipTitle(user.leadershipTitle || '');
     setAppointmentDate(user.appointmentDate || '');
     setServiceEndDate(user.serviceEndDate || '');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
 
     let active = true;
     Promise.allSettled([
@@ -158,9 +166,21 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       return;
     }
 
+    const trimmedPw = newPassword.trim();
+    if (trimmedPw) {
+      if (trimmedPw.length < 6) {
+        setError('يجب أن تتكون كلمة المرور الجديدة من 6 أحرف على الأقل.');
+        return;
+      }
+      if (trimmedPw !== confirmPassword.trim()) {
+        setError('كلمة المرور الجديدة وتأكيدها غير متطابقتين.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
-      await userManagementApi.updateUser(user.id, {
+      const payload: Record<string, unknown> = {
         name: name.trim(),
         phone: phone.trim(),
         email: email.trim() || '',
@@ -173,9 +193,14 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         metroLineId: metroLineId || undefined,
         department: department.trim(),
         jobTitle: jobTitle.trim(),
+        leadershipTitle: leadershipTitle.trim(),
         appointmentDate,
         serviceEndDate: serviceEndDate || null,
-      });
+      };
+      if (trimmedPw) {
+        payload.password = trimmedPw;
+      }
+      await userManagementApi.updateUser(user.id, payload as any);
       toast.success(`تم تحديث بيانات "${name.trim()}" بنجاح.`);
       onSuccess();
       onClose();
@@ -191,7 +216,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       isOpen={isOpen}
       onClose={() => !isSubmitting && onClose()}
       title="تعديل البيانات الشخصية والوظيفية"
-      size="lg"
+      size="2xl"
       dataTestId="edit-user-modal"
     >
       <form onSubmit={handleSubmit} className="space-y-4 text-right" noValidate>
@@ -201,7 +226,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-user-name" className="text-xs font-semibold text-text">
               الاسم الكامل <span className="text-danger">*</span>
@@ -394,6 +419,27 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <label htmlFor="edit-user-leadership" className="text-xs font-semibold text-text">
+              الصفة القيادية / الإشرافية (اختياري)
+            </label>
+            <select
+              id="edit-user-leadership"
+              disabled={isSubmitting}
+              value={leadershipTitle}
+              onChange={(e) => setLeadershipTitle(e.target.value)}
+              className={INPUT_CLASS}
+            >
+              <option value="">— بدون (فارغ) —</option>
+              <option value="رئيس قطاع / رئيس إدارة مركزية">رئيس قطاع / رئيس إدارة مركزية</option>
+              <option value="مدير عام">مدير عام</option>
+              <option value="مدير إدارة">مدير إدارة</option>
+              <option value="رئيس قسم / رئيس وحدة">رئيس قسم / رئيس وحدة</option>
+              <option value="مشرف / رئيس وردية">مشرف / رئيس وردية</option>
+              <option value="قائد فريق / منسق">قائد فريق / منسق</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-user-line" className="text-xs font-semibold text-text">
               خط المترو
             </label>
@@ -473,7 +519,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
             <label htmlFor="edit-user-address" className="text-xs font-semibold text-text">
               العنوان
             </label>
@@ -485,6 +531,61 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               onChange={(e) => setAddress(e.target.value)}
               className={INPUT_CLASS}
             />
+          </div>
+
+          {/* Optional Password Update Section */}
+          <div className="sm:col-span-2 lg:col-span-3 pt-3 border-t border-border">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-xs font-bold text-text-heading">تعديل كلمة المرور (اختياري)</div>
+                <div className="text-[11px] text-text-muted">
+                  اترك الحقلين فارغين إذا كنت لا تريد تغيير كلمة المرور الحالية للمستخدم.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="text-xs text-primary hover:underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Icon name={showPassword ? 'eyeOff' : 'eye'} size="sm" />
+                <span>{showPassword ? 'إخفاء' : 'إظهار'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="edit-user-password" className="text-xs font-semibold text-text">
+                  كلمة المرور الجديدة
+                </label>
+                <input
+                  id="edit-user-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="6 أحرف على الأقل..."
+                  className={INPUT_CLASS}
+                  data-testid="edit-user-password-input"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="edit-user-confirm-password" className="text-xs font-semibold text-text">
+                  تأكيد كلمة المرور الجديدة
+                </label>
+                <input
+                  id="edit-user-confirm-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="أعد إدخال كلمة المرور الجديدة..."
+                  className={INPUT_CLASS}
+                  data-testid="edit-user-confirm-password-input"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
