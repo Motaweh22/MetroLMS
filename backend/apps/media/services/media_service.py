@@ -92,7 +92,7 @@ def upload_media_asset(
     if scope_prefix:
         existing = (
             MediaAsset.objects.filter(
-                checksum_sha256=checksum,
+                sha256_checksum=checksum,
                 mime_type=mime_type,
                 storage_key__startswith=f"{scope_prefix}/",
             )
