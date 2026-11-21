@@ -42,16 +42,19 @@ RUN Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$env:PYTHON_VERSIO
 
 # Install VC++ 2015-2022 Redistributable + Microsoft ODBC Driver 18 for SQL Server
 RUN Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile C:\vc_redist.x64.exe; `
-    Start-Process -Wait -FilePath C:\vc_redist.x64.exe -ArgumentList '/install /quiet /norestart'; `
+    $vc = Start-Process -Wait -PassThru -FilePath C:\vc_redist.x64.exe -ArgumentList '/install /quiet /norestart'; `
+    if ($vc.ExitCode -ne 0 -and $vc.ExitCode -ne 3010) { throw "VC_REDIST_INSTALL_FAILED: $($vc.ExitCode)" }; `
     Remove-Item C:\vc_redist.x64.exe -Force; `
     Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2266337" -OutFile C:\msodbcsql.msi; `
-    Start-Process -Wait -FilePath msiexec.exe -ArgumentList '/i C:\msodbcsql.msi /qn IACCEPTMSODBCSQLLICENSETERMS=1'; `
-    Remove-Item C:\msodbcsql.msi -Force
+    $odbc = Start-Process -Wait -PassThru -FilePath msiexec.exe -ArgumentList '/i C:\msodbcsql.msi /qn /norestart IACCEPTMSODBCSQLLICENSETERMS=YES ADDLOCAL=ALL /L*v C:\odbc18-install.log'; `
+    if ($odbc.ExitCode -ne 0 -and $odbc.ExitCode -ne 3010) { Get-Content C:\odbc18-install.log -Tail 60; throw "ODBC_DRIVER_18_INSTALL_FAILED: $($odbc.ExitCode)" }; `
+    Remove-Item C:\msodbcsql.msi, C:\odbc18-install.log -Force -ErrorAction SilentlyContinue
 
 WORKDIR C:\app\backend
 COPY backend\requirements.txt backend\requirements-prod.txt .\
 RUN python -m pip install --no-cache-dir --upgrade pip; `
-    python -m pip install --no-cache-dir -r requirements-prod.txt
+    python -m pip install --no-cache-dir -r requirements-prod.txt; `
+    python -c "import pyodbc; drivers = pyodbc.drivers(); print('ODBC drivers:', drivers); assert 'ODBC Driver 18 for SQL Server' in drivers, f'Missing ODBC Driver 18: {drivers}'"
 
 COPY backend\ .\
 COPY --from=frontend-builder C:\build\frontend\dist C:\app\frontend\dist
