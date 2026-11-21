@@ -209,6 +209,7 @@ export interface Course {
   targetDepartmentIds?: number[];
   targetJobTitleIds?: number[];
   targetMetroLineIds?: number[];
+  targetLeadershipTitles?: string[];
   accessMode?: CourseVisibilityMode;
   qrSettings?: CourseQrSettings;
   level: CourseLevel;
@@ -437,6 +438,7 @@ export interface CourseBaselineSnapshot {
   targetDepartmentIds?: number[];
   targetJobTitleIds?: number[];
   targetMetroLineIds?: number[];
+  targetLeadershipTitles?: string[];
   accessMode?: CourseVisibilityMode;
   qrSettings?: CourseQrSettings;
   prerequisiteCourseId?: string | null;

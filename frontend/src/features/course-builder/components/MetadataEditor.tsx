@@ -9,6 +9,15 @@ import { userManagementApi } from '@/features/user-management/services/userManag
 import { AudienceSelectionModal } from './AudienceSelectionModal';
 import { AudienceSectionCard } from './AudienceSectionCard';
 
+const LEADERSHIP_TITLE_OPTIONS: Array<{ id: number; label: string }> = [
+  { id: 1, label: 'رئيس قطاع / رئيس إدارة مركزية' },
+  { id: 2, label: 'مدير عام' },
+  { id: 3, label: 'مدير إدارة' },
+  { id: 4, label: 'رئيس قسم / رئيس وحدة' },
+  { id: 5, label: 'مشرف / رئيس وردية' },
+  { id: 6, label: 'قائد فريق / منسق' },
+];
+
 export interface MetadataEditorProps {
   course: Course;
   onChange: (updatedCourse: Course) => void;
@@ -215,13 +224,15 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
     departments: boolean;
     jobTitles: boolean;
     metroLines: boolean;
+    leadership: boolean;
   }>({
     departments: false,
     jobTitles: false,
     metroLines: false,
+    leadership: false,
   });
   const [activeAudienceModal, setActiveAudienceModal] = useState<
-    'departments' | 'jobTitles' | 'metroLines' | null
+    'departments' | 'jobTitles' | 'metroLines' | 'leadership' | null
   >(null);
 
   const toggleAudienceExpand = (key: keyof typeof expandedAudience) => {
@@ -797,6 +808,37 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
                 </div>
               )}
             </AudienceSectionCard>
+
+            {/* F. Target Leadership / Supervisory Titles */}
+            <AudienceSectionCard
+              title="الصفات القيادية / الإشرافية المستهدفة"
+              description="تحديد الصفات القيادية المستهدفة (اختياري — اتركها فارغة لإتاحة الدورة للجميع)"
+              summaryText={
+                (course.targetLeadershipTitles || []).length > 0
+                  ? (course.targetLeadershipTitles || []).length <= 2
+                    ? (course.targetLeadershipTitles || []).join('، ')
+                    : `${(course.targetLeadershipTitles || []).length} صفات قيادية محددة`
+                  : 'متاح للجميع'
+              }
+              hasSelection={(course.targetLeadershipTitles || []).length > 0}
+              isExpanded={expandedAudience.leadership}
+              onToggleExpand={() => toggleAudienceExpand('leadership')}
+              onEdit={() => setActiveAudienceModal('leadership')}
+              toggleTestId="toggle-audience-leadership"
+              editTestId="edit-audience-leadership-btn"
+            >
+              {(course.targetLeadershipTitles || []).length === 0 ? (
+                <p className="text-xs text-text-muted">لم يتم تحديد أي صفة قيادية بعد (متاح للجميع).</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {(course.targetLeadershipTitles || []).map((lt) => (
+                    <Badge key={lt} variant="warning" size="sm">
+                      {lt}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </AudienceSectionCard>
           </div>
 
           <AudienceSelectionModal
@@ -837,6 +879,26 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
             onClose={() => setActiveAudienceModal(null)}
             searchPlaceholder="ابحث عن خط مترو..."
             dataTestId="audience-metro-lines-modal"
+          />
+
+          <AudienceSelectionModal
+            isOpen={activeAudienceModal === 'leadership'}
+            title="تحديد الصفات القيادية / الإشرافية المستهدفة"
+            description="اختر الصفات القيادية المستهدفة لهذه الدورة، أو اتركها فارغة لإتاحتها للجميع."
+            items={LEADERSHIP_TITLE_OPTIONS}
+            selectedIds={LEADERSHIP_TITLE_OPTIONS.filter((opt) =>
+              (course.targetLeadershipTitles || []).includes(opt.label)
+            ).map((opt) => opt.id)}
+            onSave={(nextIds) => {
+              const titles = LEADERSHIP_TITLE_OPTIONS.filter((opt) =>
+                nextIds.includes(opt.id)
+              ).map((opt) => opt.label);
+              onChange({ ...course, targetLeadershipTitles: titles });
+              setActiveAudienceModal(null);
+            }}
+            onClose={() => setActiveAudienceModal(null)}
+            searchPlaceholder="ابحث عن صفة قيادية..."
+            dataTestId="audience-leadership-modal"
           />
         </div>
       </section>

@@ -42,6 +42,7 @@ class CourseSerializer(serializers.ModelSerializer):
     targetJobTitleIds = serializers.SerializerMethodField()
     targetJobTitles = serializers.SerializerMethodField()
     targetMetroLineIds = serializers.SerializerMethodField()
+    targetLeadershipTitles = serializers.SerializerMethodField()
     estimatedHours = serializers.SerializerMethodField()
     prerequisites = serializers.SerializerMethodField()
     modules = serializers.SerializerMethodField()
@@ -77,6 +78,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "targetJobTitleIds",
             "targetJobTitles",
             "targetMetroLineIds",
+            "targetLeadershipTitles",
             "modules",
             "chapters",
             "createdAt",
@@ -136,6 +138,15 @@ class CourseSerializer(serializers.ModelSerializer):
             CourseAudienceMetroLine.objects.filter(course=obj)
             .order_by("metro_line_id")
             .values_list("metro_line_id", flat=True)
+        )
+
+    def get_targetLeadershipTitles(self, obj: Course) -> list[str]:
+        from apps.courses.models import CourseAudienceLeadership
+
+        return list(
+            CourseAudienceLeadership.objects.filter(course=obj)
+            .order_by("id")
+            .values_list("leadership_title", flat=True)
         )
 
     def get_ratingCount(self, obj: Course) -> int:
