@@ -55,8 +55,8 @@ RUN Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Out
 WORKDIR C:\app\backend
 COPY backend\requirements.txt backend\requirements-prod.txt .\
 RUN python -m pip install --no-cache-dir --upgrade pip; `
-    python -m pip install --no-cache-dir -r requirements-prod.txt; `
-    python -c "import pyodbc; drivers = pyodbc.drivers(); print('ODBC drivers:', drivers); assert 'ODBC Driver 18 for SQL Server' in drivers, f'Missing ODBC Driver 18: {drivers}'"
+    python -m pip install --no-cache-dir -r requirements-prod.txt
+RUN ["python", "-c", "import pyodbc; drivers = pyodbc.drivers(); print('ODBC drivers:', drivers); assert 'ODBC Driver 18 for SQL Server' in drivers, f'Missing ODBC Driver 18: {drivers}'"]
 
 COPY backend\ .\
 COPY --from=frontend-builder C:\build\frontend\dist C:\app\frontend\dist
