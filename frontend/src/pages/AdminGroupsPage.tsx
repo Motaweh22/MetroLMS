@@ -691,9 +691,15 @@ export const AdminGroupsPage: React.FC = () => {
                     >
                       {/* Name, ID & Reminder Countdown */}
                       <td className="py-3.5 px-4 max-w-xs">
-                        <div className="font-bold text-text-heading text-sm line-clamp-1">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/groups/${encodeURIComponent(g.id)}`)}
+                          className="font-bold text-text-heading hover:text-primary hover:underline text-sm line-clamp-1 text-right transition-colors cursor-pointer"
+                          title="الانتقال إلى صفحة المجموعة"
+                          data-testid={`group-name-link-${g.id}`}
+                        >
                           {g.name}
-                        </div>
+                        </button>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1">
                           <span className="text-[10px] font-mono bg-bg px-1.5 py-0.5 rounded text-text-muted border border-border">
                             {g.id}
