@@ -183,7 +183,11 @@ def save_course_draft(
             if ext_url:
                 validate_https_url(ext_url)
             raw_dl = str(l_data.get("downloadPolicy") or ("immediate" if l_data.get("canDownload") else "never")).strip()
-            dl_policy = raw_dl if raw_dl in {"immediate", "after_completion", "never"} else "never"
+            dl_policy = (
+                raw_dl
+                if raw_dl in {"immediate", "after_item_completion", "after_course_completion", "never"}
+                else "never"
+            )
             lesson = LessonItem.objects.create(
                 module=mod,
                 title=l_title,

@@ -391,7 +391,9 @@ export const LearningPlayerPage: React.FC = () => {
                   isReadOnly={progress?.accessMode === 'review_only'}
                   canDownload={Boolean(
                     currentItem.downloadPolicy === 'immediate' ||
-                    (currentItem.downloadPolicy === 'after_completion' && currentItem.isCompleted) ||
+                    (currentItem.downloadPolicy === 'after_item_completion' && currentItem.isCompleted) ||
+                    (currentItem.downloadPolicy === 'after_course_completion' &&
+                      (progress?.progressPercent ?? 0) >= 100) ||
                     (!currentItem.downloadPolicy && currentItem.canDownload)
                   )}
                   onComplete={handleComplete}
@@ -405,7 +407,9 @@ export const LearningPlayerPage: React.FC = () => {
                   url: resolvedMediaUrl || currentItem.url,
                   canDownload: Boolean(
                     currentItem.downloadPolicy === 'immediate' ||
-                    (currentItem.downloadPolicy === 'after_completion' && currentItem.isCompleted) ||
+                    (currentItem.downloadPolicy === 'after_item_completion' && currentItem.isCompleted) ||
+                    (currentItem.downloadPolicy === 'after_course_completion' &&
+                      (progress?.progressPercent ?? 0) >= 100) ||
                     (!currentItem.downloadPolicy && currentItem.canDownload)
                   ),
                 }}
@@ -421,7 +425,9 @@ export const LearningPlayerPage: React.FC = () => {
                   url: resolvedMediaUrl || currentItem.url,
                   canDownload: Boolean(
                     currentItem.downloadPolicy === 'immediate' ||
-                    (currentItem.downloadPolicy === 'after_completion' && currentItem.isCompleted) ||
+                    (currentItem.downloadPolicy === 'after_item_completion' && currentItem.isCompleted) ||
+                    (currentItem.downloadPolicy === 'after_course_completion' &&
+                      (progress?.progressPercent ?? 0) >= 100) ||
                     (!currentItem.downloadPolicy && currentItem.canDownload)
                   ),
                 }}
