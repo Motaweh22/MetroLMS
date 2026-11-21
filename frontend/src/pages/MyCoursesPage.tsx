@@ -256,10 +256,18 @@ export const MyCoursesPage: React.FC = () => {
                 <div>
                   {/* Thumbnail Banner */}
                   <div
-                    className="h-36 w-full flex items-center justify-center relative text-white text-4xl font-extrabold select-none shadow-inner"
-                    style={{ background: grad }}
+                    className="h-40 w-full flex items-center justify-center relative text-white text-4xl font-extrabold select-none shadow-inner overflow-hidden"
+                    style={course.thumbnail ? undefined : { background: grad }}
                   >
-                    <span>{initial}</span>
+                    {course.thumbnail ? (
+                      <img
+                        src={course.thumbnail}
+                        alt={course.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <span>{initial}</span>
+                    )}
 
                     {/* Level Pill */}
                     <div className="absolute top-3 end-3">
@@ -292,7 +300,12 @@ export const MyCoursesPage: React.FC = () => {
                     <CardTitle className="text-base sm:text-lg font-bold text-text-heading line-clamp-2 leading-snug group-hover:text-primary transition-colors">
                       {course.title}
                     </CardTitle>
-                    <p className="text-xs text-text-muted mt-1 flex items-center gap-1.5">
+                    {course.description && (
+                      <p className="text-xs text-text-muted mt-1 line-clamp-2 leading-relaxed">
+                        {course.description}
+                      </p>
+                    )}
+                    <p className="text-xs text-text-muted mt-1.5 flex items-center gap-1.5">
                       <Icon name="user" size="sm" />
                       <span>{course.lecturerName}</span>
                     </p>
@@ -302,7 +315,14 @@ export const MyCoursesPage: React.FC = () => {
                     {/* Progress Bar */}
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs text-text-muted">
-                        <span className="font-medium">نسبة الإنجاز</span>
+                        <span className="font-medium">
+                          نسبة الإنجاز
+                          {(course.progress as any)?.totalLessons > 0 && (
+                            <span className="text-[11px] text-text-muted/80 mr-1.5">
+                              ({(course.progress as any).completedLessons ?? 0} / {(course.progress as any).totalLessons} درس)
+                            </span>
+                          )}
+                        </span>
                         <span className="font-bold text-text-heading">{progressPercent}%</span>
                       </div>
                       <ProgressBar
