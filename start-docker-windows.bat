@@ -114,7 +114,7 @@ if "!DO_CONFIG!"=="1" (
 
     REM Detect primary IPv4 address as a helpful default for SQL Server inside container
     set "DETECTED_IP="
-    for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1 -ExpandProperty IPAddress)" 2^>nul`) do set "DETECTED_IP=%%I"
+    for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.PrefixOrigin -ne 'WellKnown' -and $_.InterfaceAlias -notmatch 'vEthernet|WSL|Hyper-V|Docker|Loopback' } | Sort-Object InterfaceMetric | Select-Object -First 1 -ExpandProperty IPAddress)" 2^>nul`) do set "DETECTED_IP=%%I"
     if "!DETECTED_IP!"=="" set "DETECTED_IP=host.docker.internal"
 
     echo.
