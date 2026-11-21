@@ -33,6 +33,8 @@ export const GroupDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isForbidden, setIsForbidden] = useState(false);
   const [isInstructorsModalOpen, setIsInstructorsModalOpen] = useState(false);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+  const [membersSearchQuery, setMembersSearchQuery] = useState('');
   const [isManageAssistantsOpen, setIsManageAssistantsOpen] = useState(false);
 
   const isOutOfScope = Boolean(
@@ -263,6 +265,20 @@ export const GroupDetailPage: React.FC = () => {
                 className="font-bold text-xs shrink-0"
               >
                 مشرفين المجموعة
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                leftIcon="users"
+                onClick={() => {
+                  setMembersSearchQuery('');
+                  setIsMembersModalOpen(true);
+                }}
+                data-testid="open-group-members-modal-btn"
+                className="font-bold text-xs shrink-0"
+              >
+                أعضاء المجموعة ({metrics?.traineeMetricsList?.length ?? group.traineeIds?.length ?? 0})
               </Button>
               {canManageAssistants && (
                 <Button
@@ -704,6 +720,119 @@ export const GroupDetailPage: React.FC = () => {
           readOnly={user?.role === 'user'}
         />
       </div>
+
+      {/* Group Members Modal (أعضاء المجموعة) */}
+      <Modal
+        isOpen={isMembersModalOpen}
+        onClose={() => setIsMembersModalOpen(false)}
+        title={`أعضاء المجموعة (${metrics?.traineeMetricsList?.length ?? 0})`}
+        description={`قائمة المتدربين المسجلين في مجموعة: ${group.name}`}
+        size="lg"
+        dataTestId="group-members-modal"
+        footer={
+          <div className="flex items-center justify-end w-full">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsMembersModalOpen(false)}
+              data-testid="close-group-members-modal-btn"
+              className="font-bold text-xs"
+            >
+              إغلاق
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4" dir="rtl">
+          <div className="relative">
+            <input
+              type="text"
+              value={membersSearchQuery}
+              onChange={(e) => setMembersSearchQuery(e.target.value)}
+              placeholder="بحث باسم المتدرب أو البريد أو الهاتف..."
+              className="w-full text-xs pr-9 pl-3 py-2 bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/20"
+              data-testid="group-members-search-input"
+            />
+            <Icon
+              name="search"
+              size="sm"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+            />
+          </div>
+
+          {(() => {
+            const allMembers = metrics?.traineeMetricsList ?? [];
+            const q = membersSearchQuery.trim().toLowerCase();
+            const filteredMembers = q
+              ? allMembers.filter(
+                  (m) =>
+                    m.userName.toLowerCase().includes(q) ||
+                    (m.email || '').toLowerCase().includes(q) ||
+                    (m.phone || '').toLowerCase().includes(q) ||
+                    (m.department || '').toLowerCase().includes(q)
+                )
+              : allMembers;
+
+            if (filteredMembers.length === 0) {
+              return (
+                <Card
+                  variant="default"
+                  className="p-6 text-center text-text-muted text-xs border-dashed"
+                  data-testid="group-members-empty-state"
+                >
+                  {allMembers.length === 0
+                    ? 'لا يوجد متدربون مسجلون في هذه المجموعة حالياً.'
+                    : 'لا يوجد أعضاء مطابقون لبحثك.'}
+                </Card>
+              );
+            }
+
+            return (
+              <div className="divide-y divide-border/70 border border-border rounded-xl overflow-hidden max-h-[55vh] overflow-y-auto">
+                {filteredMembers.map((member, idx) => (
+                  <div
+                    key={member.userId}
+                    className="p-3 bg-surface hover:bg-bg/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                    data-testid={`group-member-row-${member.userId}`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-text-heading truncate">
+                          {member.userName}
+                        </div>
+                        <div className="text-[11px] text-text-muted flex flex-wrap items-center gap-2 mt-0.5">
+                          {(member.phone || member.email) && (
+                            <span dir="ltr">{member.phone || member.email}</span>
+                          )}
+                          {member.department && <span>· {member.department}</span>}
+                          {member.jobTitle && <span>· {member.jobTitle}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant={member.programPercent >= 100 ? 'success' : 'neutral'} size="sm">
+                        الإنجاز: {member.programPercent}%
+                      </Badge>
+                      {isOperationalStaff && (
+                        <Link to={`/users/${encodeURIComponent(member.userId)}`}>
+                          <Button variant="outline" size="sm" className="text-xs">
+                            الملف
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      </Modal>
 
       {/* Group Instructors Contact Modal (مشرفين المجموعة) */}
       <Modal
