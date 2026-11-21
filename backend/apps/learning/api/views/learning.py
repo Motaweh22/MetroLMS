@@ -323,6 +323,19 @@ class CourseProgressView(APIView):
         try:
             attempt = get_active_attempt_for_user(user=request.user, course=course, attempt_id=attempt_id)
         except LearningDomainError as exc:
+            if request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
+                return success_response(
+                    {
+                        "progress": {
+                            "progressPercent": 0,
+                            "completedLessons": 0,
+                            "totalLessons": 0,
+                            "completedItemIds": [],
+                            "accessMode": "review_only",
+                        },
+                        "lessons": [],
+                    }
+                )
             return error_response(exc.code, exc.message, exc.status_code)
         lessons = LessonProgress.objects.filter(course_attempt=attempt).order_by("lesson_item_id")
         return success_response(

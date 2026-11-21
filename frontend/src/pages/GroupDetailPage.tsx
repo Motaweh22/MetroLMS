@@ -42,11 +42,19 @@ export const GroupDetailPage: React.FC = () => {
     groupId.toLowerCase() !== scopedAssignmentPreview.groupId.toLowerCase()
   );
 
+  const isOperationalStaff = Boolean(
+    user &&
+    (user.role === 'admin' ||
+      user.role === 'super_admin' ||
+      user.role === 'assistant_admin' ||
+      user.role === 'developer')
+  );
+
   const canManageAssistants = useMemo(() => {
     if (!user || !group) return false;
     // Assistant Lecturer cannot manage assistant assignments
     if (previewRole === 'assistant_lecturer') return false;
-    if (user.role === 'admin') return true;
+    if (isOperationalStaff) return true;
     if (user.role === 'lecturer') {
       const uid = user.id.toLowerCase();
       if (group.primaryInstructorId !== undefined) {
@@ -269,7 +277,7 @@ export const GroupDetailPage: React.FC = () => {
                   إدارة المحاضرين المساعدين
                 </Button>
               )}
-              {previewRole === 'assistant_lecturer' && (
+              {(previewRole === 'assistant_lecturer' || isOperationalStaff) && (
                 <Link to={`/admin/groups/${group.id}/monitoring`}>
                   <Button
                     type="button"
@@ -295,7 +303,7 @@ export const GroupDetailPage: React.FC = () => {
           )}
 
           {/* Overall Program Progress Bar (Trainees only) */}
-          {previewRole !== 'assistant_lecturer' && (
+          {previewRole !== 'assistant_lecturer' && !isOperationalStaff && (
             <div className="pt-2 border-t border-border/60 space-y-2">
               <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-text-heading">
                 <span className="flex items-center gap-2">
