@@ -65,20 +65,37 @@ if errorlevel 1 (
 docker info >nul 2>&1
 if errorlevel 1 (
     echo [FAIL] Docker daemon is not running or not accessible.
-    echo        Ensure the Docker service is started ^(services.msc -> Docker Engine^).
+    echo        Ensure the Docker service is started ^(services.msc -^> Docker Engine^).
+    set "EXIT_CODE=1"
+    goto finish
+)
+
+set "COMPOSE_CMD="
+docker compose version >nul 2>&1
+if not errorlevel 1 (
+    set "COMPOSE_CMD=docker compose"
+) else (
+    docker-compose version >nul 2>&1
+    if not errorlevel 1 (
+        set "COMPOSE_CMD=docker-compose"
+    )
+)
+if "!COMPOSE_CMD!"=="" (
+    echo [FAIL] Docker Compose is not installed ^(neither "docker compose" nor "docker-compose"^).
+    echo        Install Docker Compose v2 plugin or docker-compose.exe and try again.
     set "EXIT_CODE=1"
     goto finish
 )
 
 if /I "%ACTION%"=="DOWN" (
     echo [INFO] Stopping MetroLMS Docker container...
-    docker compose -f "%COMPOSE_FILE%" down
+    !COMPOSE_CMD! -f "%COMPOSE_FILE%" down
     if errorlevel 1 set "EXIT_CODE=1"
     goto finish
 )
 
 if /I "%ACTION%"=="LOGS" (
-    docker compose -f "%COMPOSE_FILE%" logs -f
+    !COMPOSE_CMD! -f "%COMPOSE_FILE%" logs -f
     if errorlevel 1 set "EXIT_CODE=1"
     goto finish
 )
@@ -212,9 +229,9 @@ for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8000 " ^| findstr "L
 echo.
 echo [Step 3/3] Starting MetroLMS Windows Container...
 if "%NO_BUILD%"=="1" (
-    docker compose -f "%COMPOSE_FILE%" up -d
+    !COMPOSE_CMD! -f "%COMPOSE_FILE%" up -d
 ) else (
-    docker compose -f "%COMPOSE_FILE%" up -d --build
+    !COMPOSE_CMD! -f "%COMPOSE_FILE%" up -d --build
 )
 if errorlevel 1 (
     echo [FAIL] Docker Compose failed. Check the messages above.
