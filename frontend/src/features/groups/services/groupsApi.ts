@@ -179,7 +179,7 @@ export const groupsApi = {
    */
   async renewCycle(
     groupId: string,
-    dto: RenewGroupCycleRequestDTO,
+    dto: Partial<RenewGroupCycleRequestDTO> = {},
     options?: RequestOptions
   ): Promise<{
     previousCycle: GroupRenewalCycle | null;

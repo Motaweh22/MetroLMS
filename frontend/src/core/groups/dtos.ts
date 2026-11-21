@@ -138,6 +138,19 @@ export interface GroupSummaryDTO {
   isEnrollmentOpen: boolean;
   currentCycleNumber?: number;
   currentCycleTitle?: string;
+  groupType?: 'regular' | 'reminder';
+  renewalSchedule?: {
+    autoRenewalEnabled?: boolean;
+    intervalDays?: number | null;
+    renewalIntervalDays?: number | null;
+    nextScheduledRenewalDate?: string | null;
+    recurrenceType?: string;
+  } | null;
+  currentCycle?: {
+    id: string | number;
+    cycleNumber?: number;
+    title?: string;
+  } | null;
   pendingJoinRequestsCount?: number;
   primaryInstructorId?: string | null;
   assistantLecturerIds?: string[];
