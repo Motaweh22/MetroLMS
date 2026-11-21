@@ -179,7 +179,7 @@ export const appRouteElements = (
       <Route path="my-groups/:groupId" element={<GroupDetailPage />} />
       <Route path="groups" element={<GroupsAdaptiveRedirect />} />
       <Route path="groups/join" element={<JoinGroupPage />} />
-      <Route path="groups/:groupId" element={<Navigate to="/my-groups/:groupId" replace />} />
+      <Route path="groups/:groupId" element={<GroupDetailPage />} />
       <Route path="profile" element={<ProfilePage />} />
       <Route path="users/:userId" element={<MemberProfilePage />} />
       <Route path="notifications" element={<NotificationsPage />} />

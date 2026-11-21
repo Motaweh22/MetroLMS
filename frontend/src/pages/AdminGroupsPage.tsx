@@ -693,7 +693,7 @@ export const AdminGroupsPage: React.FC = () => {
                       <td className="py-3.5 px-4 max-w-xs">
                         <button
                           type="button"
-                          onClick={() => navigate(`/groups/${encodeURIComponent(g.id)}`)}
+                          onClick={() => navigate(`/my-groups/${encodeURIComponent(g.id)}`)}
                           className="font-bold text-text-heading hover:text-primary hover:underline text-sm line-clamp-1 text-right transition-colors cursor-pointer"
                           title="الانتقال إلى صفحة المجموعة"
                           data-testid={`group-name-link-${g.id}`}
