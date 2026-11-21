@@ -16,4 +16,5 @@ backend/__pycache__/
 docs/
 legacy-reference/
 Demo/*
-!Demo/mocks/
+!Demo/mocks
+!Demo/mocks/**
