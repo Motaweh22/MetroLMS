@@ -182,6 +182,8 @@ def save_course_draft(
             ext_url = normalize_optional_url(raw_ext)
             if ext_url:
                 validate_https_url(ext_url)
+            raw_dl = str(l_data.get("downloadPolicy") or ("immediate" if l_data.get("canDownload") else "never")).strip()
+            dl_policy = raw_dl if raw_dl in {"immediate", "after_completion", "never"} else "never"
             lesson = LessonItem.objects.create(
                 module=mod,
                 title=l_title,
@@ -189,6 +191,7 @@ def save_course_draft(
                 sort_order=int(l_data.get("sortOrder", l_idx)),
                 external_video_url=ext_url,
                 duration_seconds=int(l_data.get("durationSeconds", 0) or 0),
+                download_policy=dl_policy,
             )
             raw_media_id = l_data.get("mediaId") or l_data.get("mediaAssetId")
             if raw_media_id is not None and str(raw_media_id).isdigit():
@@ -304,6 +307,7 @@ def decide_course_review(
                     sort_order=lesson.sort_order,
                     external_video_url=lesson.external_video_url,
                     duration_seconds=lesson.duration_seconds,
+                    download_policy=lesson.download_policy,
                 )
                 quiz = QuizDefinition.objects.filter(lesson_item=lesson).first()
                 if quiz is not None:

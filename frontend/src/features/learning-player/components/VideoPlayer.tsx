@@ -15,6 +15,7 @@ export interface VideoPlayerProps {
   furthestWatched?: number;
   isCompleted?: boolean;
   isReadOnly?: boolean;
+  canDownload?: boolean;
   onComplete: (itemId: string) => Promise<boolean> | void;
   onLocalProgressUpdate?: (itemId: string, activity: Partial<LessonProgress>) => void;
 }
@@ -29,6 +30,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   furthestWatched = 0,
   isCompleted = false,
   isReadOnly = false,
+  canDownload = false,
   onComplete,
   onLocalProgressUpdate,
 }) => {
@@ -581,6 +583,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 >
                   {playbackRate}x
                 </button>
+
+                {/* Download Button (when enabled by course downloadPolicy) */}
+                {canDownload && src && (
+                  <a
+                    href={src}
+                    download={`${title || 'video'}.mp4`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ctrl-btn"
+                    title="تحميل الفيديو"
+                    aria-label="تحميل الفيديو"
+                    data-testid="video-download-btn"
+                  >
+                    <Icon name="download" size="md" />
+                  </a>
+                )}
 
                 {/* Visible Fullscreen Toggle Button */}
                 <button

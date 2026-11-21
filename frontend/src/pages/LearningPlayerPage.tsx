@@ -389,13 +389,26 @@ export const LearningPlayerPage: React.FC = () => {
                   furthestWatched={currentItem.progress?.furthestWatchedSeconds || 0}
                   isCompleted={currentItem.isCompleted}
                   isReadOnly={progress?.accessMode === 'review_only'}
+                  canDownload={Boolean(
+                    currentItem.downloadPolicy === 'immediate' ||
+                    (currentItem.downloadPolicy === 'after_completion' && currentItem.isCompleted) ||
+                    (!currentItem.downloadPolicy && currentItem.canDownload)
+                  )}
                   onComplete={handleComplete}
                   onLocalProgressUpdate={updateLocalActivity}
                 />
               )
             ) : currentItem.type === 'image' ? (
               <ImageViewer
-                item={resolvedMediaUrl ? { ...currentItem, url: resolvedMediaUrl } : currentItem}
+                item={{
+                  ...currentItem,
+                  url: resolvedMediaUrl || currentItem.url,
+                  canDownload: Boolean(
+                    currentItem.downloadPolicy === 'immediate' ||
+                    (currentItem.downloadPolicy === 'after_completion' && currentItem.isCompleted) ||
+                    (!currentItem.downloadPolicy && currentItem.canDownload)
+                  ),
+                }}
                 isCompleted={currentItem.isCompleted}
                 isSubmitting={isSubmitting}
                 isReadOnly={progress?.accessMode === 'review_only'}
@@ -403,7 +416,15 @@ export const LearningPlayerPage: React.FC = () => {
               />
             ) : (
               <DocumentViewer
-                item={resolvedMediaUrl ? { ...currentItem, url: resolvedMediaUrl } : currentItem}
+                item={{
+                  ...currentItem,
+                  url: resolvedMediaUrl || currentItem.url,
+                  canDownload: Boolean(
+                    currentItem.downloadPolicy === 'immediate' ||
+                    (currentItem.downloadPolicy === 'after_completion' && currentItem.isCompleted) ||
+                    (!currentItem.downloadPolicy && currentItem.canDownload)
+                  ),
+                }}
                 isCompleted={currentItem.isCompleted}
                 isSubmitting={isSubmitting}
                 isReadOnly={progress?.accessMode === 'review_only'}

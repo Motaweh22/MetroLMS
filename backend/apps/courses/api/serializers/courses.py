@@ -230,12 +230,15 @@ class CourseSerializer(serializers.ModelSerializer):
             items_out = []
             for l in lessons:
                 ref = refs.get(l.title)
+                dl_policy = getattr(l, "download_policy", "never") or "never"
                 item_dict = {
                     "id": str(l.id),
                     "title": l.title,
                     "type": l.lesson_type,
                     "durationSeconds": l.duration_seconds or 0,
                     "externalVideoUrl": l.external_video_url or "",
+                    "downloadPolicy": dl_policy,
+                    "canDownload": dl_policy != "never",
                 }
                 if ref is not None:
                     item_dict["mediaId"] = str(ref.media_asset_id)

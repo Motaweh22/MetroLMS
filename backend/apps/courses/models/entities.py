@@ -382,6 +382,7 @@ class LessonItem(models.Model):
     sort_order = models.IntegerField(default=0, db_default=0)
     external_video_url = models.CharField(max_length=2048, null=True, blank=True, validators=[validate_https_url])
     duration_seconds = models.IntegerField(null=True, blank=True, default=0, db_default=0)
+    download_policy = models.CharField(max_length=20, default="never", db_default="never")
 
     class Meta:
         db_table = "courses_lessonitem"
