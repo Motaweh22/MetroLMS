@@ -16,8 +16,9 @@ ARG NODE_VERSION=24.11.0
 RUN Invoke-WebRequest -Uri "https://nodejs.org/dist/v$env:NODE_VERSION/node-v$env:NODE_VERSION-win-x64.zip" -OutFile C:\node.zip; `
     Expand-Archive C:\node.zip -DestinationPath C:\; `
     Rename-Item "C:\node-v$env:NODE_VERSION-win-x64" C:\nodejs; `
-    Remove-Item C:\node.zip -Force; `
-    setx PATH "$env:PATH;C:\nodejs" /M
+    Remove-Item C:\node.zip -Force
+
+ENV PATH="C:\nodejs;${PATH}"
 
 WORKDIR C:\build\frontend
 COPY frontend\package.json frontend\package-lock.json .\
