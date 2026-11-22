@@ -66,7 +66,10 @@ class UserManager(BaseUserManager["User"]):
         return user
 
     def create_user(self, phone_e164: str, password: str | None = None, **extra_fields: object) -> "User":
-        extra_fields.setdefault("role", "trainee")
+        if "role" not in extra_fields and "role_id" not in extra_fields:
+            extra_fields["role_id"] = "trainee"
+        elif isinstance(extra_fields.get("role"), str):
+            extra_fields["role_id"] = extra_fields.pop("role")
         extra_fields.setdefault("status", "Active")
         return self._create_user(phone_e164, password, **extra_fields)
 

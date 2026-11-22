@@ -166,3 +166,40 @@ class Bp02AuthAndSessionTests(TestCase):
         self.assertEqual(me_res.json()["code"], "AUTHENTICATION_REQUIRED")
         self.assertEqual(invalidate_user_sessions(self.active_user.id), 1)
         self.assertEqual(ServerSession.objects.filter(user=self.active_user).count(), 0)
+
+    def test_create_user_supports_role_id_default_role_and_gender(self) -> None:
+        # 1. Explicit role_id (previously failed due to setdefault('role', 'trainee'))
+        u_role_id = User.objects.create_user(
+            phone_e164="+201200001111",
+            password="StrongPassword@123",
+            role_id="trainee",
+            full_name="متدربة جديدة",
+            gender="female",
+            national_id="29901010101022",
+            marital_status=self.marital,
+            appointment_date=datetime.date(2021, 1, 1),
+            military_service_status=self.military,
+            educational_qualification="بكالوريوس",
+            address="القاهرة",
+            date_of_birth=datetime.date(1999, 2, 2),
+            metro_line=self.metro_line,
+        )
+        self.assertEqual(u_role_id.role_id, "trainee")
+        self.assertEqual(u_role_id.gender, "female")
+
+        # 2. Default role omitted & string role normalized to role_id
+        u_default = User.objects.create_user(
+            phone_e164="+201200002222",
+            password="StrongPassword@123",
+            full_name="متدرب افتراضي",
+            national_id="29901010101023",
+            marital_status=self.marital,
+            appointment_date=datetime.date(2021, 1, 1),
+            military_service_status=self.military,
+            educational_qualification="بكالوريوس",
+            address="القاهرة",
+            date_of_birth=datetime.date(1999, 3, 3),
+            metro_line=self.metro_line,
+        )
+        self.assertEqual(u_default.role_id, "trainee")
+        self.assertEqual(u_default.gender, "male")
