@@ -13,6 +13,7 @@ import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { Alert } from '@/shared/ui/Alert';
 import { Modal } from '@/shared/ui/Modal';
 import {
@@ -930,19 +931,21 @@ export const GroupMonitoringPage: React.FC = () => {
               <label htmlFor="status-filter" className="text-xs text-text-muted whitespace-nowrap">
                 تصفية الحالة:
               </label>
-              <select
+              <StyledSelect
                 id="status-filter"
+                dataTestId="trainee-status-filter"
+                size="sm"
+                className="min-w-[180px]"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-background border border-border rounded-lg px-3 py-2 text-xs text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-                data-testid="trainee-status-filter"
-              >
-                <option value="all">جميع الحالات ({metrics.traineeMetricsList.length})</option>
-                <option value="completed_core">أتموا الأساسي بالكامل</option>
-                <option value="in_progress">قيد التدريب والإنجاز</option>
-                <option value="not_started">لم يبدأوا بعد</option>
-                <option value="needs_attention">بحاجة لمتابعة وتنبيه</option>
-              </select>
+                onChange={(val) => setStatusFilter(val)}
+                options={[
+                  { value: 'all', label: `جميع الحالات (${metrics.traineeMetricsList.length})` },
+                  { value: 'completed_core', label: 'أتموا الأساسي بالكامل' },
+                  { value: 'in_progress', label: 'قيد التدريب والإنجاز' },
+                  { value: 'not_started', label: 'لم يبدأوا بعد' },
+                  { value: 'needs_attention', label: 'بحاجة لمتابعة وتنبيه' },
+                ]}
+              />
             </div>
           </div>
 

@@ -18,6 +18,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
@@ -299,17 +300,16 @@ export const RolePreviewModal: React.FC<RolePreviewModalProps> = ({ isOpen, onCl
               </div>
             ) : (
               <div className="space-y-1.5">
-                <select
+                <StyledSelect
                   id="scoped-group-select"
-                  data-testid="scoped-group-select"
+                  dataTestId="scoped-group-select"
+                  size="sm"
+                  buttonClassName="bg-surface"
                   value={selectedGroupId}
-                  onChange={(e) => setSelectedGroupId(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-md border border-border bg-surface text-text focus:ring-2 focus:ring-primary focus:outline-none"
-                >
-                  <option value="" disabled>
-                    -- اختر مجموعة تدريبية لمعاينة تكليف المساعد --
-                  </option>
-                  {eligibleGroupsWithAssistants.map((group) => {
+                  onChange={(val) => setSelectedGroupId(val)}
+                  placeholder="-- اختر مجموعة تدريبية لمعاينة تكليف المساعد --"
+                  emptyMessage="لا توجد مجموعات متاحة"
+                  options={eligibleGroupsWithAssistants.map((group) => {
                     const assistantInstructor = group.instructors?.find(
                       (i) => i.instructorRole === 'assistant'
                     );
@@ -317,14 +317,12 @@ export const RolePreviewModal: React.FC<RolePreviewModalProps> = ({ isOpen, onCl
                       assistantInstructor?.name ||
                       group.assistantLecturerIds?.[0] ||
                       'محاضر مساعد معتمد';
-
-                    return (
-                      <option key={group.id} value={group.id}>
-                        {group.id}: {group.name} (المساعد: {assistantName})
-                      </option>
-                    );
+                    return {
+                      value: group.id,
+                      label: `${group.id}: ${group.name} (المساعد: ${assistantName})`,
+                    };
                   })}
-                </select>
+                />
                 <span className="text-[11px] text-text-muted">
                   سيتم تطبيق الهيكل البصري الخاص بالمحاضر المساعد داخل سياق هذه المجموعة حصراً.
                 </span>

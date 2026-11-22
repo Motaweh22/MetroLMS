@@ -3,6 +3,7 @@ import { apiClient } from '@/core/api/apiClient';
 import type { Course, CourseLevel } from '@/core/courses/types';
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -483,22 +484,19 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
               <label htmlFor="select-primary-lecturer" className="block text-xs font-bold text-text-heading">
                 المحاضر الرئيسي المسؤول عن المقرر <span className="text-danger">*</span>
               </label>
-              <select
+              <StyledSelect
                 id="select-primary-lecturer"
+                dataTestId="select-primary-lecturer"
+                buttonClassName="bg-surface rounded-xl py-2.5 px-3.5"
                 value={course.lecturerId || ''}
-                onChange={(e) => handlePrimaryLecturerChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-surface border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                data-testid="select-primary-lecturer"
-              >
-                <option value="" disabled>
-                  -- اختر المحاضر الرئيسي من دليل المحاضرين --
-                </option>
-                {lecturersList.map((lec) => (
-                  <option key={lec.id} value={lec.id}>
-                    {lec.name} ({lec.id}) {lec.department ? `— ${lec.department}` : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => handlePrimaryLecturerChange(val)}
+                placeholder="-- اختر المحاضر الرئيسي من دليل المحاضرين --"
+                emptyMessage="لا يوجد محاضرون مسجلون"
+                options={lecturersList.map((lec) => ({
+                  value: lec.id,
+                  label: `${lec.name} (${lec.id})${lec.department ? ` — ${lec.department}` : ''}`,
+                }))}
+              />
               <p className="text-[11px] text-text-muted">
                 المحاضر المحدد هو المسؤول المعتمد عن محتوى المقرر وسير العملية التدريبية وتوريث أرقام التواصل.
               </p>
@@ -546,21 +544,26 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
 
               {/* Add Co-Lecturer selector */}
               <div className="flex gap-2 items-center pt-1">
-                <select
+                <StyledSelect
+                  dataTestId="select-add-co-lecturer"
+                  ariaLabel="اختيار محاضر مشارك"
+                  size="sm"
+                  className="flex-1"
+                  buttonClassName="bg-surface"
                   value={selectedCoLecturerToAdd}
-                  onChange={(e) => setSelectedCoLecturerToAdd(e.target.value)}
-                  className="flex-1 px-3 py-2 text-xs bg-surface border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary"
-                  data-testid="select-add-co-lecturer"
-                >
-                  <option value="">-- اختر محاضراً مشاركاً لإضافته --</option>
-                  {lecturersList
-                    .filter((l) => l.id !== course.lecturerId && !(course.coLecturers || []).includes(l.id))
-                    .map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name} ({l.id})
-                      </option>
-                    ))}
-                </select>
+                  onChange={(val) => setSelectedCoLecturerToAdd(val)}
+                  placeholder="-- اختر محاضراً مشاركاً لإضافته --"
+                  emptyMessage="لا يوجد محاضرون متاحون للإضافة"
+                  options={[
+                    { value: '', label: '-- اختر محاضراً مشاركاً لإضافته --' },
+                    ...lecturersList
+                      .filter((l) => l.id !== course.lecturerId && !(course.coLecturers || []).includes(l.id))
+                      .map((l) => ({
+                        value: l.id,
+                        label: `${l.name} (${l.id})`,
+                      })),
+                  ]}
+                />
                 <Button
                   type="button"
                   variant="outline"
@@ -1096,24 +1099,26 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
 
           {/* Dropdown to add another course */}
           <div className="flex items-center gap-2 pt-1">
-            <select
+            <StyledSelect
               id="builder-prereq-select"
+              dataTestId="builder-prereq-select"
+              size="sm"
+              className="flex-1"
+              buttonClassName="bg-surface"
               value={selectedCourseToAdd}
-              onChange={(e) => setSelectedCourseToAdd(e.target.value)}
-              className="flex-1 px-3.5 py-2.5 text-xs bg-white border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              data-testid="builder-prereq-select"
-            >
-              <option value="">اختر مقرراً تدريبياً لإضافته كمتطلب سابق...</option>
-              {availableCourses
-                .filter(
-                  (c) => c.id !== course.id && !currentPrereqCourseIds.includes(c.id)
-                )
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.id}: {c.title}
-                  </option>
-                ))}
-            </select>
+              onChange={(val) => setSelectedCourseToAdd(val)}
+              placeholder="اختر مقرراً تدريبياً لإضافته كمتطلب سابق..."
+              emptyMessage="لا توجد مقررات أخرى متاحة"
+              options={[
+                { value: '', label: 'اختر مقرراً تدريبياً لإضافته كمتطلب سابق...' },
+                ...availableCourses
+                  .filter((c) => c.id !== course.id && !currentPrereqCourseIds.includes(c.id))
+                  .map((c) => ({
+                    value: c.id,
+                    label: `${c.id}: ${c.title}`,
+                  })),
+              ]}
+            />
             <button
               type="button"
               onClick={() => handleAddPrereqCourse(selectedCourseToAdd)}

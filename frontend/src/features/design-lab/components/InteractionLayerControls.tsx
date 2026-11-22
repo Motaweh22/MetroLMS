@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import type {
   InteractionLayerConfig,
   InteractionLayerPreset,
@@ -304,22 +305,25 @@ export const InteractionLayerControls: React.FC<InteractionLayerControlsProps> =
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <select
+                    <StyledSelect
+                      size="xs"
+                      className="min-w-[190px]"
+                      ariaLabel="سلوك منطقة التفاعل"
+                      dataTestId={`region-action-select-${region.id}`}
                       value={region.action || (region.type === 'fullscreen' ? 'fullscreen' : 'passthrough')}
-                      onChange={(e) => {
-                        const act = e.target.value as 'passthrough' | 'fullscreen';
+                      onChange={(val) => {
+                        const act = val as 'passthrough' | 'fullscreen';
                         handleUpdateRegion(region.id, {
                           action: act,
                           type: act === 'fullscreen' ? 'fullscreen' : (region.type === 'fullscreen' ? 'custom' : region.type),
                         });
                       }}
                       disabled={!config.enabled || !region.enabled}
-                      className="bg-bg border border-border rounded px-1.5 py-0.5 text-[10px] text-text focus:border-primary focus:outline-none"
-                      data-testid={`region-action-select-${region.id}`}
-                    >
-                      <option value="passthrough">تمرير النقر (Pass-Through)</option>
-                      <option value="fullscreen">إجراء مدار: ملء الشاشة (Managed Fullscreen)</option>
-                    </select>
+                      options={[
+                        { value: 'passthrough', label: 'تمرير النقر (Pass-Through)' },
+                        { value: 'fullscreen', label: 'إجراء مدار: ملء الشاشة (Managed Fullscreen)' },
+                      ]}
+                    />
 
                     <div className="flex items-center gap-1.5 font-mono text-[11px] text-text-muted">
                       <span>X:{region.x}%</span>

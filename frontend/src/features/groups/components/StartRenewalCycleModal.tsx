@@ -13,6 +13,7 @@ import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { Alert } from '@/shared/ui/Alert';
 import { useToast } from '@/shared/ui/Toast';
 import { toDatetimeLocal, toIsoString } from '../utils/dateUtils';
@@ -309,16 +310,17 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
               <label htmlFor="cycle-policy-select" className="block text-xs font-semibold text-text mb-1">
                 سياسة ما بعد انتهاء الموعد
               </label>
-              <select
+              <StyledSelect
                 id="cycle-policy-select"
+                dataTestId="cycle-policy-select"
+                buttonClassName="rounded-xl"
                 value={postDeadlinePolicy}
-                onChange={(e) => setPostDeadlinePolicy(e.target.value as PostDeadlinePolicy)}
-                className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary"
-                data-testid="cycle-policy-select"
-              >
-                <option value="keep_no_cert">إتاحة المحتوى للقراءة دون إصدار شهادة (keep_no_cert)</option>
-                <option value="hide">حجب المحتوى التدريبي تماماً (hide)</option>
-              </select>
+                onChange={(val) => setPostDeadlinePolicy(val as PostDeadlinePolicy)}
+                options={[
+                  { value: 'keep_no_cert', label: 'إتاحة المحتوى للقراءة دون إصدار شهادة (keep_no_cert)' },
+                  { value: 'hide', label: 'حجب المحتوى التدريبي تماماً (hide)' },
+                ]}
+              />
             </div>
 
             <div>
@@ -350,29 +352,38 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
 
           {/* Add Course bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-bg p-3 rounded-xl border border-border">
-            <select
+            <StyledSelect
+              dataTestId="add-course-select"
+              ariaLabel="اختيار مقرر تدريبي لإضافته للدورة"
+              size="xs"
+              className="flex-1"
+              buttonClassName="bg-surface"
               value={selectedCourseToAdd}
-              onChange={(e) => setSelectedCourseToAdd(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-xs bg-surface border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary"
-              data-testid="add-course-select"
-            >
-              <option value="">اختر مقرراً تدريبياً لإضافته للدورة...</option>
-              {unassignedCourses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title} ({c.id})
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedCourseToAdd(val)}
+              placeholder="اختر مقرراً تدريبياً لإضافته للدورة..."
+              emptyMessage="لا توجد مقررات متاحة"
+              options={[
+                { value: '', label: 'اختر مقرراً تدريبياً لإضافته للدورة...' },
+                ...unassignedCourses.map((c) => ({
+                  value: c.id,
+                  label: `${c.title} (${c.id})`,
+                })),
+              ]}
+            />
 
-            <select
+            <StyledSelect
+              dataTestId="add-role-select"
+              ariaLabel="دور المقرر"
+              size="xs"
+              className="sm:w-48"
+              buttonClassName="bg-surface"
               value={selectedRoleToAdd}
-              onChange={(e) => setSelectedRoleToAdd(e.target.value as CourseRole)}
-              className="px-3 py-1.5 text-xs bg-surface border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary"
-              data-testid="add-role-select"
-            >
-              <option value="core">دورة أساسية (Core)</option>
-              <option value="reminder">دورة تنشيطية (Reminder)</option>
-            </select>
+              onChange={(val) => setSelectedRoleToAdd(val as CourseRole)}
+              options={[
+                { value: 'core', label: 'دورة أساسية (Core)' },
+                { value: 'reminder', label: 'دورة تنشيطية (Reminder)' },
+              ]}
+            />
 
             <Button
               type="button"

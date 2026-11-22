@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useToast } from '@/shared/ui/Toast';
 
 export interface ManageGroupAssistantsModalProps {
@@ -285,27 +286,37 @@ export const ManageGroupAssistantsModal: React.FC<ManageGroupAssistantsModalProp
               />
             )}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-              <select
+              <StyledSelect
                 id="modal-assistant-lecturer-select"
+                dataTestId="modal-assistant-lecturer-select"
+                className="flex-1"
+                buttonClassName="rounded-xl py-2.5 px-3.5"
                 value={selectedToAdd}
-                onChange={(e) => setSelectedToAdd(e.target.value)}
+                onChange={(val) => setSelectedToAdd(val)}
                 disabled={loadingLecturers}
-                className="flex-1 px-3.5 py-2.5 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary"
-                data-testid="modal-assistant-lecturer-select"
-              >
-                <option value="">
-                  {loadingLecturers
+                placeholder={
+                  loadingLecturers
                     ? 'جارٍ تحميل قائمة المحاضرين...'
                     : availableCandidates.length > 0
                     ? '— اختر محاضراً مساعداً لإضافته —'
-                    : '— لا يوجد محاضرون إضافيون متاحون للاختيار —'}
-                </option>
-                {availableCandidates.map((lec) => (
-                  <option key={lec.id} value={lec.id}>
-                    {lec.name} — {lec.jobTitle} ({lec.department})
-                  </option>
-                ))}
-              </select>
+                    : '— لا يوجد محاضرون إضافيون متاحون للاختيار —'
+                }
+                emptyMessage="لا يوجد محاضرون إضافيون متاحون"
+                options={[
+                  {
+                    value: '',
+                    label: loadingLecturers
+                      ? 'جارٍ تحميل قائمة المحاضرين...'
+                      : availableCandidates.length > 0
+                      ? '— اختر محاضراً مساعداً لإضافته —'
+                      : '— لا يوجد محاضرون إضافيون متاحون للاختيار —',
+                  },
+                  ...availableCandidates.map((lec) => ({
+                    value: lec.id,
+                    label: `${lec.name} — ${lec.jobTitle} (${lec.department})`,
+                  })),
+                ]}
+              />
               <Button
                 type="button"
                 variant="outline"

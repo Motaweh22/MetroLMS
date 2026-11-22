@@ -3,6 +3,7 @@ import type { GroupMaterialFile, GroupMaterialFolder } from '@/core/groups/types
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { Alert } from '@/shared/ui/Alert';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { groupsApi } from '../services/groupsApi';
 
 interface GroupMoveFileModalProps {
@@ -78,23 +79,26 @@ export const GroupMoveFileModal: React.FC<GroupMoveFileModalProps> = ({
         ) : (
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-text-heading">المجلد الوجهة</label>
-            <select
+            <StyledSelect
+              dataTestId="target-folder-select"
+              ariaLabel="المجلد الوجهة"
+              size="sm"
+              buttonClassName="bg-surface"
               value={targetFolderId}
-              onChange={(e) => {
-                setTargetFolderId(e.target.value);
+              onChange={(val) => {
+                setTargetFolderId(val);
                 setError(null);
               }}
-              required
-              className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-surface text-text focus:outline-none focus:ring-2 focus:ring-primary"
-              data-testid="target-folder-select"
-            >
-              <option value="">-- اختر المجلد --</option>
-              {eligibleFolders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name} ({f.filesCount} ملف)
-                </option>
-              ))}
-            </select>
+              placeholder="-- اختر المجلد --"
+              emptyMessage="لا توجد مجلدات متاحة"
+              options={[
+                { value: '', label: '-- اختر المجلد --' },
+                ...eligibleFolders.map((f) => ({
+                  value: f.id,
+                  label: `${f.name} (${f.filesCount} ملف)`,
+                })),
+              ]}
+            />
           </div>
         )}
 

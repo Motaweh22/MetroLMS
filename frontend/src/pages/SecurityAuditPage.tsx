@@ -5,6 +5,7 @@ import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
 import { Modal } from '@/shared/ui/Modal';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useToast } from '@/shared/ui/Toast';
 import type {
   SystemAuditLogEntryDTO,
@@ -356,43 +357,45 @@ export const SecurityAuditPage: React.FC = () => {
 
           {/* Action Category Selector */}
           <div>
-            <select
+            <StyledSelect
               value={selectedActionCategory}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              data-testid="audit-action-filter"
-              className="w-full px-3 py-2 rounded-xl text-sm bg-bg border border-border focus:outline-none focus:ring-2 focus:ring-primary/30 text-text"
-            >
-              <option value="all">كافة مجالات العمليات</option>
-              <option value="users.create">إنشاء حسابات المستخدمين</option>
-              <option value="users.change_role">تعديل الأدوار الوظيفية</option>
-              <option value="users.change_status">إيقاف / تنشيط الحسابات</option>
-              <option value="users.delete">حذف حسابات المستخدمين</option>
-              <option value="permissions.configure_roles">تعديل الصلاحيات الافتراضية</option>
-              <option value="permissions.configure_users">تخصيص الصلاحيات الفردية</option>
-              <option value="governance.delegation">إدارة التفويض التشغيلي</option>
-              <option value="approvals.submit_request">تقديم طلبات الاعتماد</option>
-              <option value="approvals.decide_request">قرارات الاعتماد والرفض</option>
-              <option value="groups.create">إنشاء المجموعات التدريبية</option>
-              <option value="groups.edit_config">تعديل إعدادات المجموعات</option>
-              <option value="groups.archive">أرشفة المجموعات التدريبية</option>
-              <option value="courses.publish">نشر المقررات التدريبية</option>
-              <option value="audit.view_system_logs">الاستعلام عن سجل الرقابة</option>
-            </select>
+              onChange={(val) => handleCategoryChange(val)}
+              dataTestId="audit-action-filter"
+              ariaLabel="مجال العملية"
+              options={[
+                { value: 'all', label: 'كافة مجالات العمليات' },
+                { value: 'users.create', label: 'إنشاء حسابات المستخدمين' },
+                { value: 'users.change_role', label: 'تعديل الأدوار الوظيفية' },
+                { value: 'users.change_status', label: 'إيقاف / تنشيط الحسابات' },
+                { value: 'users.delete', label: 'حذف حسابات المستخدمين' },
+                { value: 'permissions.configure_roles', label: 'تعديل الصلاحيات الافتراضية' },
+                { value: 'permissions.configure_users', label: 'تخصيص الصلاحيات الفردية' },
+                { value: 'governance.delegation', label: 'إدارة التفويض التشغيلي' },
+                { value: 'approvals.submit_request', label: 'تقديم طلبات الاعتماد' },
+                { value: 'approvals.decide_request', label: 'قرارات الاعتماد والرفض' },
+                { value: 'groups.create', label: 'إنشاء المجموعات التدريبية' },
+                { value: 'groups.edit_config', label: 'تعديل إعدادات المجموعات' },
+                { value: 'groups.archive', label: 'أرشفة المجموعات التدريبية' },
+                { value: 'courses.publish', label: 'نشر المقررات التدريبية' },
+                { value: 'audit.view_system_logs', label: 'الاستعلام عن سجل الرقابة' },
+              ]}
+            />
           </div>
 
           {/* Severity Selector */}
           <div>
-            <select
+            <StyledSelect
               value={selectedSeverity}
-              onChange={(e) => handleSeverityChange(e.target.value as AuditEventSeverity | 'all')}
-              data-testid="audit-severity-filter"
-              className="w-full px-3 py-2 rounded-xl text-sm bg-bg border border-border focus:outline-none focus:ring-2 focus:ring-primary/30 text-text"
-            >
-              <option value="all">كافة درجات الخطورة</option>
-              <option value="info">معلومات (Info)</option>
-              <option value="warning">تحذير (Warning)</option>
-              <option value="critical">حرج (Critical)</option>
-            </select>
+              onChange={(val) => handleSeverityChange(val as AuditEventSeverity | 'all')}
+              dataTestId="audit-severity-filter"
+              ariaLabel="درجة الخطورة"
+              options={[
+                { value: 'all', label: 'كافة درجات الخطورة' },
+                { value: 'info', label: 'معلومات (Info)' },
+                { value: 'warning', label: 'تحذير (Warning)' },
+                { value: 'critical', label: 'حرج (Critical)' },
+              ]}
+            />
           </div>
         </div>
 
@@ -644,22 +647,26 @@ export const SecurityAuditPage: React.FC = () => {
               <strong className="text-text">{totalPages}</strong> (إجمالي السجلات: {total})
             </span>
             <span className="mx-2">|</span>
-            <label className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <span>عدد السجلات:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(parseInt(e.target.value, 10));
+              <StyledSelect
+                size="xs"
+                className="w-20"
+                buttonClassName="bg-surface"
+                ariaLabel="عدد السجلات في الصفحة"
+                value={String(pageSize)}
+                onChange={(val) => {
+                  setPageSize(parseInt(val, 10));
                   setPage(1);
                 }}
-                className="bg-surface border border-border rounded-lg px-2 py-1 text-xs text-text"
-              >
-                <option value={10}>10</option>
-                <option value={15}>15</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </label>
+                options={[
+                  { value: '10', label: '10' },
+                  { value: '15', label: '15' },
+                  { value: '25', label: '25' },
+                  { value: '50', label: '50' },
+                ]}
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

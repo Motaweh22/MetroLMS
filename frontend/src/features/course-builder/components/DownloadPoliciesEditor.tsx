@@ -3,6 +3,7 @@ import type { Course, CourseZipPolicy, ItemDownloadPolicy, ChapterItem } from '@
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { getEligibleZipItems } from '@/core/courses/downloadPolicy';
 import { createZipBlob } from '@/core/utils/zipGenerator';
 
@@ -277,23 +278,27 @@ export const DownloadPoliciesEditor: React.FC<DownloadPoliciesEditorProps> = ({
                             </span>
                           </div>
                         ) : (
-                          <select
+                          <StyledSelect
+                            size="xs"
+                            className="min-w-[210px]"
+                            buttonClassName="bg-surface"
+                            ariaLabel={`سياسة تنزيل ${item.title}`}
+                            dataTestId={`select-policy-${item.id}`}
                             value={policy}
-                            onChange={(e) =>
+                            onChange={(val) =>
                               handleItemPolicyChange(
                                 chapterId,
                                 item.id,
-                                e.target.value as ItemDownloadPolicy
+                                val as ItemDownloadPolicy
                               )
                             }
-                            className="px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text text-xs focus:ring-1 focus:ring-primary focus:outline-none"
-                            data-testid={`select-policy-${item.id}`}
-                          >
-                            <option value="never">غير متاح للتنزيل نهائياً (حظر)</option>
-                            <option value="immediate">متاح للتنزيل فوراً</option>
-                            <option value="after_item_completion">متاح بعد إتمام هذا الدرس</option>
-                            <option value="after_course_completion">متاح بعد إتمام الكورس كاملاً</option>
-                          </select>
+                            options={[
+                              { value: 'never', label: 'غير متاح للتنزيل نهائياً (حظر)' },
+                              { value: 'immediate', label: 'متاح للتنزيل فوراً' },
+                              { value: 'after_item_completion', label: 'متاح بعد إتمام هذا الدرس' },
+                              { value: 'after_course_completion', label: 'متاح بعد إتمام الكورس كاملاً' },
+                            ]}
+                          />
                         )}
                       </td>
                     </tr>

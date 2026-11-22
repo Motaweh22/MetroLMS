@@ -3,6 +3,7 @@ import type { UserRole, UserStatus } from '@/core/user-management/types';
 import { USER_ROLE_LABELS_AR, USER_STATUS_LABELS_AR } from '@/core/user-management/types';
 import { Icon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 
 export interface UserFilterBarProps {
   searchQuery: string;
@@ -73,20 +74,22 @@ export const UserFilterBar: React.FC<UserFilterBarProps> = ({
           >
             الدور الوظيفي
           </label>
-          <select
+          <StyledSelect
             id="user-role-filter"
+            dataTestId="role-filter-select"
+            size="sm"
+            buttonClassName="bg-bg-alt/50"
             value={selectedRole}
-            onChange={(e) => onRoleChange(e.target.value as UserRole | 'all')}
-            data-testid="role-filter-select"
-            className="w-full py-2 px-3 text-xs bg-bg-alt/50 border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer"
-          >
-            <option value="all">كافة الأدوار (الكل)</option>
-            <option value="super_admin">{USER_ROLE_LABELS_AR.super_admin}</option>
-            <option value="admin">{USER_ROLE_LABELS_AR.admin}</option>
-            <option value="assistant_admin">{USER_ROLE_LABELS_AR.assistant_admin}</option>
-            <option value="lecturer">{USER_ROLE_LABELS_AR.lecturer}</option>
-            <option value="user">{USER_ROLE_LABELS_AR.user}</option>
-          </select>
+            onChange={(val) => onRoleChange(val as UserRole | 'all')}
+            options={[
+              { value: 'all', label: 'كافة الأدوار (الكل)' },
+              { value: 'super_admin', label: USER_ROLE_LABELS_AR.super_admin },
+              { value: 'admin', label: USER_ROLE_LABELS_AR.admin },
+              { value: 'assistant_admin', label: USER_ROLE_LABELS_AR.assistant_admin },
+              { value: 'lecturer', label: USER_ROLE_LABELS_AR.lecturer },
+              { value: 'user', label: USER_ROLE_LABELS_AR.user },
+            ]}
+          />
         </div>
 
         {/* Status Filter */}
@@ -97,17 +100,19 @@ export const UserFilterBar: React.FC<UserFilterBarProps> = ({
           >
             حالة الحساب
           </label>
-          <select
+          <StyledSelect
             id="user-status-filter"
+            dataTestId="status-filter-select"
+            size="sm"
+            buttonClassName="bg-bg-alt/50"
             value={selectedStatus}
-            onChange={(e) => onStatusChange(e.target.value as UserStatus | 'all')}
-            data-testid="status-filter-select"
-            className="w-full py-2 px-3 text-xs bg-bg-alt/50 border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer"
-          >
-            <option value="all">كافة الحالات (الكل)</option>
-            <option value="active">{USER_STATUS_LABELS_AR.active}</option>
-            <option value="suspended">{USER_STATUS_LABELS_AR.suspended}</option>
-          </select>
+            onChange={(val) => onStatusChange(val as UserStatus | 'all')}
+            options={[
+              { value: 'all', label: 'كافة الحالات (الكل)' },
+              { value: 'active', label: USER_STATUS_LABELS_AR.active },
+              { value: 'suspended', label: USER_STATUS_LABELS_AR.suspended },
+            ]}
+          />
         </div>
 
         {/* Department Filter */}
@@ -118,20 +123,18 @@ export const UserFilterBar: React.FC<UserFilterBarProps> = ({
           >
             الإدارة / القطاع
           </label>
-          <select
+          <StyledSelect
             id="user-dept-filter"
+            dataTestId="dept-filter-select"
+            size="sm"
+            buttonClassName="bg-bg-alt/50"
             value={selectedDepartment}
-            onChange={(e) => onDepartmentChange(e.target.value)}
-            data-testid="dept-filter-select"
-            className="w-full py-2 px-3 text-xs bg-bg-alt/50 border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer"
-          >
-            <option value="all">كافة الإدارات والقطاعات</option>
-            {availableDepartments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => onDepartmentChange(val)}
+            options={[
+              { value: 'all', label: 'كافة الإدارات والقطاعات' },
+              ...availableDepartments.map((dept) => ({ value: dept, label: dept })),
+            ]}
+          />
         </div>
 
         {/* Reset Filters Action */}

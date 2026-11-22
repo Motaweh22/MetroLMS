@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui/Button';
 import { Alert } from '@/shared/ui/Alert';
 import { Icon } from '@/shared/ui/Icon';
 import { Badge } from '@/shared/ui/Badge';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useToast } from '@/shared/ui/Toast';
 
 type CatalogTabKey = 'departments' | 'job-titles' | 'metro-lines';
@@ -325,21 +326,20 @@ export const OrganizationCatalogPage: React.FC = () => {
               <label htmlFor="org-new-dept" className="text-xs font-semibold text-text">
                 القطاع / الإدارة المرتبطة
               </label>
-              <select
+              <StyledSelect
                 id="org-new-dept"
-                data-testid="org-new-dept-select"
+                dataTestId="org-new-dept-select"
                 disabled={isAdding}
                 value={newDepartmentId}
-                onChange={(e) => setNewDepartmentId(e.target.value)}
-                className="w-full bg-bg text-text text-sm rounded-lg border border-border focus:border-primary py-2 px-3 outline-none"
-              >
-                <option value="">عام (لكل الإدارات)</option>
-                {departmentsList.map((dept) => (
-                  <option key={dept.id} value={String(dept.id)}>
-                    {dept.nameAr}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setNewDepartmentId(val)}
+                options={[
+                  { value: '', label: 'عام (لكل الإدارات)' },
+                  ...departmentsList.map((dept) => ({
+                    value: String(dept.id),
+                    label: dept.nameAr,
+                  })),
+                ]}
+              />
             </div>
           )}
 
@@ -399,20 +399,19 @@ export const OrganizationCatalogPage: React.FC = () => {
                         className="w-full bg-bg text-text text-sm rounded-lg border border-border focus:border-primary py-1.5 px-3 outline-none text-left"
                       />
                       {currentTab.key === 'job-titles' && (
-                        <select
+                        <StyledSelect
                           value={editDepartmentId}
-                          onChange={(e) => setEditDepartmentId(e.target.value)}
+                          onChange={(val) => setEditDepartmentId(val)}
                           disabled={savingId === item.id}
-                          aria-label="القطاع / الإدارة المرتبطة"
-                          className="w-full bg-bg text-text text-sm rounded-lg border border-border focus:border-primary py-1.5 px-3 outline-none"
-                        >
-                          <option value="">عام (لكل الإدارات)</option>
-                          {departmentsList.map((dept) => (
-                            <option key={dept.id} value={String(dept.id)}>
-                              {dept.nameAr}
-                            </option>
-                          ))}
-                        </select>
+                          ariaLabel="القطاع / الإدارة المرتبطة"
+                          options={[
+                            { value: '', label: 'عام (لكل الإدارات)' },
+                            ...departmentsList.map((dept) => ({
+                              value: String(dept.id),
+                              label: dept.nameAr,
+                            })),
+                          ]}
+                        />
                       )}
                     </div>
                   ) : (

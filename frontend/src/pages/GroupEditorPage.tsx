@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
@@ -1427,20 +1428,22 @@ export const GroupEditorPage: React.FC = () => {
                   >
                     المحاضر الأساسي للمجموعة
                   </label>
-                  <select
+                  <StyledSelect
                     id="primary-instructor-select"
+                    dataTestId="primary-instructor-select"
+                    buttonClassName="rounded-xl py-2.5 px-4"
                     value={primaryInstructorId}
-                    onChange={(e) => handlePrimaryInstructorChange(e.target.value)}
-                    className="w-full px-4 py-2.5 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                    data-testid="primary-instructor-select"
-                  >
-                    <option value="">— بدون محاضر أساسي محدد حالياً —</option>
-                    {candidateLecturers.map((lec) => (
-                      <option key={lec.id} value={lec.id}>
-                        {lec.name} — {lec.jobTitle} ({lec.department})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => handlePrimaryInstructorChange(val)}
+                    placeholder="— بدون محاضر أساسي محدد حالياً —"
+                    emptyMessage="لا يوجد محاضرون مسجلون"
+                    options={[
+                      { value: '', label: '— بدون محاضر أساسي محدد حالياً —' },
+                      ...candidateLecturers.map((lec) => ({
+                        value: lec.id,
+                        label: `${lec.name} — ${lec.jobTitle} (${lec.department})`,
+                      })),
+                    ]}
+                  />
 
                   {selectedPrimaryLecturer ? (
                     <div
@@ -1518,24 +1521,33 @@ export const GroupEditorPage: React.FC = () => {
                       />
                     )}
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                      <select
+                      <StyledSelect
                         id="assistant-lecturer-select"
+                        dataTestId="assistant-lecturer-select"
+                        className="flex-1"
+                        buttonClassName="rounded-xl py-2.5 px-4"
                         value={selectedAssistantToAdd}
-                        onChange={(e) => setSelectedAssistantToAdd(e.target.value)}
-                        className="flex-1 px-4 py-2.5 text-sm bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                        data-testid="assistant-lecturer-select"
-                      >
-                        <option value="">
-                          {availableAssistantLecturers.length > 0
+                        onChange={(val) => setSelectedAssistantToAdd(val)}
+                        placeholder={
+                          availableAssistantLecturers.length > 0
                             ? '— اختر محاضراً مساعداً لإضافته —'
-                            : '— لا يوجد محاضرون إضافيون متاحون للاختيار —'}
-                        </option>
-                        {availableAssistantLecturers.map((lec) => (
-                          <option key={lec.id} value={lec.id}>
-                            {lec.name} — {lec.jobTitle} ({lec.department})
-                          </option>
-                        ))}
-                      </select>
+                            : '— لا يوجد محاضرون إضافيون متاحون للاختيار —'
+                        }
+                        emptyMessage="لا يوجد محاضرون إضافيون متاحون"
+                        options={[
+                          {
+                            value: '',
+                            label:
+                              availableAssistantLecturers.length > 0
+                                ? '— اختر محاضراً مساعداً لإضافته —'
+                                : '— لا يوجد محاضرون إضافيون متاحون للاختيار —',
+                          },
+                          ...availableAssistantLecturers.map((lec) => ({
+                            value: lec.id,
+                            label: `${lec.name} — ${lec.jobTitle} (${lec.department})`,
+                          })),
+                        ]}
+                      />
                       <Button
                         type="button"
                         variant="outline"

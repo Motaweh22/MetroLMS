@@ -13,6 +13,7 @@ import { userManagementApi } from '@/features/user-management/services/userManag
 import { Badge } from '@/shared/ui/Badge';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { QRCodeModal } from '@/shared/ui/QRCodeModal';
 import { useToast } from '@/shared/ui/Toast';
 
@@ -437,15 +438,18 @@ export const CourseAccessAndEnrollmentTab: React.FC<CourseAccessAndEnrollmentTab
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="block text-xs font-bold text-text-heading">سلوك المسح عبر QR</label>
-            <select
+            <StyledSelect
+              dataTestId="course-qr-mode-select"
+              ariaLabel="سلوك المسح عبر QR"
+              size="sm"
+              buttonClassName="bg-surface font-semibold"
               value={qrSettings.qrMode}
-              onChange={(e) => setQrSettings((prev) => ({ ...prev, qrMode: e.target.value as CourseQrMode }))}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-text-heading"
-              data-testid="course-qr-mode-select"
-            >
-              <option value="view_only">فتح صفحة المقرر فقط (يخضع لقواعد الظهور)</option>
-              <option value="auto_enroll">تسجيل المتدرب تلقائياً في المقرر عند المسح</option>
-            </select>
+              onChange={(val) => setQrSettings((prev) => ({ ...prev, qrMode: val as CourseQrMode }))}
+              options={[
+                { value: 'view_only', label: 'فتح صفحة المقرر فقط (يخضع لقواعد الظهور)' },
+                { value: 'auto_enroll', label: 'تسجيل المتدرب تلقائياً في المقرر عند المسح' },
+              ]}
+            />
           </div>
 
           <div className="space-y-2">

@@ -6,6 +6,7 @@ import { Card } from '@/shared/ui/Card';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 
 export interface TraineeGroupsDetailedTableProps {
   groups: TraineeGroupItemDTO[];
@@ -122,17 +123,19 @@ export const TraineeGroupsDetailedTable: React.FC<TraineeGroupsDetailedTableProp
               <label htmlFor="trainee-type-filter" className="text-xs text-text-muted font-medium whitespace-nowrap">
                 النوع:
               </label>
-              <select
+              <StyledSelect
                 id="trainee-type-filter"
+                dataTestId="table-type-filter"
+                size="sm"
+                className="min-w-[145px]"
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as 'all' | 'regular' | 'reminder')}
-                className="text-xs bg-bg border border-border rounded-xl px-3 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-                data-testid="table-type-filter"
-              >
-                <option value="all">جميع الأنواع</option>
-                <option value="regular">مجموعات أساسية</option>
-                <option value="reminder">برامج تذكيرية</option>
-              </select>
+                onChange={(val) => setTypeFilter(val as 'all' | 'regular' | 'reminder')}
+                options={[
+                  { value: 'all', label: 'جميع الأنواع' },
+                  { value: 'regular', label: 'مجموعات أساسية' },
+                  { value: 'reminder', label: 'برامج تذكيرية' },
+                ]}
+              />
             </div>
 
             {/* Operational Status Filter */}
@@ -140,18 +143,20 @@ export const TraineeGroupsDetailedTable: React.FC<TraineeGroupsDetailedTableProp
               <label htmlFor="trainee-status-filter" className="text-xs text-text-muted font-medium whitespace-nowrap">
                 الحالة:
               </label>
-              <select
+              <StyledSelect
                 id="trainee-status-filter"
+                dataTestId="table-status-filter"
+                size="sm"
+                className="min-w-[165px]"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'scheduled' | 'expired')}
-                className="text-xs bg-bg border border-border rounded-xl px-3 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-                data-testid="table-status-filter"
-              >
-                <option value="all">جميع الحالات</option>
-                <option value="active">نشطة — قيد التدريب</option>
-                <option value="scheduled">مجدولة</option>
-                <option value="expired">منتهية الصلاحية</option>
-              </select>
+                onChange={(val) => setStatusFilter(val as 'all' | 'active' | 'scheduled' | 'expired')}
+                options={[
+                  { value: 'all', label: 'جميع الحالات' },
+                  { value: 'active', label: 'نشطة — قيد التدريب' },
+                  { value: 'scheduled', label: 'مجدولة' },
+                  { value: 'expired', label: 'منتهية الصلاحية' },
+                ]}
+              />
             </div>
 
             {/* Course Filter (optional) */}
@@ -160,20 +165,21 @@ export const TraineeGroupsDetailedTable: React.FC<TraineeGroupsDetailedTableProp
                 <label htmlFor="trainee-course-filter" className="text-xs text-text-muted font-medium whitespace-nowrap">
                   المقرر:
                 </label>
-                <select
+                <StyledSelect
                   id="trainee-course-filter"
+                  dataTestId="table-course-filter"
+                  size="sm"
+                  className="min-w-[155px] max-w-[200px]"
                   value={courseFilter}
-                  onChange={(e) => setCourseFilter(e.target.value)}
-                  className="text-xs bg-bg border border-border rounded-xl px-3 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all max-w-[150px] truncate"
-                  data-testid="table-course-filter"
-                >
-                  <option value="all">جميع المقررات</option>
-                  {availableCourses.map((c) => (
-                    <option key={c.courseId} value={c.courseId}>
-                      {c.title}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setCourseFilter(val)}
+                  options={[
+                    { value: 'all', label: 'جميع المقررات' },
+                    ...availableCourses.map((c) => ({
+                      value: c.courseId,
+                      label: c.title,
+                    })),
+                  ]}
+                />
               </div>
             )}
 

@@ -12,6 +12,7 @@ import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { ProgressBar } from '@/shared/ui/ProgressBar';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useToast } from '@/shared/ui/Toast';
 import { ManageGroupAssistantsModal } from '@/features/groups/components';
 
@@ -524,17 +525,19 @@ export const AdminGroupsPage: React.FC = () => {
             <label htmlFor="sort-filter" className="text-xs text-text-muted font-medium whitespace-nowrap">
               الترتيب:
             </label>
-            <select
+            <StyledSelect
               id="sort-filter"
+              dataTestId="sort-filter-select"
+              size="sm"
+              className="min-w-[175px]"
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'urgency' | 'newest' | 'name')}
-              className="text-xs bg-bg border border-border rounded-xl px-3 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              data-testid="sort-filter-select"
-            >
-              <option value="urgency">الأقرب انتهاءً / تجديداً</option>
-              <option value="newest">الأحدث إنشاءً</option>
-              <option value="name">أبجدياً</option>
-            </select>
+              onChange={(val) => setSortBy(val as 'urgency' | 'newest' | 'name')}
+              options={[
+                { value: 'urgency', label: 'الأقرب انتهاءً / تجديداً' },
+                { value: 'newest', label: 'الأحدث إنشاءً' },
+                { value: 'name', label: 'أبجدياً' },
+              ]}
+            />
           </div>
 
           {/* Enrollment Policy Selector */}
@@ -542,18 +545,20 @@ export const AdminGroupsPage: React.FC = () => {
             <label htmlFor="policy-filter" className="text-xs text-text-muted font-medium whitespace-nowrap">
               السياسة:
             </label>
-            <select
+            <StyledSelect
               id="policy-filter"
+              dataTestId="policy-filter-select"
+              size="sm"
+              className="min-w-[185px]"
               value={policyFilter}
-              onChange={(e) => setPolicyFilter(e.target.value)}
-              className="text-xs bg-bg border border-border rounded-xl px-3 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              data-testid="policy-filter-select"
-            >
-              <option value="all">كافة سياسات الانضمام</option>
-              <option value="open">انضمام تلقائي (مفتوح)</option>
-              <option value="approval_required">موافقة المشرف مطلوبة</option>
-              <option value="closed">انضمام مغلق / تعيين مباشر</option>
-            </select>
+              onChange={(val) => setPolicyFilter(val)}
+              options={[
+                { value: 'all', label: 'كافة سياسات الانضمام' },
+                { value: 'open', label: 'انضمام تلقائي (مفتوح)' },
+                { value: 'approval_required', label: 'موافقة المشرف مطلوبة' },
+                { value: 'closed', label: 'انضمام مغلق / تعيين مباشر' },
+              ]}
+            />
           </div>
         </div>
 

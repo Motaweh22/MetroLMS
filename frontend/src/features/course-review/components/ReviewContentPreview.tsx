@@ -11,6 +11,7 @@ import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
 import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
 
@@ -259,20 +260,21 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                     <label htmlFor="course-level-select" className="block text-xs font-semibold text-text mb-1">
                       المستوى
                     </label>
-                    <select
+                    <StyledSelect
                       id="course-level-select"
+                      dataTestId="edit-course-level"
+                      buttonClassName="bg-surface"
                       value={course.level || 'متوسط'}
-                      onChange={(e) =>
-                        onUpdateMetadata({ level: e.target.value as CourseLevel })
+                      onChange={(val) =>
+                        onUpdateMetadata({ level: val as CourseLevel })
                       }
-                      data-testid="edit-course-level"
-                      className="w-full px-3 py-2 text-sm bg-surface border border-border rounded-lg text-text focus:outline-none focus:border-primary"
-                    >
-                      <option value="مبتدئ">مبتدئ</option>
-                      <option value="متوسط">متوسط</option>
-                      <option value="متقدم">متقدم</option>
-                      <option value="شامل">شامل</option>
-                    </select>
+                      options={[
+                        { value: 'مبتدئ', label: 'مبتدئ' },
+                        { value: 'متوسط', label: 'متوسط' },
+                        { value: 'متقدم', label: 'متقدم' },
+                        { value: 'شامل', label: 'شامل' },
+                      ]}
+                    />
                   </div>
 
                   <div>
@@ -616,25 +618,26 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                     <label htmlFor="item-type-select" className="block text-xs font-semibold text-text mb-1">
                       نوع الدرس ومحتواه
                     </label>
-                    <select
+                    <StyledSelect
                       id="item-type-select"
+                      dataTestId="edit-item-type"
+                      buttonClassName="bg-surface"
                       value={activeItem.type}
-                      onChange={(e) =>
+                      onChange={(val) =>
                         activeChapter &&
                         activeItem &&
                         onUpdateItem(activeChapter.id, activeItem.id, {
-                          type: e.target.value as ContentItemType,
+                          type: val as ContentItemType,
                         })
                       }
-                      data-testid="edit-item-type"
-                      className="w-full px-3 py-2 text-sm bg-surface border border-border rounded-lg text-text focus:outline-none focus:border-primary"
-                    >
-                      <option value="video">فيديو مرئي (Video)</option>
-                      <option value="pdf">مستند إلكتروني (PDF)</option>
-                      <option value="audio">ملف صوتي (Audio)</option>
-                      <option value="powerpoint">عرض تقديمي (PowerPoint)</option>
-                      <option value="docx">مستند نصي (Word/DOCX)</option>
-                    </select>
+                      options={[
+                        { value: 'video', label: 'فيديو مرئي (Video)' },
+                        { value: 'pdf', label: 'مستند إلكتروني (PDF)' },
+                        { value: 'audio', label: 'ملف صوتي (Audio)' },
+                        { value: 'powerpoint', label: 'عرض تقديمي (PowerPoint)' },
+                        { value: 'docx', label: 'مستند نصي (Word/DOCX)' },
+                      ]}
+                    />
                   </div>
 
                   <div>
@@ -739,7 +742,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                   >
                     {(activeItem.url || activeItem.externalUrl) && !videoError ? (
                       (activeItem.url || activeItem.externalUrl || '').includes('youtube.com') ||
-                      (activeItem.url || activeItem.externalUrl || '').includes('youtu.be') ? (
+                        (activeItem.url || activeItem.externalUrl || '').includes('youtu.be') ? (
                         <iframe
                           title={activeItem.title}
                           src={(activeItem.url || activeItem.externalUrl || '').replace('watch?v=', 'embed/')}

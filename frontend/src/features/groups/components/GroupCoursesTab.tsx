@@ -13,6 +13,7 @@ import {
 } from '@/core/domain/groups';
 import { groupsApi } from '../services/groupsApi';
 import { coursesApi } from '@/features/courses/services/coursesApi';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
@@ -477,29 +478,36 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-            <select
+            <StyledSelect
+              dataTestId="select-course-to-add"
+              ariaLabel="اختيار مقرر تدريبي لإضافته"
+              size="sm"
+              className="flex-1"
               value={courseToAdd}
-              onChange={(e) => setCourseToAdd(e.target.value)}
-              className="flex-1 px-3 py-2 text-xs bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary"
-              data-testid="select-course-to-add"
-            >
-              <option value="">اختر مقرراً تدريبياً من دليل الدورات المعتمد...</option>
-              {unassignedCourses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title} ({c.id}) — المستوى: {c.level}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setCourseToAdd(val)}
+              placeholder="اختر مقرراً تدريبياً من دليل الدورات المعتمد..."
+              emptyMessage="لا توجد مقررات إضافية متاحة"
+              options={[
+                { value: '', label: 'اختر مقرراً تدريبياً من دليل الدورات المعتمد...' },
+                ...unassignedCourses.map((c) => ({
+                  value: c.id,
+                  label: `${c.title} (${c.id}) — المستوى: ${c.level}`,
+                })),
+              ]}
+            />
 
-            <select
+            <StyledSelect
+              dataTestId="select-role-to-add"
+              ariaLabel="تصنيف المقرر"
+              size="sm"
+              className="sm:w-56"
               value={roleToAdd}
-              onChange={(e) => setRoleToAdd(e.target.value as CourseRole)}
-              className="px-3 py-2 text-xs bg-bg border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary sm:w-52"
-              data-testid="select-role-to-add"
-            >
-              <option value="core">دورة أساسية (Core Course)</option>
-              <option value="reminder">دورة تنشيطية (Reminder Course)</option>
-            </select>
+              onChange={(val) => setRoleToAdd(val as CourseRole)}
+              options={[
+                { value: 'core', label: 'دورة أساسية (Core Course)' },
+                { value: 'reminder', label: 'دورة تنشيطية (Reminder Course)' },
+              ]}
+            />
 
             <Button
               type="button"

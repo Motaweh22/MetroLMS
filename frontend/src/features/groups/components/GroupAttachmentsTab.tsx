@@ -6,6 +6,7 @@ import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Modal } from '@/shared/ui/Modal';
 import { FormInput } from '@/shared/ui/FormInput';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { Alert } from '@/shared/ui/Alert';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { useToast } from '@/shared/ui/Toast';
@@ -283,14 +284,17 @@ export const GroupAttachmentsTab: React.FC<GroupAttachmentsTabProps> = ({
             <label className="block text-xs font-bold text-text-heading mb-1.5">
               نوع المادة المرفقة
             </label>
-            <select
+            <StyledSelect
+              ariaLabel="نوع المادة المرفقة"
+              size="sm"
+              buttonClassName="bg-surface"
               value={type}
-              onChange={(e) => setType(e.target.value as 'pdf' | 'link')}
-              className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-surface text-text focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="pdf">مستند أو كتيب PDF</option>
-              <option value="link">رابط أو مستند مرجعي خارجي</option>
-            </select>
+              onChange={(val) => setType(val as 'pdf' | 'link')}
+              options={[
+                { value: 'pdf', label: 'مستند أو كتيب PDF' },
+                { value: 'link', label: 'رابط أو مستند مرجعي خارجي' },
+              ]}
+            />
           </div>
 
           <div>

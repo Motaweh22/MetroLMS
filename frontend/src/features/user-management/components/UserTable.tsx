@@ -8,6 +8,7 @@ import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import { Badge, type BadgeVariant } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Button } from '@/shared/ui/Button';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { SectionSkeleton } from '@/shared/ui/Loading';
 
 export interface UserTableProps {
@@ -202,20 +203,19 @@ export const UserTable: React.FC<UserTableProps> = ({
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     {canEditRole && allowedRolesForTarget.length > 0 ? (
                       <div className="flex items-center gap-2">
-                        <select
-                          aria-label={`تعديل دور ${u.name}`}
-                          data-testid={`role-select-${u.id}`}
+                        <StyledSelect
+                          ariaLabel={`تعديل دور ${u.name}`}
+                          dataTestId={`role-select-${u.id}`}
+                          size="xs"
+                          className="min-w-[130px]"
                           value={u.role}
                           disabled={isUpdating}
-                          onChange={(e) => onRoleChange?.(u, e.target.value as UserRole)}
-                          className="bg-bg text-text text-xs rounded-lg border border-border py-1.5 px-2.5 font-medium focus:border-primary outline-none transition-colors"
-                        >
-                          {allowedRolesForTarget.map((r) => (
-                            <option key={r} value={r}>
-                              {USER_ROLE_LABELS_AR[r] || r}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(val) => onRoleChange?.(u, val as UserRole)}
+                          options={allowedRolesForTarget.map((r) => ({
+                            value: r,
+                            label: USER_ROLE_LABELS_AR[r] || r,
+                          }))}
+                        />
                         {isUpdating && (
                           <span className="text-text-muted text-[11px] animate-pulse">
                             جارٍ الحفظ...

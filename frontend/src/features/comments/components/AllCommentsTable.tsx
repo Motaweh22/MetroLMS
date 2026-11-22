@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
+import { StyledSelect } from '@/shared/ui/StyledSelect';
 import type { CourseComment } from '@/core/comments/types';
 import { COMMENT_REPORT_REASONS_AR } from '@/core/comments/types';
 import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
@@ -60,19 +61,22 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
-          <select
+          <StyledSelect
             value={selectedCourseFilter}
-            onChange={(e) => onCourseFilterChange(e.target.value)}
-            className="px-3 py-2 border border-border rounded-xl text-xs sm:text-sm bg-surface text-text focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-            data-testid="course-filter-select"
-          >
-            <option value="all">كافة المقررات التدريبية</option>
-            {courses.map((crs) => (
-              <option key={crs.id} value={crs.id}>
-                {crs.title} ({crs.id})
-              </option>
-            ))}
-          </select>
+            onChange={(val) => onCourseFilterChange(val)}
+            dataTestId="course-filter-select"
+            ariaLabel="تصفية حسب المقرر التدريبي"
+            size="sm"
+            className="min-w-[200px]"
+            buttonClassName="bg-surface"
+            options={[
+              { value: 'all', label: 'كافة المقررات التدريبية' },
+              ...courses.map((crs) => ({
+                value: crs.id,
+                label: `${crs.title} (${crs.id})`,
+              })),
+            ]}
+          />
 
           {(searchQuery || selectedCourseFilter !== 'all') && (
             <Button
