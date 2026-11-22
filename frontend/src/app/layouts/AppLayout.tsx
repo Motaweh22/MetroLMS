@@ -122,8 +122,10 @@ export const AppLayout: React.FC = () => {
   const location = useLocation();
   const { user, sessionEpoch } = useAuth();
 
-  // Application-level scheduler: periodically checks and processes due automatic group renewals
-  useAutoRenewalScheduler(Boolean(user));
+  // Application-level scheduler: periodically checks and processes due automatic group renewals (admin roles only)
+  useAutoRenewalScheduler(
+    Boolean(user && (user.role === 'admin' || user.role === 'assistant_admin'))
+  );
 
   // Immersive Learning Mode: Hide light application navbar, sidebar, and footer on player routes
   const isLearningRoute = Boolean(location.pathname.match(/^\/courses\/[^/]+\/learn(\/.*)?$/));

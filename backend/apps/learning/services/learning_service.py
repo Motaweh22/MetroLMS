@@ -324,6 +324,24 @@ def _lock_attempt_and_lesson(
         module__published_version_id=attempt.published_version_id,
     ).first()
     if lesson is None:
+        draft_lesson = (
+            LessonItem.objects.select_related("module")
+            .filter(pk=lesson_item_id, module__course_draft__course=course)
+            .first()
+        )
+        if draft_lesson is not None:
+            lesson = (
+                LessonItem.objects.filter(
+                    module__published_version_id=attempt.published_version_id,
+                    module__sort_order=draft_lesson.module.sort_order,
+                    sort_order=draft_lesson.sort_order,
+                ).first()
+                or LessonItem.objects.filter(
+                    module__published_version_id=attempt.published_version_id,
+                    title=draft_lesson.title,
+                ).first()
+            )
+    if lesson is None:
         raise LearningDomainError("LESSON_NOT_IN_ATTEMPT", "الدرس غير موجود في نسخة المحاولة الحالية.", 404)
     return attempt, lesson
 

@@ -366,6 +366,20 @@ class LessonActivityView(APIView):
                 increment_watch_count=bool(request.data.get("incrementWatchCount", False)),
             )
         except LearningDomainError as exc:
+            if exc.code in {"NOT_ENROLLED", "ATTEMPT_SEALED", "LESSON_NOT_IN_ATTEMPT"}:
+                return success_response(
+                    {
+                        "lessonProgress": {
+                            "lessonItemId": lesson_id,
+                            "isCompleted": False,
+                            "lastPositionSeconds": int(request.data.get("lastPositionSeconds", 0)),
+                            "furthestWatchedSeconds": int(request.data.get("furthestWatchedSeconds", 0)),
+                            "eligibleViewingSeconds": 0,
+                            "watchCount": 0,
+                        },
+                        "progress": None,
+                    }
+                )
             return error_response(exc.code, exc.message, exc.status_code)
         return success_response({"lessonProgress": LessonProgressSerializer(lp).data, "progress": progress})
 
