@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog/ConfirmDialog';
 import { useToast } from '@/shared/ui/Toast';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { formatArabicDateTime, toDatetimeLocal, toIsoString } from '../utils/dateUtils';
+import { blockInvalidNumberKeys, sanitizeDigitsOnly } from '@/core/utils/numericInput';
 
 export interface GroupQRModalProps {
   isOpen: boolean;
@@ -507,9 +508,11 @@ export const GroupQRModal: React.FC<GroupQRModalProps> = ({
                 <FormInput
                   label="الحد الأقصى لعدد المتدربين (السعة القصوى)"
                   type="number"
+                  inputMode="numeric"
                   min="1"
                   value={localMaxTrainees}
-                  onChange={(e) => handleMaxTraineesChange(e.target.value)}
+                  onKeyDown={(e) => blockInvalidNumberKeys(e, false)}
+                  onChange={(e) => handleMaxTraineesChange(sanitizeDigitsOnly(e.target.value, 5))}
                   placeholder="اتركه فارغاً لسعة غير محدودة"
                   helperText="يمنع النظام التسجيل الإضافي تلقائياً عند بلوغ السعة"
                   error={policyErrors?.maxTrainees}

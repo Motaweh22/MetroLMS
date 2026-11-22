@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { StyledSelect } from '@/shared/ui/StyledSelect';
+import { blockInvalidNumberKeys, sanitizeDigitsOnly } from '@/core/utils/numericInput';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
@@ -1217,11 +1218,15 @@ export const GroupEditorPage: React.FC = () => {
                         <input
                           id="renewal-interval-days-input"
                           type="number"
+                          inputMode="numeric"
                           min="1"
                           max="730"
                           step="1"
                           value={renewalIntervalDays}
-                          onChange={(e) => handleFieldChange(setRenewalIntervalDays)(e.target.value)}
+                          onKeyDown={(e) => blockInvalidNumberKeys(e, false)}
+                          onChange={(e) =>
+                            handleFieldChange(setRenewalIntervalDays)(sanitizeDigitsOnly(e.target.value, 3))
+                          }
                           placeholder="مثال: 17، 30، 45، 60، 90، 120"
                           className={`w-full px-3.5 py-2.5 text-sm bg-bg border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
                             errors.renewalIntervalDays ? 'border-danger focus:ring-danger' : 'border-border'

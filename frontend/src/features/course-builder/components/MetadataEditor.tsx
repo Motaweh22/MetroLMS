@@ -10,6 +10,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
 import { AudienceSelectionModal } from './AudienceSelectionModal';
 import { AudienceSectionCard } from './AudienceSectionCard';
+import { blockInvalidNumberKeys, sanitizePhoneInput } from '@/core/utils/numericInput';
 
 const LEADERSHIP_TITLE_OPTIONS: Array<{ id: number; label: string }> = [
   { id: 1, label: 'رئيس قطاع / رئيس إدارة مركزية' },
@@ -716,9 +717,11 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
               <input
                 id="builder-hours-input"
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={200}
                 value={course.estimatedHours || 4}
+                onKeyDown={(e) => blockInvalidNumberKeys(e, false)}
                 onChange={(e) => handleFieldChange('estimatedHours', Number(e.target.value) || 1)}
                 className="w-full px-3.5 py-2.5 text-sm bg-surface border border-border rounded-xl text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 data-testid="builder-hours-input"
@@ -1442,10 +1445,12 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
                       data-testid={`wa-contact-name-input-${idx}`}
                     />
                     <input
-                      type="text"
+                      type="tel"
+                      inputMode="tel"
+                      maxLength={15}
                       dir="ltr"
                       value={contact.number}
-                      onChange={(e) => handleUpdateContact(idx, 'number', e.target.value)}
+                      onChange={(e) => handleUpdateContact(idx, 'number', sanitizePhoneInput(e.target.value, 15))}
                       placeholder="رقم الهاتف (مثال: 01012345678)"
                       className="w-full sm:flex-1 px-3 py-2 text-xs font-mono text-right bg-surface border border-border rounded-xl text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
                       data-testid={`wa-contact-number-input-${idx}`}

@@ -7,6 +7,7 @@ import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
 import { brandConfig } from '@/shared/config/brand';
 import { buildWhatsAppUrl, usePublicSupportContacts } from '@/features/whatsapp';
+import { sanitizePhoneInput } from '@/core/utils/numericInput';
 
 const SIGNUP_DRAFT_MESSAGE =
   'مرحبًا، أرغب في إنشاء حساب جديد على منصة التدريب الإلكتروني. يرجى إرشادي إلى خطوات التسجيل.';
@@ -205,6 +206,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
               <div className="input-wrapper">
                 <input
                   type="tel"
+                  inputMode="tel"
+                  maxLength={15}
                   id="phone"
                   name="phone"
                   dir="ltr"
@@ -215,7 +218,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                   disabled={isSubmitting}
                   className={fieldErrors.phone ? 'input-has-error' : ''}
                   onChange={(e) => {
-                    setPhone(e.target.value);
+                    setPhone(sanitizePhoneInput(e.target.value, 15));
                     if (fieldErrors.phone) {
                       setFieldErrors((prev) => ({ ...prev, phone: undefined }));
                     }

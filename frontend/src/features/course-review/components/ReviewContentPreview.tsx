@@ -14,6 +14,7 @@ import { Icon } from '@/shared/ui/Icon';
 import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
 import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
+import { blockInvalidNumberKeys, sanitizeDurationInput } from '@/core/utils/numericInput';
 
 export interface ReviewContentPreviewProps {
   course: Course;
@@ -292,8 +293,10 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                     <input
                       id="course-hours-input"
                       type="number"
+                      inputMode="numeric"
                       min={1}
                       value={course.estimatedHours || 1}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, false)}
                       onChange={(e) =>
                         onUpdateMetadata({ estimatedHours: Number(e.target.value) || 1 })
                       }
@@ -647,13 +650,16 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                     <input
                       id="item-duration-input"
                       type="text"
+                      inputMode="numeric"
+                      maxLength={8}
+                      dir="ltr"
                       placeholder="10:00"
                       value={activeItem.duration || ''}
                       onChange={(e) =>
                         activeChapter &&
                         activeItem &&
                         onUpdateItem(activeChapter.id, activeItem.id, {
-                          duration: e.target.value,
+                          duration: sanitizeDurationInput(e.target.value),
                         })
                       }
                       data-testid="edit-item-duration"

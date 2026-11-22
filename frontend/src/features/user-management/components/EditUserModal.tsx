@@ -13,6 +13,7 @@ import {
 } from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
 import { StyledSelect } from './StyledSelect';
+import { sanitizeDigitsOnly, sanitizePhoneInput } from '@/core/utils/numericInput';
 
 interface CatalogItem {
   id: number | string;
@@ -303,11 +304,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <input
               id="edit-user-phone"
               type="tel"
+              inputMode="tel"
+              maxLength={15}
               required
               dir="ltr"
               disabled={isSubmitting}
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(sanitizePhoneInput(e.target.value, 15))}
               className={`${INPUT_CLASS} text-left`}
             />
           </div>
@@ -334,12 +337,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <input
               id="edit-user-nid"
               type="text"
+              inputMode="numeric"
               maxLength={14}
               dir="ltr"
               disabled={isSubmitting}
               value={nationalId}
               onChange={(e) => {
-                const val = e.target.value;
+                const val = sanitizeDigitsOnly(e.target.value, 14);
                 setNationalId(val);
                 const detected = detectGenderFromNationalId(val);
                 if (detected) {

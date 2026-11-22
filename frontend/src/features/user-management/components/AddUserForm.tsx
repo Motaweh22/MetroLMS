@@ -20,6 +20,7 @@ import {
 } from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
 import { StyledSelect } from './StyledSelect';
+import { sanitizeDigitsOnly, sanitizePhoneInput } from '@/core/utils/numericInput';
 
 interface CatalogItem {
   id: number | string;
@@ -490,7 +491,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               placeholder="29501010100001"
               value={formData.nationalId}
               onChange={(e) => {
-                const val = e.target.value;
+                const val = sanitizeDigitsOnly(e.target.value, 14);
                 updateField('nationalId', val);
                 const detected = detectGenderFromNationalId(val);
                 if (detected) {
@@ -512,12 +513,14 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               id="add-user-phone"
               data-testid="add-user-phone-input"
               type="tel"
+              inputMode="tel"
+              maxLength={15}
               required
               disabled={isSubmitting}
               dir="ltr"
               placeholder="010XXXXXXXX"
               value={formData.phone}
-              onChange={(e) => updateField('phone', e.target.value)}
+              onChange={(e) => updateField('phone', sanitizePhoneInput(e.target.value, 15))}
               className={inputClass(errors.phone, 'text-left')}
             />
             {errors.phone && <span className="text-[11px] text-danger">{errors.phone}</span>}

@@ -9,6 +9,7 @@ import type {
   LessonCompletionPolicy,
 } from '@/core/courses/types';
 import { parseDurationToSeconds } from '@/core/domain/progress';
+import { sanitizeDurationInput } from '@/core/utils/numericInput';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
@@ -1003,8 +1004,11 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                   <input
                     id="video-duration-input"
                     type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    dir="ltr"
                     value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
+                    onChange={(e) => setDuration(sanitizeDurationInput(e.target.value))}
                     placeholder="15:30"
                     className="w-full sm:w-1/2 px-3.5 py-2 text-sm bg-surface border border-border rounded-xl text-text placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary"
                     data-testid="item-duration-input"
