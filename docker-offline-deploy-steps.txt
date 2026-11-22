@@ -48,8 +48,10 @@ Phase 2: Server Preparation (One-Time Setup)
      SQL Server service.
    - Enable Mixed Mode Authentication (SQL Server and Windows Authentication)
      so SQL logins (`DB_USER` / `DB_PASSWORD`) are accepted.
-   - Ensure Windows Firewall allows inbound TCP on port `1433` (for container
-     to SQL Server) and port `8000` (for users accessing the web app).
+   - Ensure Windows Firewall allows inbound TCP on port `1433` for ALL profiles
+     (Docker's vEthernet NAT adapter uses the Public profile):
+     New-NetFirewallRule -DisplayName "MetroLMS SQL Server 1433 (Docker)" -Direction Inbound -Protocol TCP -LocalPort 1433 -Profile Any -Action Allow
+   - Also allow port `8000` for users accessing the web app.
 
 2) Create the persistent host media folder (stores uploaded course videos/PDFs
    outside the container):

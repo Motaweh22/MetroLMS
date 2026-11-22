@@ -223,8 +223,9 @@ if "!METROLMS_MEDIA_HOST_DIR!"=="" set "METROLMS_MEDIA_HOST_DIR=D:\MetroLMSMedia
 if not exist "!METROLMS_MEDIA_HOST_DIR!" mkdir "!METROLMS_MEDIA_HOST_DIR!" >nul 2>&1
 
 echo.
-echo [Step 2/3] Ensuring port 8000 is free from non-Docker processes...
+echo [Step 2/3] Ensuring port 8000 is free from non-Docker processes and SQL port 1433 is open...
 for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8000 " ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+powershell -NoProfile -Command "if (-not (Get-NetFirewallRule -DisplayName 'MetroLMS SQL Server 1433 (Docker)' -ErrorAction SilentlyContinue)) { New-NetFirewallRule -DisplayName 'MetroLMS SQL Server 1433 (Docker)' -Direction Inbound -Protocol TCP -LocalPort 1433 -Profile Any -Action Allow | Out-Null }" >nul 2>&1
 
 echo.
 echo [Step 3/3] Starting MetroLMS Windows Container...
