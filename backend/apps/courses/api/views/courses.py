@@ -101,10 +101,11 @@ class CourseCatalogListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request):
+        base_qs = Course.objects.select_related("primary_lecturer", "qr_code").order_by("id")
         if request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
-            courses = Course.objects.all().order_by("id")
+            courses = list(base_qs)
         else:
-            published = Course.objects.filter(lifecycle_status="Published").order_by("id")
+            published = base_qs.filter(lifecycle_status="Published")
             courses = [c for c in published if is_course_visible_to_trainee(request.user, c)]
         return success_response({"courses": CourseSerializer(courses, many=True).data})
 
@@ -115,7 +116,7 @@ class CourseCatalogDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, course_id: int):
-        course = Course.objects.filter(pk=course_id).first()
+        course = Course.objects.select_related("primary_lecturer", "qr_code").filter(pk=course_id).first()
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
@@ -140,10 +141,11 @@ class LecturerCourseListView(APIView):
         return [IsAuthenticated(), has_capability("courses.create")()]
 
     def get(self, request: Request):
+        base_qs = Course.objects.select_related("primary_lecturer", "qr_code").order_by("id")
         if request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
-            courses = Course.objects.all().order_by("id")
+            courses = list(base_qs)
         else:
-            courses = Course.objects.filter(primary_lecturer=request.user).order_by("id")
+            courses = list(base_qs.filter(primary_lecturer=request.user))
         return success_response({"courses": CourseSerializer(courses, many=True).data})
 
     def post(self, request: Request):

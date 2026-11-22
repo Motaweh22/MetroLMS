@@ -92,11 +92,20 @@ class ProfileView(APIView):
         enrolled = Enrollment.objects.filter(user=user, source_grants__isnull=False).distinct().count()
         overview = get_user_courses_and_groups_overview(user)
         completed_count = sum(1 for c in overview["enrolledCourses"] if c.get("isCompleted"))
+        from django.db.models import Sum
+        from apps.learning.models import LessonProgress
+
+        lp_agg = LessonProgress.objects.filter(course_attempt__enrollment__user=user).aggregate(
+            elig=Sum("eligible_viewing_seconds"),
+            furth=Sum("furthest_watched_seconds"),
+        )
+        total_secs = int(lp_agg.get("elig") or 0) or int(lp_agg.get("furth") or 0)
+        total_hours = round(total_secs / 3600, 1) if total_secs > 0 else 0
         return success_response(
             {
                 "user": user_data,
                 "stats": {
-                    "totalLearningHours": 0,
+                    "totalLearningHours": total_hours,
                     "enrolledCoursesCount": enrolled,
                     "completedCoursesCount": completed_count,
                 },

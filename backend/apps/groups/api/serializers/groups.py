@@ -154,14 +154,36 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
     def get_postDeadlinePolicy(self, obj: TrainingGroup) -> str:
         return "keep_no_cert"
 
+    def _get_memberships(self, obj: TrainingGroup) -> list:
+        if not hasattr(obj, "_ser_memberships"):
+            obj._ser_memberships = list(
+                GroupMembership.objects.filter(training_group=obj).select_related("user").order_by("id")
+            )
+        return obj._ser_memberships
+
+    def _get_assistants(self, obj: TrainingGroup) -> list:
+        if not hasattr(obj, "_ser_assistants"):
+            obj._ser_assistants = list(obj.assistant_assignments.select_related("user").order_by("id"))
+        return obj._ser_assistants
+
+    def _get_active_cycle(self, obj: TrainingGroup):
+        if not hasattr(obj, "_ser_active_cycle"):
+            obj._ser_active_cycle = (
+                GroupRenewalCycle.objects.filter(training_group=obj, cycle_status="Active")
+                .order_by("-cycle_number")
+                .first()
+                or GroupRenewalCycle.objects.filter(training_group=obj).order_by("-cycle_number").first()
+            )
+        return obj._ser_active_cycle
+
     def get_description(self, obj: TrainingGroup) -> str:
         return obj.description or ""
 
     def get_traineeCount(self, obj: TrainingGroup) -> int:
-        return GroupMembership.objects.filter(training_group=obj).count()
+        return len(self._get_memberships(obj))
 
     def get_courseCount(self, obj: TrainingGroup) -> int:
-        return GroupCourseAssignment.objects.filter(group_renewal_cycle__training_group=obj).count()
+        return len(self.get_courses(obj))
 
     def get_totalTraineesCount(self, obj: TrainingGroup) -> int:
         return self.get_traineeCount(obj)
@@ -173,7 +195,8 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
         return self.get_courseCount(obj)
 
     def get_averageProgressPercent(self, obj: TrainingGroup) -> int:
-        return 0
+        metrics = self.get_metrics(obj)
+        return int(metrics.get("cohortSummary", {}).get("averageProgressPercent", 0) or 0)
 
     def get_timeStatus(self, obj: TrainingGroup) -> str:
         from django.utils import timezone
@@ -216,40 +239,33 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
         }
 
     def get_primaryInstructorId(self, obj: TrainingGroup) -> str:
-        row = GroupAssistantAssignment.objects.filter(training_group=obj, assignment_role="primary").first()
-        return str(row.user_id) if row is not None else ""
+        for row in self._get_assistants(obj):
+            if row.assignment_role == "primary":
+                return str(row.user_id)
+        return ""
 
     def get_assistantLecturerIds(self, obj: TrainingGroup) -> list[str]:
-        rows = GroupAssistantAssignment.objects.filter(training_group=obj).exclude(assignment_role="primary")
-        return [str(r.user_id) for r in rows]
+        return [str(r.user_id) for r in self._get_assistants(obj) if r.assignment_role != "primary"]
 
     def get_supervisorIds(self, obj: TrainingGroup) -> list[str]:
-        rows = GroupAssistantAssignment.objects.filter(training_group=obj).order_by("id")
-        return [str(r.user_id) for r in rows]
+        return [str(r.user_id) for r in self._get_assistants(obj)]
 
     def get_traineeIds(self, obj: TrainingGroup) -> list[str]:
-        return [str(m.user_id) for m in GroupMembership.objects.filter(training_group=obj).order_by("id")]
+        return [str(m.user_id) for m in self._get_memberships(obj)]
 
     def get_currentCycle(self, obj: TrainingGroup):
-        cycle = (
-            GroupRenewalCycle.objects.filter(training_group=obj, cycle_status="Active")
-            .order_by("-cycle_number")
-            .first()
-            or GroupRenewalCycle.objects.filter(training_group=obj).order_by("-cycle_number").first()
-        )
+        cycle = self._get_active_cycle(obj)
         return GroupRenewalCycleSerializer(cycle).data if cycle is not None else None
 
     def get_courses(self, obj: TrainingGroup) -> list[dict]:
-        cycle = (
-            GroupRenewalCycle.objects.filter(training_group=obj, cycle_status="Active")
-            .order_by("-cycle_number")
-            .first()
-            or GroupRenewalCycle.objects.filter(training_group=obj).order_by("-cycle_number").first()
-        )
+        if hasattr(obj, "_ser_courses"):
+            return obj._ser_courses
+        cycle = self._get_active_cycle(obj)
         if cycle is None:
+            obj._ser_courses = []
             return []
         assignments = cycle.course_assignments.select_related("course").order_by("id")
-        return [
+        obj._ser_courses = [
             {
                 "id": str(a.course_id),
                 "courseId": str(a.course_id),
@@ -259,9 +275,10 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
             }
             for a in assignments
         ]
+        return obj._ser_courses
 
     def get_instructors(self, obj: TrainingGroup) -> list[dict]:
-        rows = obj.assistant_assignments.select_related("user").order_by("id")
+        rows = self._get_assistants(obj)
         return [
             {
                 "userId": str(r.user_id),
@@ -275,47 +292,171 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
         return GroupResourceSerializer(obj.resources.all().order_by("id"), many=True).data
 
     def get_metrics(self, obj: TrainingGroup) -> dict:
+        if hasattr(obj, "_ser_metrics"):
+            return obj._ser_metrics
+
         courses = self.get_courses(obj)
-        memberships = list(GroupMembership.objects.filter(training_group=obj).select_related("user").order_by("id"))
-        trainee_metrics = [
-            {
-                "userId": str(m.user_id),
-                "userName": m.user.full_name,
-                "email": m.user.email or m.user.phone_e164,
-                "phone": m.user.phone_e164 or "",
-                "department": "",
-                "jobTitle": "متدرب",
-                "enrolledAt": m.joined_at.isoformat() if m.joined_at else "",
-                "startedCoursesCount": 0,
-                "completedCoursesCount": 0,
-                "totalRequiredCourses": len(courses),
-                "isAllCoreCompleted": False,
-                "programPercent": 0,
-                "completedLessonsTotal": 0,
-                "totalRequiredLessons": 0,
-                "courseProgressMap": {},
-                "worstAttention": {"needsAttention": False, "level": "none", "reasonAr": ""},
-            }
-            for m in memberships
-        ]
-        core_count = sum(1 for c in courses if c.get("courseRole") != "reminder")
-        rem_count = sum(1 for c in courses if c.get("courseRole") == "reminder")
-        return {
+        memberships = self._get_memberships(obj)
+        course_ids = [int(c["courseId"]) for c in courses if str(c["courseId"]).isdigit()]
+        member_ids = [m.user_id for m in memberships]
+
+        # Bulk-fetch attempts, published lesson counts, and completed lessons (zero N+1)
+        attempt_by_user_course: dict[tuple[int, int], tuple[int, int]] = {}
+        lesson_count_by_pub: dict[int, int] = {}
+        completed_by_attempt: dict[int, int] = {}
+
+        if member_ids and course_ids:
+            from django.db.models import Count
+            from apps.courses.models import LessonItem
+            from apps.learning.models import CourseAttempt, LessonProgress
+
+            attempts = (
+                CourseAttempt.objects.filter(
+                    enrollment__user_id__in=member_ids,
+                    enrollment__course_id__in=course_ids,
+                )
+                .values("id", "enrollment__user_id", "enrollment__course_id", "published_version_id")
+                .order_by("id")
+            )
+            pub_ids: set[int] = set()
+            att_ids: list[int] = []
+            for a in attempts:
+                key = (a["enrollment__user_id"], a["enrollment__course_id"])
+                attempt_by_user_course[key] = (a["id"], a["published_version_id"])
+                pub_ids.add(a["published_version_id"])
+            att_ids = [v[0] for v in attempt_by_user_course.values()]
+
+            if pub_ids:
+                for row in (
+                    LessonItem.objects.filter(module__published_version_id__in=pub_ids)
+                    .values("module__published_version_id")
+                    .annotate(cnt=Count("id"))
+                ):
+                    lesson_count_by_pub[row["module__published_version_id"]] = row["cnt"]
+            if att_ids:
+                for row in (
+                    LessonProgress.objects.filter(course_attempt_id__in=att_ids, is_completed=True)
+                    .values("course_attempt_id")
+                    .annotate(cnt=Count("id"))
+                ):
+                    completed_by_attempt[row["course_attempt_id"]] = row["cnt"]
+
+        trainee_metrics = []
+        trainees_started = 0
+        trainees_completed_all_core = 0
+        total_completed_attempts = 0
+        program_percent_sum = 0
+
+        course_stats: dict[int, dict[str, int]] = {
+            cid: {"started": 0, "completed": 0, "pct_sum": 0, "total_lessons": 0}
+            for cid in course_ids
+        }
+        core_course_ids = [int(c["courseId"]) for c in courses if c.get("courseRole") != "reminder" and str(c["courseId"]).isdigit()]
+
+        for m in memberships:
+            started_c = 0
+            completed_c = 0
+            completed_core_c = 0
+            completed_lessons_total = 0
+            required_lessons_total = 0
+            pct_sum_user = 0
+            progress_map: dict[str, dict] = {}
+
+            for c in courses:
+                cid = int(c["courseId"])
+                att_info = attempt_by_user_course.get((m.user_id, cid))
+                if att_info is not None:
+                    att_id, pub_id = att_info
+                    tot_l = lesson_count_by_pub.get(pub_id, 0)
+                    done_l = min(tot_l, completed_by_attempt.get(att_id, 0)) if tot_l > 0 else 0
+                    if tot_l == 0:
+                        pct = 0
+                    elif done_l >= tot_l:
+                        pct = 100
+                    else:
+                        pct = min(99, (done_l * 100 + tot_l // 2) // tot_l)
+                else:
+                    tot_l = 0
+                    done_l = 0
+                    pct = 0
+
+                if tot_l > course_stats[cid]["total_lessons"]:
+                    course_stats[cid]["total_lessons"] = tot_l
+                course_stats[cid]["pct_sum"] += pct
+
+                if pct > 0:
+                    started_c += 1
+                    course_stats[cid]["started"] += 1
+                if pct >= 100:
+                    completed_c += 1
+                    total_completed_attempts += 1
+                    course_stats[cid]["completed"] += 1
+                    if cid in core_course_ids:
+                        completed_core_c += 1
+
+                completed_lessons_total += done_l
+                required_lessons_total += tot_l
+                pct_sum_user += pct
+                progress_map[str(cid)] = {
+                    "progressPercent": pct,
+                    "completedLessons": done_l,
+                    "totalLessons": tot_l,
+                    "isCompleted": pct >= 100,
+                }
+
+            prog_pct = round(pct_sum_user / len(courses)) if courses else 0
+            program_percent_sum += prog_pct
+            if started_c > 0:
+                trainees_started += 1
+            is_all_core_done = bool(core_course_ids) and completed_core_c >= len(core_course_ids)
+            if is_all_core_done:
+                trainees_completed_all_core += 1
+
+            trainee_metrics.append(
+                {
+                    "userId": str(m.user_id),
+                    "userName": m.user.full_name,
+                    "email": m.user.email or m.user.phone_e164,
+                    "phone": m.user.phone_e164 or "",
+                    "department": "",
+                    "jobTitle": "متدرب",
+                    "enrolledAt": m.joined_at.isoformat() if m.joined_at else "",
+                    "startedCoursesCount": started_c,
+                    "completedCoursesCount": completed_c,
+                    "totalRequiredCourses": len(courses),
+                    "isAllCoreCompleted": is_all_core_done,
+                    "programPercent": prog_pct,
+                    "completedLessonsTotal": completed_lessons_total,
+                    "totalRequiredLessons": required_lessons_total,
+                    "courseProgressMap": progress_map,
+                    "worstAttention": {"needsAttention": False, "level": "none", "reasonAr": ""},
+                }
+            )
+
+        avg_group_pct = round(program_percent_sum / len(memberships)) if memberships else 0
+        completion_rate = (
+            round((trainees_completed_all_core * 100) / len(memberships))
+            if memberships and core_course_ids
+            else avg_group_pct
+        )
+        core_count = len(core_course_ids)
+        rem_count = len(courses) - core_count
+        obj._ser_metrics = {
             "status": "expired" if obj.is_archived else "active",
             "statusLabelAr": "منتهية الصلاحية" if obj.is_archived else "نشطة — قيد التدريب",
-            "timeRemainingText": "منتهية الصلاحية" if obj.is_archived else "نشطة",
+            "timeRemainingText": self.get_timeRemainingText(obj),
             "totalTrainees": len(memberships),
             "activeCourses": len(courses),
-            "completionRate": 0,
+            "completionRate": completion_rate,
             "cohortSummary": {
                 "totalMembers": len(memberships),
                 "totalCourses": len(courses),
                 "coreCoursesCount": core_count,
                 "reminderCoursesCount": rem_count,
-                "traineesStarted": 0,
-                "traineesCompletedAllCore": 0,
-                "completedAttempts": 0,
-                "averageProgressPercent": 0,
+                "traineesStarted": trainees_started,
+                "traineesCompletedAllCore": trainees_completed_all_core,
+                "completedAttempts": total_completed_attempts,
+                "averageProgressPercent": avg_group_pct,
                 "warningAlertsCount": 0,
                 "dangerAlertsCount": 0,
                 "totalAttentionCount": 0,
@@ -327,11 +468,15 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
                     "courseTitle": c["title"],
                     "courseRole": c.get("courseRole", "core"),
                     "order": idx + 1,
-                    "totalRequiredLessons": 0,
-                    "traineesStartedCount": 0,
-                    "traineesCompletedCount": 0,
-                    "averageProgressPercent": 0,
-                    "completedCount": 0,
+                    "totalRequiredLessons": course_stats.get(int(c["courseId"]), {}).get("total_lessons", 0),
+                    "traineesStartedCount": course_stats.get(int(c["courseId"]), {}).get("started", 0),
+                    "traineesCompletedCount": course_stats.get(int(c["courseId"]), {}).get("completed", 0),
+                    "averageProgressPercent": (
+                        round(course_stats.get(int(c["courseId"]), {}).get("pct_sum", 0) / len(memberships))
+                        if memberships
+                        else 0
+                    ),
+                    "completedCount": course_stats.get(int(c["courseId"]), {}).get("completed", 0),
                     "timeRemainingText": "منتهية الصلاحية" if obj.is_archived else "متاحة",
                     "effective": {
                         "hasDeadlineOverride": False,
@@ -344,6 +489,7 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
                 for idx, c in enumerate(courses)
             ],
         }
+        return obj._ser_metrics
 
     def get_summary(self, obj: TrainingGroup) -> dict:
         return {

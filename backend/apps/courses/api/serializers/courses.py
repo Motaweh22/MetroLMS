@@ -1,12 +1,15 @@
 """Serializers for apps.courses."""
 from __future__ import annotations
 
+from django.db import models
+from django.db.models import Count, Q
 from rest_framework import serializers
 
 from apps.courses.models import (
     Course,
     CourseAudienceDepartment,
     CourseAudienceJobTitle,
+    CourseAudienceLeadership,
     CourseAudienceMetroLine,
     CourseComment,
     CourseCommentReport,
@@ -16,6 +19,153 @@ from apps.courses.models import (
     Module,
     PublishedCourseVersion,
 )
+
+
+class CourseListSerializer(serializers.ListSerializer):
+    """Bulk-prefetch course relations once per list response to eliminate N+1 queries."""
+
+    def to_representation(self, data):
+        courses = list(data.all() if isinstance(data, models.Manager) else data)
+        if courses:
+            self._prefetch_courses(courses)
+        return [self.child.to_representation(item) for item in courses]
+
+    @staticmethod
+    def _prefetch_courses(courses: list[Course]) -> None:
+        from apps.learning.models import Enrollment
+        from apps.media.models import MediaContentReference
+
+        course_ids = [c.id for c in courses]
+
+        # 1. Drafts
+        draft_by_course: dict[int, CourseDraft] = {}
+        for d in CourseDraft.objects.filter(course_id__in=course_ids):
+            draft_by_course.setdefault(d.course_id, d)
+
+        # 2. Latest published versions
+        pub_by_course: dict[int, PublishedCourseVersion] = {}
+        for p in PublishedCourseVersion.objects.filter(course_id__in=course_ids).order_by(
+            "course_id", "-version_number"
+        ):
+            pub_by_course.setdefault(p.course_id, p)
+
+        draft_ids = [d.id for d in draft_by_course.values()]
+        pub_ids = [p.id for p in pub_by_course.values()]
+
+        # 3. Active media references (for drafts and latest published versions)
+        refs_by_draft: dict[int, list] = {}
+        refs_by_pub: dict[int, list] = {}
+        ref_filter = Q()
+        if draft_ids:
+            ref_filter |= Q(course_draft_id__in=draft_ids)
+        if pub_ids:
+            ref_filter |= Q(published_version_id__in=pub_ids)
+        if draft_ids or pub_ids:
+            for ref in MediaContentReference.objects.filter(
+                ref_filter, detached_at__isnull=True
+            ).select_related("media_asset"):
+                if ref.course_draft_id:
+                    refs_by_draft.setdefault(ref.course_draft_id, []).append(ref)
+                if ref.published_version_id:
+                    refs_by_pub.setdefault(ref.published_version_id, []).append(ref)
+
+        # 4. Modules & LessonItems
+        mods_by_draft: dict[int, list[Module]] = {}
+        mods_by_pub: dict[int, list[Module]] = {}
+        all_mod_ids: list[int] = []
+        mod_filter = Q()
+        if draft_ids:
+            mod_filter |= Q(course_draft_id__in=draft_ids)
+        if pub_ids:
+            mod_filter |= Q(published_version_id__in=pub_ids)
+        if draft_ids or pub_ids:
+            for m in Module.objects.filter(mod_filter).order_by("sort_order", "id"):
+                all_mod_ids.append(m.id)
+                if m.course_draft_id:
+                    mods_by_draft.setdefault(m.course_draft_id, []).append(m)
+                if m.published_version_id:
+                    mods_by_pub.setdefault(m.published_version_id, []).append(m)
+
+        lessons_by_mod: dict[int, list[LessonItem]] = {}
+        if all_mod_ids:
+            for lesson in LessonItem.objects.filter(module_id__in=all_mod_ids).order_by("sort_order", "id"):
+                lessons_by_mod.setdefault(lesson.module_id, []).append(lesson)
+
+        # 5. Audience tables (4 bulk queries)
+        dept_map: dict[int, list[int]] = {}
+        for cid, did in (
+            CourseAudienceDepartment.objects.filter(course_id__in=course_ids)
+            .order_by("department_id")
+            .values_list("course_id", "department_id")
+        ):
+            dept_map.setdefault(cid, []).append(did)
+
+        job_id_map: dict[int, list[int]] = {}
+        job_name_map: dict[int, list[str]] = {}
+        for cid, jid, jname in (
+            CourseAudienceJobTitle.objects.filter(course_id__in=course_ids)
+            .select_related("job_title")
+            .order_by("job_title_id")
+            .values_list("course_id", "job_title_id", "job_title__name_ar")
+        ):
+            job_id_map.setdefault(cid, []).append(jid)
+            job_name_map.setdefault(cid, []).append(jname)
+
+        line_map: dict[int, list[int]] = {}
+        for cid, lid in (
+            CourseAudienceMetroLine.objects.filter(course_id__in=course_ids)
+            .order_by("metro_line_id")
+            .values_list("course_id", "metro_line_id")
+        ):
+            line_map.setdefault(cid, []).append(lid)
+
+        lead_map: dict[int, list[str]] = {}
+        for cid, title in (
+            CourseAudienceLeadership.objects.filter(course_id__in=course_ids)
+            .order_by("id")
+            .values_list("course_id", "leadership_title")
+        ):
+            lead_map.setdefault(cid, []).append(title)
+
+        # 6. Enrollment counts (1 bulk query)
+        enr_counts: dict[int, int] = {
+            row["course_id"]: row["cnt"]
+            for row in Enrollment.objects.filter(
+                course_id__in=course_ids, source_grants__isnull=False
+            )
+            .values("course_id")
+            .annotate(cnt=Count("id", distinct=True))
+        }
+
+        # Attach prefetched caches onto each Course instance
+        for c in courses:
+            draft = draft_by_course.get(c.id)
+            pub = pub_by_course.get(c.id)
+            c._ser_draft = draft
+            c._ser_pub = pub
+            if draft is not None:
+                c._ser_refs = refs_by_draft.get(draft.id, [])
+                c._ser_mods_raw = mods_by_draft.get(draft.id, [])
+            elif pub is not None:
+                c._ser_refs = refs_by_pub.get(pub.id, [])
+                c._ser_mods_raw = mods_by_pub.get(pub.id, [])
+            else:
+                c._ser_refs = []
+                c._ser_mods_raw = []
+            pub_cover = None
+            if pub is not None:
+                for ref in refs_by_pub.get(pub.id, []):
+                    if ref.title == "__course_cover__":
+                        pub_cover = ref
+                        break
+            c._ser_pub_cover = pub_cover
+            c._ser_lessons_by_mod = lessons_by_mod
+            c._ser_dept_ids = dept_map.get(c.id, [])
+            c._ser_job_ids = job_id_map.get(c.id, [])
+            c._ser_job_names = job_name_map.get(c.id, [])
+            c._ser_line_ids = line_map.get(c.id, [])
+            c._ser_lead_titles = lead_map.get(c.id, [])
+            c._ser_enrollment_count = enr_counts.get(c.id, 0)
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -54,6 +204,7 @@ class CourseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Course
+        list_serializer_class = CourseListSerializer
         fields = [
             "id",
             "title",
@@ -109,13 +260,71 @@ class CourseSerializer(serializers.ModelSerializer):
     def get_lecturerName(self, obj: Course) -> str:
         return obj.primary_lecturer.full_name if obj.primary_lecturer else "محاضر معتمد"
 
+    def _get_draft(self, obj: Course):
+        if not hasattr(obj, "_ser_draft"):
+            obj._ser_draft = CourseDraft.objects.filter(course=obj).first()
+        return obj._ser_draft
+
+    def _get_latest_pub(self, obj: Course):
+        if not hasattr(obj, "_ser_pub"):
+            obj._ser_pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
+        return obj._ser_pub
+
+    def _get_active_refs(self, obj: Course) -> list:
+        if not hasattr(obj, "_ser_refs"):
+            from apps.media.models import MediaContentReference
+
+            draft = self._get_draft(obj)
+            if draft is not None:
+                obj._ser_refs = list(
+                    MediaContentReference.objects.filter(
+                        course_draft=draft, detached_at__isnull=True
+                    ).select_related("media_asset")
+                )
+            else:
+                pub = self._get_latest_pub(obj)
+                obj._ser_refs = (
+                    list(
+                        MediaContentReference.objects.filter(
+                            published_version=pub, detached_at__isnull=True
+                        ).select_related("media_asset")
+                    )
+                    if pub is not None
+                    else []
+                )
+        return obj._ser_refs
+
+    def _total_duration_seconds(self, obj: Course) -> int:
+        modules = self.get_modules(obj)
+        total = 0
+        for mod in modules:
+            for item in mod.get("items", []):
+                try:
+                    total += max(0, int(item.get("durationSeconds") or 0))
+                except (TypeError, ValueError):
+                    pass
+        return total
+
     def get_duration(self, obj: Course) -> str:
-        return "—"
+        total_sec = self._total_duration_seconds(obj)
+        if total_sec <= 0:
+            return "—"
+        total_min = round(total_sec / 60)
+        if total_min < 1:
+            return "أقل من دقيقة"
+        if total_min < 60:
+            return f"{total_min} دقيقة"
+        hours, rem_min = divmod(total_min, 60)
+        if rem_min == 0:
+            return f"{hours} ساعة"
+        return f"{hours} ساعة و {rem_min} دقيقة"
 
     def get_rating(self, obj: Course) -> float:
         return 0.0
 
     def get_targetDepartmentIds(self, obj: Course) -> list[int]:
+        if hasattr(obj, "_ser_dept_ids"):
+            return obj._ser_dept_ids
         return list(
             CourseAudienceDepartment.objects.filter(course=obj)
             .order_by("department_id")
@@ -123,6 +332,8 @@ class CourseSerializer(serializers.ModelSerializer):
         )
 
     def get_targetJobTitleIds(self, obj: Course) -> list[int]:
+        if hasattr(obj, "_ser_job_ids"):
+            return obj._ser_job_ids
         return list(
             CourseAudienceJobTitle.objects.filter(course=obj)
             .order_by("job_title_id")
@@ -130,6 +341,8 @@ class CourseSerializer(serializers.ModelSerializer):
         )
 
     def get_targetJobTitles(self, obj: Course) -> list[str]:
+        if hasattr(obj, "_ser_job_names"):
+            return obj._ser_job_names
         return list(
             CourseAudienceJobTitle.objects.filter(course=obj)
             .select_related("job_title")
@@ -138,6 +351,8 @@ class CourseSerializer(serializers.ModelSerializer):
         )
 
     def get_targetMetroLineIds(self, obj: Course) -> list[int]:
+        if hasattr(obj, "_ser_line_ids"):
+            return obj._ser_line_ids
         return list(
             CourseAudienceMetroLine.objects.filter(course=obj)
             .order_by("metro_line_id")
@@ -145,8 +360,8 @@ class CourseSerializer(serializers.ModelSerializer):
         )
 
     def get_targetLeadershipTitles(self, obj: Course) -> list[str]:
-        from apps.courses.models import CourseAudienceLeadership
-
+        if hasattr(obj, "_ser_lead_titles"):
+            return obj._ser_lead_titles
         return list(
             CourseAudienceLeadership.objects.filter(course=obj)
             .order_by("id")
@@ -157,6 +372,8 @@ class CourseSerializer(serializers.ModelSerializer):
         return 0
 
     def get_enrollmentCount(self, obj: Course) -> int:
+        if hasattr(obj, "_ser_enrollment_count"):
+            return obj._ser_enrollment_count
         return obj.enrollments.filter(source_grants__isnull=False).distinct().count()
 
     def get_qrSettings(self, obj: Course) -> dict:
@@ -177,35 +394,42 @@ class CourseSerializer(serializers.ModelSerializer):
             "updatedAt": qr.updated_at.isoformat() if qr.updated_at else None,
         }
 
-    def get_estimatedHours(self, obj: Course) -> int:
-        return 0
+    def get_estimatedHours(self, obj: Course) -> float:
+        total_sec = self._total_duration_seconds(obj)
+        if total_sec <= 0:
+            return 0
+        return round(total_sec / 3600, 1)
 
     def get_thumbnail(self, obj: Course) -> str | None:
-        from apps.media.models import MediaContentReference
-
-        draft = CourseDraft.objects.filter(course=obj).first()
+        for ref in self._get_active_refs(obj):
+            if ref.title == "__course_cover__":
+                return f"/api/media/assets/{ref.media_asset_id}/stream"
+        # Fallback: if draft has no cover, check latest published version
+        draft = self._get_draft(obj)
         if draft is not None:
-            ref = MediaContentReference.objects.filter(
-                course_draft=draft, title="__course_cover__", detached_at__isnull=True
-            ).first()
-            if ref is not None:
-                return f"/api/media/assets/{ref.media_asset_id}/stream"
-        pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
-        if pub is not None:
-            ref = MediaContentReference.objects.filter(
-                published_version=pub, title="__course_cover__", detached_at__isnull=True
-            ).first()
-            if ref is not None:
-                return f"/api/media/assets/{ref.media_asset_id}/stream"
+            if hasattr(obj, "_ser_pub_cover"):
+                pub_ref = obj._ser_pub_cover
+            else:
+                pub = self._get_latest_pub(obj)
+                if pub is not None:
+                    from apps.media.models import MediaContentReference
+
+                    pub_ref = MediaContentReference.objects.filter(
+                        published_version=pub, title="__course_cover__", detached_at__isnull=True
+                    ).first()
+                else:
+                    pub_ref = None
+            if pub_ref is not None:
+                return f"/api/media/assets/{pub_ref.media_asset_id}/stream"
         return None
 
     def get_hasDraft(self, obj: Course) -> bool:
         if obj.lifecycle_status != "Published":
             return False
-        draft = CourseDraft.objects.filter(course=obj).first()
+        draft = self._get_draft(obj)
         if draft is None:
             return False
-        pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
+        pub = self._get_latest_pub(obj)
         if pub is None:
             return True
         return bool(draft.updated_at and pub.published_at and draft.updated_at > pub.published_at)
@@ -214,36 +438,33 @@ class CourseSerializer(serializers.ModelSerializer):
         return []
 
     def get_modules(self, obj: Course) -> list:
-        from apps.media.models import MediaContentReference
+        if hasattr(obj, "_ser_modules"):
+            return obj._ser_modules
 
-        draft = CourseDraft.objects.filter(course=obj).first()
-        if draft is not None:
-            mods = Module.objects.filter(course_draft=draft).order_by("sort_order", "id")
-            refs = {
-                r.title: r
-                for r in MediaContentReference.objects.filter(
-                    course_draft=draft, detached_at__isnull=True
-                ).select_related("media_asset")
-            }
+        if hasattr(obj, "_ser_mods_raw"):
+            mods = obj._ser_mods_raw
         else:
-            pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
-            mods = Module.objects.filter(published_version=pub).order_by("sort_order", "id") if pub else []
-            refs = (
-                {
-                    r.title: r
-                    for r in MediaContentReference.objects.filter(
-                        published_version=pub, detached_at__isnull=True
-                    ).select_related("media_asset")
-                }
-                if pub
-                else {}
-            )
+            draft = self._get_draft(obj)
+            if draft is not None:
+                mods = list(Module.objects.filter(course_draft=draft).order_by("sort_order", "id"))
+            else:
+                pub = self._get_latest_pub(obj)
+                mods = list(Module.objects.filter(published_version=pub).order_by("sort_order", "id")) if pub else []
+
+        refs = {r.title: r for r in self._get_active_refs(obj)}
+        if hasattr(obj, "_ser_lessons_by_mod"):
+            lessons_by_mod = obj._ser_lessons_by_mod
+        else:
+            mod_ids = [m.id for m in mods]
+            lessons_by_mod = {mid: [] for mid in mod_ids}
+            if mod_ids:
+                for lesson in LessonItem.objects.filter(module_id__in=mod_ids).order_by("sort_order", "id"):
+                    lessons_by_mod.setdefault(lesson.module_id, []).append(lesson)
 
         result = []
         for m in mods:
-            lessons = LessonItem.objects.filter(module=m).order_by("sort_order", "id")
             items_out = []
-            for l in lessons:
+            for l in lessons_by_mod.get(m.id, []):
                 ref = refs.get(l.title)
                 dl_policy = getattr(l, "download_policy", "never") or "never"
                 item_dict = {
@@ -268,54 +489,35 @@ class CourseSerializer(serializers.ModelSerializer):
                     item_dict["url"] = l.external_video_url
                 items_out.append(item_dict)
             result.append({"id": str(m.id), "title": m.title, "items": items_out})
+        obj._ser_modules = result
         return result
 
     def get_chapters(self, obj: Course) -> list:
         return self.get_modules(obj)
 
     def get_courseZipPolicy(self, obj: Course) -> str:
-        draft = CourseDraft.objects.filter(course=obj).first()
+        draft = self._get_draft(obj)
         if draft is not None:
             return getattr(draft, "course_zip_policy", "disabled") or "disabled"
-        pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
+        pub = self._get_latest_pub(obj)
         if pub is not None:
             return getattr(pub, "course_zip_policy", "disabled") or "disabled"
         return "disabled"
 
     def get_refresherConfig(self, obj: Course):
         import copy
-        from apps.media.models import MediaContentReference
 
-        draft = CourseDraft.objects.filter(course=obj).first()
+        draft = self._get_draft(obj)
         if draft is not None:
             raw_cfg = draft.refresher_config_json
-            refs = {
-                r.title: r
-                for r in MediaContentReference.objects.filter(
-                    course_draft=draft,
-                    detached_at__isnull=True,
-                    title__startswith="__refresher__",
-                ).select_related("media_asset")
-            }
         else:
-            pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
+            pub = self._get_latest_pub(obj)
             raw_cfg = pub.refresher_config_json if pub is not None else None
-            refs = (
-                {
-                    r.title: r
-                    for r in MediaContentReference.objects.filter(
-                        published_version=pub,
-                        detached_at__isnull=True,
-                        title__startswith="__refresher__",
-                    ).select_related("media_asset")
-                }
-                if pub is not None
-                else {}
-            )
 
         if not isinstance(raw_cfg, dict):
             return None
 
+        refs = {r.title: r for r in self._get_active_refs(obj) if r.title.startswith("__refresher__")}
         cfg = copy.deepcopy(raw_cfg)
 
         def _hydrate_items(items_list):
