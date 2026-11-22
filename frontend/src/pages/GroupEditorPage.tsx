@@ -413,10 +413,11 @@ export const GroupEditorPage: React.FC = () => {
       }
       if (!q) return true;
       return (
-        l.name.toLowerCase().includes(q) ||
-        l.department.toLowerCase().includes(q) ||
-        l.jobTitle.toLowerCase().includes(q) ||
-        l.email.toLowerCase().includes(q)
+        (l.name || '').toLowerCase().includes(q) ||
+        (l.department || '').toLowerCase().includes(q) ||
+        (l.jobTitle || '').toLowerCase().includes(q) ||
+        (l.email || '').toLowerCase().includes(q) ||
+        (l.phone || '').toLowerCase().includes(q)
       );
     });
   }, [candidateLecturers, primaryInstructorId, assistantLecturerIds, lecturerSearchQuery]);
@@ -1445,7 +1446,7 @@ export const GroupEditorPage: React.FC = () => {
                       { value: '', label: '— بدون محاضر أساسي محدد حالياً —' },
                       ...candidateLecturers.map((lec) => ({
                         value: lec.id,
-                        label: `${lec.name} — ${lec.jobTitle} (${lec.department})`,
+                        label: `${lec.name}${lec.jobTitle ? ` — ${lec.jobTitle}` : ''}${lec.department ? ` (${lec.department})` : ''}`,
                       })),
                     ]}
                   />
@@ -1549,7 +1550,7 @@ export const GroupEditorPage: React.FC = () => {
                           },
                           ...availableAssistantLecturers.map((lec) => ({
                             value: lec.id,
-                            label: `${lec.name} — ${lec.jobTitle} (${lec.department})`,
+                            label: `${lec.name}${lec.jobTitle ? ` — ${lec.jobTitle}` : ''}${lec.department ? ` (${lec.department})` : ''}`,
                           })),
                         ]}
                       />

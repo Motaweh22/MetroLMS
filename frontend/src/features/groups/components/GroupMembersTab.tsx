@@ -120,11 +120,11 @@ export const GroupMembersTab: React.FC<GroupMembersTabProps> = ({
     if (!q) return members;
     return members.filter(
       (m) =>
-        m.name.toLowerCase().includes(q) ||
-        m.email.toLowerCase().includes(q) ||
-        (m.department && m.department.toLowerCase().includes(q)) ||
-        (m.jobTitle && m.jobTitle.toLowerCase().includes(q)) ||
-        m.userId.toLowerCase().includes(q)
+        (m.name || '').toLowerCase().includes(q) ||
+        (m.email || '').toLowerCase().includes(q) ||
+        (m.department || '').toLowerCase().includes(q) ||
+        (m.jobTitle || '').toLowerCase().includes(q) ||
+        (m.userId || '').toLowerCase().includes(q)
     );
   }, [members, memberSearch]);
 

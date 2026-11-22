@@ -78,11 +78,11 @@ export const DirectAssignModal: React.FC<DirectAssignModalProps> = ({
     if (!q) return eligibleCandidates;
     return eligibleCandidates.filter(
       (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q) ||
-        (c.department && c.department.toLowerCase().includes(q)) ||
-        (c.jobTitle && c.jobTitle.toLowerCase().includes(q)) ||
-        c.id.toLowerCase().includes(q)
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.email || '').toLowerCase().includes(q) ||
+        (c.department || '').toLowerCase().includes(q) ||
+        (c.jobTitle || '').toLowerCase().includes(q) ||
+        (c.id || '').toLowerCase().includes(q)
     );
   }, [eligibleCandidates, searchQuery]);
 

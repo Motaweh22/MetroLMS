@@ -577,15 +577,48 @@ class AdminCandidateLecturersView(APIView):
         allowed_roles = ["super_admin", "admin", "assistant_admin", "lecturer"]
         if request.user.role_id == "developer":
             allowed_roles.append("developer")
-        users = User.objects.filter(status="Active", role_id__in=allowed_roles).order_by("id")
+        users = list(User.objects.filter(status="Active", role_id__in=allowed_roles).order_by("id"))
+        user_ids = [u.id for u in users]
+
+        from apps.organization.models import UserJobTitle, UserOrganizationalDepartment
+
+        dept_map: dict[int, str] = {}
+        for link in (
+            UserOrganizationalDepartment.objects.filter(user_id__in=user_ids)
+            .select_related("department")
+            .order_by("id")
+        ):
+            if link.user_id not in dept_map and link.department is not None:
+                dept_map[link.user_id] = link.department.name_ar
+        job_map: dict[int, str] = {}
+        for jlink in (
+            UserJobTitle.objects.filter(user_id__in=user_ids)
+            .select_related("job_title", "department")
+            .order_by("id")
+        ):
+            if jlink.user_id not in job_map and jlink.job_title is not None:
+                job_map[jlink.user_id] = jlink.job_title.name_ar
+            if jlink.user_id not in dept_map and jlink.department is not None:
+                dept_map[jlink.user_id] = jlink.department.name_ar
+
+        role_labels_ar = {
+            "developer": "مطور النظام",
+            "super_admin": "مسؤول أعلى",
+            "admin": "مدير النظام",
+            "assistant_admin": "مساعد مدير",
+            "lecturer": "محاضر معتمد",
+        }
         items = [
             {
                 "id": str(u.id),
                 "name": u.full_name,
+                "username": u.phone_e164,
+                "email": u.email or "",
                 "role": u.role_id,
                 "phone": u.phone_e164,
-                "department": "",
-                "jobTitle": u.role_id,
+                "department": dept_map.get(u.id, ""),
+                "jobTitle": job_map.get(u.id, "") or role_labels_ar.get(u.role_id, u.role_id),
+                "status": "active",
             }
             for u in users
         ]
@@ -600,14 +633,41 @@ class AdminCandidateTraineesView(APIView):
     def get(self, request: Request):
         if request.user.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}:
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية عرض قائمة المتدربين.", status.HTTP_403_FORBIDDEN)
-        users = User.objects.filter(status="Active", role_id="trainee").order_by("id")
+        users = list(User.objects.filter(status="Active", role_id="trainee").order_by("id"))
+        user_ids = [u.id for u in users]
+
+        from apps.organization.models import UserJobTitle, UserOrganizationalDepartment
+
+        dept_map: dict[int, str] = {}
+        for link in (
+            UserOrganizationalDepartment.objects.filter(user_id__in=user_ids)
+            .select_related("department")
+            .order_by("id")
+        ):
+            if link.user_id not in dept_map and link.department is not None:
+                dept_map[link.user_id] = link.department.name_ar
+        job_map: dict[int, str] = {}
+        for jlink in (
+            UserJobTitle.objects.filter(user_id__in=user_ids)
+            .select_related("job_title", "department")
+            .order_by("id")
+        ):
+            if jlink.user_id not in job_map and jlink.job_title is not None:
+                job_map[jlink.user_id] = jlink.job_title.name_ar
+            if jlink.user_id not in dept_map and jlink.department is not None:
+                dept_map[jlink.user_id] = jlink.department.name_ar
+
         items = [
             {
                 "id": str(u.id),
                 "name": u.full_name,
+                "username": u.phone_e164,
+                "email": u.email or "",
                 "role": "user",
                 "phone": u.phone_e164,
-                "department": "",
+                "department": dept_map.get(u.id, ""),
+                "jobTitle": job_map.get(u.id, "") or "متدرب",
+                "status": "active",
             }
             for u in users
         ]

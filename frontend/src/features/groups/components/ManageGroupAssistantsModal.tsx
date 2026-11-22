@@ -139,10 +139,10 @@ export const ManageGroupAssistantsModal: React.FC<ManageGroupAssistantsModalProp
       }
       if (!q) return true;
       return (
-        l.name.toLowerCase().includes(q) ||
-        l.department.toLowerCase().includes(q) ||
-        l.jobTitle.toLowerCase().includes(q) ||
-        l.email.toLowerCase().includes(q)
+        (l.name || '').toLowerCase().includes(q) ||
+        (l.department || '').toLowerCase().includes(q) ||
+        (l.jobTitle || '').toLowerCase().includes(q) ||
+        (l.email || '').toLowerCase().includes(q)
       );
     });
   }, [candidateLecturers, effectivePrimaryId, assistantIds, searchQuery]);
@@ -313,7 +313,7 @@ export const ManageGroupAssistantsModal: React.FC<ManageGroupAssistantsModalProp
                   },
                   ...availableCandidates.map((lec) => ({
                     value: lec.id,
-                    label: `${lec.name} — ${lec.jobTitle} (${lec.department})`,
+                    label: `${lec.name}${lec.jobTitle ? ` — ${lec.jobTitle}` : ''}${lec.department ? ` (${lec.department})` : ''}`,
                   })),
                 ]}
               />

@@ -101,14 +101,14 @@ export const UserManagementPage: React.FC = () => {
 
       result = result.filter((u) => {
         const matchesDirect =
-          u.name.toLowerCase().includes(q) ||
-          u.username.toLowerCase().includes(q) ||
-          u.id.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q) ||
-          (u.phone && u.phone.includes(q)) ||
-          u.jobTitle.toLowerCase().includes(q) ||
-          u.department.toLowerCase().includes(q) ||
-          (u.legacyAliases && u.legacyAliases.some((a) => a.toLowerCase().includes(q)));
+          (u.name || '').toLowerCase().includes(q) ||
+          (u.username || '').toLowerCase().includes(q) ||
+          (u.id || '').toLowerCase().includes(q) ||
+          (u.email || '').toLowerCase().includes(q) ||
+          (u.phone || '').includes(q) ||
+          (u.jobTitle || '').toLowerCase().includes(q) ||
+          (u.department || '').toLowerCase().includes(q) ||
+          (u.legacyAliases && u.legacyAliases.some((a) => (a || '').toLowerCase().includes(q)));
 
         const matchesCanonical = u.id.toLowerCase() === canonicalQueryId;
 

@@ -43,10 +43,10 @@ export const CoursePerformancePage: React.FC = () => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     return (
-      t.name.toLowerCase().includes(q) ||
-      t.jobTitle.toLowerCase().includes(q) ||
-      t.department.toLowerCase().includes(q) ||
-      (t.phone && t.phone.includes(q))
+      (t.name || '').toLowerCase().includes(q) ||
+      (t.jobTitle || '').toLowerCase().includes(q) ||
+      (t.department || '').toLowerCase().includes(q) ||
+      (t.phone || '').includes(q)
     );
   });
 
