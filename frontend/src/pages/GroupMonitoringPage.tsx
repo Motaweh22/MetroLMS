@@ -193,10 +193,10 @@ export const GroupMonitoringPage: React.FC = () => {
       if (metrics.group.primaryInstructorId !== undefined) {
         return Boolean(
           metrics.group.primaryInstructorId &&
-          metrics.group.primaryInstructorId.toLowerCase() === uid
+          String(metrics.group.primaryInstructorId).toLowerCase() === uid
         );
       }
-      return Boolean(metrics.group.supervisorIds?.[0]?.toLowerCase() === uid);
+      return Boolean(String(metrics.group.supervisorIds?.[0] ?? '').toLowerCase() === uid);
     }
     return false;
   }, [user, metrics?.group, previewRole]);
@@ -209,7 +209,7 @@ export const GroupMonitoringPage: React.FC = () => {
       // Search query filter (name, email, department, job title)
       const q = searchQuery.trim().toLowerCase();
       if (q) {
-        const matchesName = trainee.userName.toLowerCase().includes(q);
+        const matchesName = (trainee.userName || '').toLowerCase().includes(q);
         const matchesEmail = (trainee.email || '').toLowerCase().includes(q);
         const matchesDept = (trainee.department || '').toLowerCase().includes(q);
         const matchesJob = (trainee.jobTitle || '').toLowerCase().includes(q);
@@ -287,7 +287,7 @@ export const GroupMonitoringPage: React.FC = () => {
     const q = notificationSearch.trim().toLowerCase();
     return list.filter((t) => {
       if (q) {
-        const matchName = t.userName.toLowerCase().includes(q);
+        const matchName = (t.userName || '').toLowerCase().includes(q);
         const matchPhone = (t.phone || '').toLowerCase().includes(q);
         const matchEmail = (t.email || '').toLowerCase().includes(q);
         if (!matchName && !matchPhone && !matchEmail) return false;

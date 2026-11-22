@@ -104,9 +104,9 @@ export const ApprovalsPage: React.FC = () => {
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchTitle = item.title.toLowerCase().includes(q);
-        const matchLecturer = item.lecturerName.toLowerCase().includes(q);
-        const matchId = item.id.toLowerCase().includes(q);
+        const matchTitle = (item.title || '').toLowerCase().includes(q);
+        const matchLecturer = (item.lecturerName || '').toLowerCase().includes(q);
+        const matchId = String(item.id ?? '').toLowerCase().includes(q);
         return matchTitle || matchLecturer || matchId;
       }
       return true;
@@ -123,8 +123,8 @@ export const ApprovalsPage: React.FC = () => {
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchTitle = item.title.toLowerCase().includes(q);
-        const matchId = item.id.toLowerCase().includes(q);
+        const matchTitle = (item.title || '').toLowerCase().includes(q);
+        const matchId = String(item.id ?? '').toLowerCase().includes(q);
         return matchTitle || matchId;
       }
       return true;

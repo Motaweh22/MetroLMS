@@ -63,6 +63,7 @@ class GroupRenewalCycleSerializer(serializers.ModelSerializer):
 
 
 class TrainingGroupSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(read_only=True)
     groupType = serializers.CharField(source="group_type", read_only=True)
     isArchived = serializers.BooleanField(source="is_archived", read_only=True)
     autoRenewalEnabled = serializers.BooleanField(source="auto_renewal_enabled", read_only=True)

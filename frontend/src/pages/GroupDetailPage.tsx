@@ -768,7 +768,7 @@ export const GroupDetailPage: React.FC = () => {
             const filteredMembers = q
               ? allMembers.filter(
                   (m) =>
-                    m.userName.toLowerCase().includes(q) ||
+                    (m.userName || '').toLowerCase().includes(q) ||
                     (m.email || '').toLowerCase().includes(q) ||
                     (m.phone || '').toLowerCase().includes(q) ||
                     (m.department || '').toLowerCase().includes(q)
@@ -918,7 +918,7 @@ export const GroupDetailPage: React.FC = () => {
                               : 'bg-info/15 text-info'
                           }`}
                         >
-                          {instructor.name.charAt(0)}
+                          {(instructor.name || 'م').charAt(0)}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">

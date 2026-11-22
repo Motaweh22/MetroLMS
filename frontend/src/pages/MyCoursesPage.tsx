@@ -59,8 +59,8 @@ export const MyCoursesPage: React.FC = () => {
       // Search query filtering
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        const matchesTitle = c.title.toLowerCase().includes(q);
-        const matchesLecturer = c.lecturerName.toLowerCase().includes(q);
+        const matchesTitle = (c.title || '').toLowerCase().includes(q);
+        const matchesLecturer = (c.lecturerName || '').toLowerCase().includes(q);
         if (!matchesTitle && !matchesLecturer) return false;
       }
 

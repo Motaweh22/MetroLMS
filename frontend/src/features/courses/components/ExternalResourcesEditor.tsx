@@ -165,7 +165,13 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
                   <div className="flex items-center gap-2">
                     <strong className="text-xs text-text-heading truncate">{res.title}</strong>
                     <span className="text-[10px] text-text-muted font-mono" dir="ltr">
-                      {new URL(res.url).hostname}
+                      {(() => {
+                        try {
+                          return new URL(res.url).hostname;
+                        } catch {
+                          return res.url;
+                        }
+                      })()}
                     </span>
                   </div>
                   {res.description && (

@@ -104,14 +104,16 @@ export const DepartmentTracksPage: React.FC = () => {
   const filteredCourses = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return courses;
-    return courses.filter((c) => c.title.toLowerCase().includes(q));
+    return courses.filter((c) => (c.title || '').toLowerCase().includes(q));
   }, [courses, searchQuery]);
 
   const filteredDepartments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return departments;
     return departments.filter(
-      (d) => d.nameAr.toLowerCase().includes(q) || d.nameEn.toLowerCase().includes(q)
+      (d) =>
+        (d.nameAr || '').toLowerCase().includes(q) ||
+        (d.nameEn || '').toLowerCase().includes(q)
     );
   }, [departments, searchQuery]);
 
@@ -120,8 +122,8 @@ export const DepartmentTracksPage: React.FC = () => {
     if (!q) return jobTitles;
     return jobTitles.filter(
       (j) =>
-        j.nameAr.toLowerCase().includes(q) ||
-        j.nameEn.toLowerCase().includes(q) ||
+        (j.nameAr || '').toLowerCase().includes(q) ||
+        (j.nameEn || '').toLowerCase().includes(q) ||
         (j.departmentNameAr || '').toLowerCase().includes(q)
     );
   }, [jobTitles, searchQuery]);
@@ -785,7 +787,8 @@ export const DepartmentTracksPage: React.FC = () => {
                   .filter(
                     (d) =>
                       !modalScopeSearch.trim() ||
-                      d.nameAr.toLowerCase().includes(modalScopeSearch.toLowerCase())
+                      (d.nameAr || '').toLowerCase().includes(modalScopeSearch.toLowerCase()) ||
+                      (d.nameEn || '').toLowerCase().includes(modalScopeSearch.toLowerCase())
                   )
                   .map((dept) => {
                     const checked = modalDeptIds.includes(dept.id);
@@ -817,7 +820,8 @@ export const DepartmentTracksPage: React.FC = () => {
                   .filter(
                     (j) =>
                       !modalScopeSearch.trim() ||
-                      j.nameAr.toLowerCase().includes(modalScopeSearch.toLowerCase()) ||
+                      (j.nameAr || '').toLowerCase().includes(modalScopeSearch.toLowerCase()) ||
+                      (j.nameEn || '').toLowerCase().includes(modalScopeSearch.toLowerCase()) ||
                       (j.departmentNameAr || '')
                         .toLowerCase()
                         .includes(modalScopeSearch.toLowerCase())
@@ -955,7 +959,7 @@ export const DepartmentTracksPage: React.FC = () => {
               .filter(
                 (c) =>
                   !modalCourseSearch.trim() ||
-                  c.title.toLowerCase().includes(modalCourseSearch.toLowerCase())
+                  (c.title || '').toLowerCase().includes(modalCourseSearch.toLowerCase())
               )
               .map((course) => {
                 const isSelected = modalCourseIds.includes(course.id);

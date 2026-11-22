@@ -1458,7 +1458,7 @@ export const GroupEditorPage: React.FC = () => {
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-9 h-9 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0 font-bold text-sm">
-                          {selectedPrimaryLecturer.name.charAt(0)}
+                          {(selectedPrimaryLecturer.name || 'م').charAt(0)}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1583,7 +1583,7 @@ export const GroupEditorPage: React.FC = () => {
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-8 h-8 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0 font-bold text-xs">
-                              {assistant.name.charAt(0)}
+                              {(assistant.name || 'م').charAt(0)}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">

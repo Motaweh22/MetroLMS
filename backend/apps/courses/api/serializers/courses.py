@@ -578,7 +578,8 @@ class CourseReviewSubmissionSerializer(serializers.ModelSerializer):
 class CourseCommentSerializer(serializers.ModelSerializer):
     """Serializer for CourseComment enforcing D-02 anonymization label."""
 
-    courseId = serializers.IntegerField(source="course_id", read_only=True)
+    id = serializers.CharField(read_only=True)
+    courseId = serializers.CharField(source="course_id", read_only=True)
     courseTitle = serializers.CharField(source="course.title", read_only=True)
     authorName = serializers.SerializerMethodField()
     userName = serializers.SerializerMethodField()

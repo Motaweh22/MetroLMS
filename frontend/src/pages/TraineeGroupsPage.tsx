@@ -25,7 +25,7 @@ export const TraineeGroupsPage: React.FC = () => {
   const visibleGroups = useMemo(() => {
     if (previewRole === 'assistant_lecturer' && scopedAssignmentPreview?.groupId) {
       return groups.filter(
-        (g) => g.id.toLowerCase() === scopedAssignmentPreview.groupId.toLowerCase()
+        (g) => String(g.id ?? '').toLowerCase() === String(scopedAssignmentPreview.groupId ?? '').toLowerCase()
       );
     }
     return groups;
@@ -49,7 +49,7 @@ export const TraineeGroupsPage: React.FC = () => {
       if (filterTab === 'scheduled' && g.operationalStatus !== 'scheduled') return false;
       if (filterTab === 'expired' && g.operationalStatus !== 'expired') return false;
       if (q) {
-        const matchName = g.name.toLowerCase().includes(q);
+        const matchName = (g.name || '').toLowerCase().includes(q);
         const matchDesc = (g.description || '').toLowerCase().includes(q);
         if (!matchName && !matchDesc) return false;
       }

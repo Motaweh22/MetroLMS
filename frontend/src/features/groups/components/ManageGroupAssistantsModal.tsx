@@ -242,7 +242,7 @@ export const ManageGroupAssistantsModal: React.FC<ManageGroupAssistantsModalProp
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0 font-bold text-xs">
-                    {primaryLecturerInfo.name.charAt(0)}
+                    {(primaryLecturerInfo.name || 'م').charAt(0)}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -350,7 +350,7 @@ export const ManageGroupAssistantsModal: React.FC<ManageGroupAssistantsModalProp
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0 font-bold text-xs">
-                        {assistant.name.charAt(0)}
+                        {(assistant.name || 'م').charAt(0)}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">

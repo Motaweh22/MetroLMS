@@ -247,7 +247,7 @@ export const GroupMaterialsTab: React.FC<GroupMaterialsTabProps> = ({
   const filteredFolders = useMemo(() => {
     if (!searchQuery.trim()) return currentLevelFolders;
     const q = searchQuery.trim().toLowerCase();
-    return currentLevelFolders.filter((f) => f.name.toLowerCase().includes(q));
+    return currentLevelFolders.filter((f) => (f.name || '').toLowerCase().includes(q));
   }, [currentLevelFolders, searchQuery]);
 
   const filteredFiles = useMemo(() => {
@@ -255,8 +255,8 @@ export const GroupMaterialsTab: React.FC<GroupMaterialsTabProps> = ({
     const q = searchQuery.trim().toLowerCase();
     return currentLevelFiles.filter((file) => {
       return (
-        file.title.toLowerCase().includes(q) ||
-        file.originalFileName.toLowerCase().includes(q)
+        (file.title || '').toLowerCase().includes(q) ||
+        (file.originalFileName || '').toLowerCase().includes(q)
       );
     });
   }, [currentLevelFiles, searchQuery]);
@@ -276,7 +276,7 @@ export const GroupMaterialsTab: React.FC<GroupMaterialsTabProps> = ({
     return [...filteredFolders].sort((a, b) => {
       let cmp = 0;
       if (sortField === 'name') {
-        cmp = a.name.localeCompare(b.name, 'ar', { sensitivity: 'base' });
+        cmp = (a.name || '').localeCompare(b.name || '', 'ar', { sensitivity: 'base' });
       } else if (sortField === 'date') {
         cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       } else if (sortField === 'type') {
@@ -293,7 +293,7 @@ export const GroupMaterialsTab: React.FC<GroupMaterialsTabProps> = ({
     return [...filteredFiles].sort((a, b) => {
       let cmp = 0;
       if (sortField === 'name') {
-        cmp = a.title.localeCompare(b.title, 'ar', { sensitivity: 'base' });
+        cmp = (a.title || '').localeCompare(b.title || '', 'ar', { sensitivity: 'base' });
       } else if (sortField === 'date') {
         cmp = new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime();
       } else if (sortField === 'type') {

@@ -296,9 +296,9 @@ export const AdminGroupsPage: React.FC = () => {
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchName = g.name.toLowerCase().includes(q);
-        const matchId = g.id.toLowerCase().includes(q);
-        const matchDesc = g.description.toLowerCase().includes(q);
+        const matchName = (g.name || '').toLowerCase().includes(q);
+        const matchId = String(g.id ?? '').toLowerCase().includes(q);
+        const matchDesc = (g.description || '').toLowerCase().includes(q);
         return matchName || matchId || matchDesc;
       }
 
@@ -307,7 +307,7 @@ export const AdminGroupsPage: React.FC = () => {
 
     const sorted = [...list];
     if (sortBy === 'name') {
-      sorted.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      sorted.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
     } else if (sortBy === 'newest') {
       sorted.sort((a, b) => Number(b.id) - Number(a.id));
     } else {
@@ -327,7 +327,7 @@ export const AdminGroupsPage: React.FC = () => {
         if (a.deadlineDateTime && b.deadlineDateTime) {
           return new Date(a.deadlineDateTime).getTime() - new Date(b.deadlineDateTime).getTime();
         }
-        return a.name.localeCompare(b.name, 'ar');
+        return (a.name || '').localeCompare(b.name || '', 'ar');
       });
     }
     return sorted;
@@ -847,7 +847,7 @@ export const AdminGroupsPage: React.FC = () => {
                               isSupervisor &&
                                 user &&
                                 g.primaryInstructorId &&
-                                g.primaryInstructorId.toLowerCase() === user.id.toLowerCase()
+                                String(g.primaryInstructorId).toLowerCase() === String(user.id ?? '').toLowerCase()
                             )) && (
                             <Button
                               variant="outline"

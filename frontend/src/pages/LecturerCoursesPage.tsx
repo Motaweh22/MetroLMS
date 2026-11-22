@@ -109,8 +109,8 @@ export const LecturerCoursesPage: React.FC = () => {
       // Search keyword filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchTitle = c.title.toLowerCase().includes(q);
-        const matchId = c.id.toLowerCase().includes(q);
+        const matchTitle = (c.title || '').toLowerCase().includes(q);
+        const matchId = String(c.id ?? '').toLowerCase().includes(q);
         return matchTitle || matchId;
       }
 

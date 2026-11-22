@@ -497,9 +497,9 @@ export const CourseDiffViewerModal: React.FC<CourseDiffViewerModalProps> = ({
     const q = searchFilter.toLowerCase().trim();
     return metadataDiffs.filter(
       (m) =>
-        m.label.toLowerCase().includes(q) ||
-        m.baselineValue.toLowerCase().includes(q) ||
-        m.adminEditedValue.toLowerCase().includes(q)
+        (m.label || '').toLowerCase().includes(q) ||
+        String(m.baselineValue ?? '').toLowerCase().includes(q) ||
+        String(m.adminEditedValue ?? '').toLowerCase().includes(q)
     );
   }, [metadataDiffs, searchFilter]);
 
@@ -508,7 +508,7 @@ export const CourseDiffViewerModal: React.FC<CourseDiffViewerModalProps> = ({
     const q = searchFilter.toLowerCase().trim();
     return chapterDiffs.filter(
       (c) =>
-        c.title.toLowerCase().includes(q) ||
+        (c.title || '').toLowerCase().includes(q) ||
         (c.baselineTitle && c.baselineTitle.toLowerCase().includes(q))
     );
   }, [chapterDiffs, searchFilter]);
@@ -518,12 +518,12 @@ export const CourseDiffViewerModal: React.FC<CourseDiffViewerModalProps> = ({
     const q = searchFilter.toLowerCase().trim();
     return lessonDiffs.filter(
       (l) =>
-        l.title.toLowerCase().includes(q) ||
+        (l.title || '').toLowerCase().includes(q) ||
         (l.baselineTitle && l.baselineTitle.toLowerCase().includes(q)) ||
         (l.resourceDiffs &&
           l.resourceDiffs.some(
             (r) =>
-              r.title.toLowerCase().includes(q) ||
+              (r.title || '').toLowerCase().includes(q) ||
               (r.adminUrl && r.adminUrl.toLowerCase().includes(q)) ||
               (r.baselineUrl && r.baselineUrl.toLowerCase().includes(q))
           ))

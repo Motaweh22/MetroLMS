@@ -37,7 +37,7 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
   const courseDiscussionMap = React.useMemo(() => {
     const map = new Map<string, boolean>();
     courses.forEach((c) => {
-      map.set(c.id.toLowerCase(), c.commentsEnabled !== false);
+      map.set(String(c.id ?? '').toLowerCase(), c.commentsEnabled !== false);
     });
     return map;
   }, [courses]);
@@ -135,7 +135,7 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
                     'متدرب';
 
                   const isCommentsEnabled =
-                    courseDiscussionMap.get(comment.courseId.toLowerCase()) ??
+                    courseDiscussionMap.get(String(comment.courseId ?? '').toLowerCase()) ??
                     comment.commentsEnabled ??
                     true;
 

@@ -490,7 +490,7 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                       }`}
                       data-testid="comment-avatar"
                     >
-                      {comment.userInitial || comment.userName.charAt(0) || 'م'}
+                      {comment.userInitial || (comment.userName || 'م').charAt(0)}
                     </div>
 
                     {/* Author Meta */}

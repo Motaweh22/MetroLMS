@@ -170,7 +170,7 @@ export const CommentModerationPage: React.FC = () => {
 
   // Handle Course Discussion Policy Toggle
   const handleOpenToggleDialog = (courseId: string, currentEnabled: boolean) => {
-    const courseObj = courses.find((c) => c.id.toLowerCase() === courseId.toLowerCase());
+    const courseObj = courses.find((c) => String(c.id ?? '').toLowerCase() === String(courseId ?? '').toLowerCase());
     setCourseToToggle({
       courseId,
       courseTitle: courseObj?.title || courseId,
