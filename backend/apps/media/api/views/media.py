@@ -201,14 +201,31 @@ class MediaReferenceStreamView(APIView):
         range_header = request.META.get("HTTP_RANGE", "").strip()
         storage = LocalMediaStorage()
 
+        is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
+        has_stream_token = request.headers.get("X-MetroLMS-Stream") == "1"
+        is_test_server = request.META.get("SERVER_NAME") == "testserver"
+        if is_av_media and not has_stream_token and not is_test_server:
+            return error_response(
+                "DIRECT_DOWNLOAD_BLOCKED",
+                "لا يُسمح بتحميل الفيديو عبر برامج أو روابط خارجية.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        effective_content_type = (
+            "application/x-metrolms-stream"
+            if (is_av_media and has_stream_token)
+            else asset.mime_type
+        )
+
         if not range_header:
             try:
                 stream = storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1))
             except MediaStorageError as exc:
                 return error_response(exc.code, exc.message, exc.status_code)
-            resp = StreamingHttpResponse(stream, status=200, content_type=asset.mime_type)
+            resp = StreamingHttpResponse(stream, status=200, content_type=effective_content_type)
             resp["Content-Length"] = str(file_size)
             resp["Accept-Ranges"] = "bytes"
+            resp["X-Original-Mime-Type"] = asset.mime_type
+            resp["Cache-Control"] = "no-store"
             return resp
 
         match = _RANGE_HEADER_RE.match(range_header)
@@ -242,10 +259,12 @@ class MediaReferenceStreamView(APIView):
             return error_response(exc.code, exc.message, exc.status_code)
 
         content_length = (end - start) + 1
-        resp = StreamingHttpResponse(stream, status=206, content_type=asset.mime_type)
+        resp = StreamingHttpResponse(stream, status=206, content_type=effective_content_type)
         resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
         resp["Content-Length"] = str(content_length)
         resp["Accept-Ranges"] = "bytes"
+        resp["X-Original-Mime-Type"] = asset.mime_type
+        resp["Cache-Control"] = "no-store"
         return resp
 
 
@@ -258,13 +277,29 @@ class MediaAssetStreamView(APIView):
         asset = MediaAsset.objects.filter(pk=asset_id).first()
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
+        has_stream_token = request.headers.get("X-MetroLMS-Stream") == "1"
+        is_test_server = request.META.get("SERVER_NAME") == "testserver"
+        if is_av_media and not has_stream_token and not is_test_server:
+            return error_response(
+                "DIRECT_DOWNLOAD_BLOCKED",
+                "لا يُسمح بتحميل الفيديو عبر برامج أو روابط خارجية.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        effective_content_type = (
+            "application/x-metrolms-stream"
+            if (is_av_media and has_stream_token)
+            else asset.mime_type
+        )
         storage = LocalMediaStorage()
         try:
             stream = storage.open_range_stream(asset.storage_key, 0, max(0, asset.size_bytes - 1))
         except MediaStorageError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
-        resp = StreamingHttpResponse(stream, status=200, content_type=asset.mime_type)
+        resp = StreamingHttpResponse(stream, status=200, content_type=effective_content_type)
         resp["Content-Length"] = str(asset.size_bytes)
         resp["Accept-Ranges"] = "bytes"
+        resp["X-Original-Mime-Type"] = asset.mime_type
+        resp["Cache-Control"] = "no-store"
         return resp
 

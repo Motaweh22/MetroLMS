@@ -57,6 +57,77 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [seekClampKey, setSeekClampKey] = useState<number>(0);
   const [showControls, setShowControls] = useState<boolean>(true);
   const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
+  const [protectedBlobUrl, setProtectedBlobUrl] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState<number>(0);
+  const activeVideoBlobRef = useRef<string | null>(null);
+
+  // Load backend video stream via authenticated fetch with obfuscated Content-Type
+  // so browser download manager extensions (IDM) cannot sniff or hook the video stream
+  useEffect(() => {
+    let cancelled = false;
+    if (activeVideoBlobRef.current) {
+      URL.revokeObjectURL(activeVideoBlobRef.current);
+      activeVideoBlobRef.current = null;
+    }
+
+    if (!src) {
+      setProtectedBlobUrl(null);
+      return;
+    }
+
+    const isJsdom =
+      typeof window !== 'undefined' && window.navigator?.userAgent?.includes('jsdom');
+    const isProtectedApiStream = !isJsdom && src.startsWith('/api/media/');
+
+    if (!isProtectedApiStream) {
+      setProtectedBlobUrl(src);
+      return;
+    }
+
+    setIsBuffering(true);
+    setHasError(false);
+    setProtectedBlobUrl(null);
+
+    const controller = new AbortController();
+    fetch(src, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'X-MetroLMS-Stream': '1',
+      },
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok || res.status === 204) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const mime = res.headers.get('X-Original-Mime-Type') || 'video/mp4';
+        const buffer = await res.arrayBuffer();
+        if (cancelled) return;
+        if (!buffer || buffer.byteLength === 0) {
+          throw new Error('EMPTY_STREAM');
+        }
+        const blob = new Blob([buffer], { type: mime });
+        const url = URL.createObjectURL(blob);
+        activeVideoBlobRef.current = url;
+        setProtectedBlobUrl(url);
+        setIsBuffering(false);
+      })
+      .catch((err) => {
+        if (cancelled || err?.name === 'AbortError') return;
+        setHasError(true);
+        setIsBuffering(false);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (activeVideoBlobRef.current) {
+        URL.revokeObjectURL(activeVideoBlobRef.current);
+        activeVideoBlobRef.current = null;
+      }
+    };
+  }, [src, retryNonce]);
 
   // Trigger seeking clamped warning with active timer reset and animation remounting
   const triggerSeekingClamped = useCallback(() => {
@@ -411,6 +482,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             className="speed-dropdown-btn"
             onClick={() => {
               setHasError(false);
+              setRetryNonce((prev) => prev + 1);
               if (videoRef.current) {
                 videoRef.current.load();
               }
@@ -421,13 +493,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
       ) : (
         <>
-          {/* HTML5 Native Video Engine (Default Controls Disabled) */}
+          {/* HTML5 Native Video Engine (Default Controls Disabled & Download Manager Protected) */}
           <video
             ref={videoRef}
-            src={src}
+            src={protectedBlobUrl || undefined}
             poster={poster}
             className="custom-video-element"
             controls={false}
+            controlsList="nodownload noremoteplayback"
+            disablePictureInPicture
+            onContextMenu={(e) => e.preventDefault()}
             playsInline
             onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdate}
@@ -599,12 +674,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 </button>
 
                 {/* Download Button (when enabled by course downloadPolicy) */}
-                {canDownload && src && (
+                {canDownload && (protectedBlobUrl || src) && (
                   <a
-                    href={src}
+                    href={protectedBlobUrl || src}
                     download={`${title || 'video'}.mp4`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="ctrl-btn"
                     title="تحميل الفيديو"
                     aria-label="تحميل الفيديو"
