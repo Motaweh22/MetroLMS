@@ -23,8 +23,12 @@ from apps.courses.models import (
     CourseAudienceMetroLine,
     CourseComment,
     CourseCommentReport,
+    CourseDraft,
     CourseQrCode,
     CourseReviewSubmission,
+    LessonItem,
+    Module,
+    PublishedCourseVersion,
     StagedAdminEdit,
 )
 from apps.organization.models import JobTitle, MetroLine, OrganizationalDepartment
