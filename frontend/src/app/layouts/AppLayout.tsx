@@ -4,6 +4,7 @@ import { Navbar, type NavbarUser } from '@/shared/ui/Navbar';
 import { Sidebar } from '@/shared/ui/Sidebar';
 import { MobileDrawer } from '@/shared/ui/MobileDrawer';
 import { Footer } from '@/shared/ui/Footer';
+import { PageLoading } from '@/shared/ui/Loading';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
 import { useIsolatedSession } from '@/core/auth/useIsolatedSession';
@@ -88,7 +89,9 @@ const AppLayoutInner: React.FC = () => {
         {/* Scrollable Main Viewport + Footer */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
           <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
-            <Outlet key={outletKey} />
+            <React.Suspense fallback={<PageLoading />}>
+              <Outlet key={outletKey} />
+            </React.Suspense>
           </main>
 
           <Footer />
@@ -153,7 +156,9 @@ export const AppLayout: React.FC = () => {
 
             {/* Dedicated Learning Main Content (Navbar and Sidebar hidden for focused study) */}
             <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col focus:outline-none">
-              <Outlet key={learningOutletKey} />
+              <React.Suspense fallback={<PageLoading />}>
+                <Outlet key={learningOutletKey} />
+              </React.Suspense>
             </main>
           </div>
         </NotificationProvider>

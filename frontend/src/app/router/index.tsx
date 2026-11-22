@@ -17,42 +17,104 @@ import { AppLayout } from '@/app/layouts/AppLayout';
 import { AuthLayout } from '@/app/layouts/AuthLayout';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { CoursesCatalogPage } from '@/pages/CoursesCatalogPage';
-import { CourseDetailPage } from '@/pages/CourseDetailPage';
-import { CourseQrJoinPage } from '@/pages/CourseQrJoinPage';
-import { DesignSystemPreviewPage } from '@/pages/DesignSystemPreviewPage';
-import { LearningPlayerPage } from '@/pages/LearningPlayerPage';
-import { MyCoursesPage } from '@/pages/MyCoursesPage';
-import { TraineeGroupsPage } from '@/pages/TraineeGroupsPage';
-import { GroupDetailPage } from '@/pages/GroupDetailPage';
-import { ProfilePage } from '@/pages/ProfilePage';
-import { MemberProfilePage } from '@/pages/MemberProfilePage';
-import { NotificationsPage } from '@/pages/NotificationsPage';
-import { LecturerCoursesPage } from '@/pages/LecturerCoursesPage';
-import { CourseBuilderPage } from '@/pages/CourseBuilderPage';
-import { ApprovalsPage } from '@/pages/ApprovalsPage';
-import { CourseReviewPage } from '@/pages/CourseReviewPage';
-import { AdminGroupsPage } from '@/pages/AdminGroupsPage';
-import { GroupEditorPage } from '@/pages/GroupEditorPage';
-import { GroupMonitoringPage } from '@/pages/GroupMonitoringPage';
-import { JoinGroupPage } from '@/pages/JoinGroupPage';
-import { UserManagementPage } from '@/pages/UserManagementPage';
-import { AddUserPage } from '@/pages/AddUserPage';
-import { UserDetailsPage } from '@/pages/UserDetailsPage';
-import { OrganizationCatalogPage } from '@/pages/OrganizationCatalogPage';
-import { PermissionsMatrixPage } from '@/pages/PermissionsMatrixPage';
-import { SecurityAuditPage } from '@/pages/SecurityAuditPage';
-import { DepartmentTracksPage } from '@/pages/DepartmentTracksPage';
-import { CommentModerationPage } from '@/pages/CommentModerationPage';
-import { CoursePerformancePage } from '@/pages/CoursePerformancePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { ForbiddenPage } from '@/pages/ForbiddenPage';
 import { UnexpectedErrorPage } from '@/pages/UnexpectedErrorPage';
 import { RouteErrorBoundary } from './RouteErrorBoundary';
 import { ErrorBoundary } from '@/shared/ui/Error';
-import { LoadingScreen } from '@/shared/ui/Loading';
+import { LoadingScreen, PageLoading } from '@/shared/ui/Loading';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
+
+// Route-level Code Splitting: lazy-load feature & admin workspaces on demand
+const CoursesCatalogPage = React.lazy(() =>
+  import('@/pages/CoursesCatalogPage').then((m) => ({ default: m.CoursesCatalogPage }))
+);
+const CourseDetailPage = React.lazy(() =>
+  import('@/pages/CourseDetailPage').then((m) => ({ default: m.CourseDetailPage }))
+);
+const CourseQrJoinPage = React.lazy(() =>
+  import('@/pages/CourseQrJoinPage').then((m) => ({ default: m.CourseQrJoinPage }))
+);
+const DesignSystemPreviewPage = React.lazy(() =>
+  import('@/pages/DesignSystemPreviewPage').then((m) => ({ default: m.DesignSystemPreviewPage }))
+);
+const LearningPlayerPage = React.lazy(() =>
+  import('@/pages/LearningPlayerPage').then((m) => ({ default: m.LearningPlayerPage }))
+);
+const MyCoursesPage = React.lazy(() =>
+  import('@/pages/MyCoursesPage').then((m) => ({ default: m.MyCoursesPage }))
+);
+const TraineeGroupsPage = React.lazy(() =>
+  import('@/pages/TraineeGroupsPage').then((m) => ({ default: m.TraineeGroupsPage }))
+);
+const GroupDetailPage = React.lazy(() =>
+  import('@/pages/GroupDetailPage').then((m) => ({ default: m.GroupDetailPage }))
+);
+const ProfilePage = React.lazy(() =>
+  import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage }))
+);
+const MemberProfilePage = React.lazy(() =>
+  import('@/pages/MemberProfilePage').then((m) => ({ default: m.MemberProfilePage }))
+);
+const NotificationsPage = React.lazy(() =>
+  import('@/pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage }))
+);
+const LecturerCoursesPage = React.lazy(() =>
+  import('@/pages/LecturerCoursesPage').then((m) => ({ default: m.LecturerCoursesPage }))
+);
+const CourseBuilderPage = React.lazy(() =>
+  import('@/pages/CourseBuilderPage').then((m) => ({ default: m.CourseBuilderPage }))
+);
+const ApprovalsPage = React.lazy(() =>
+  import('@/pages/ApprovalsPage').then((m) => ({ default: m.ApprovalsPage }))
+);
+const CourseReviewPage = React.lazy(() =>
+  import('@/pages/CourseReviewPage').then((m) => ({ default: m.CourseReviewPage }))
+);
+const AdminGroupsPage = React.lazy(() =>
+  import('@/pages/AdminGroupsPage').then((m) => ({ default: m.AdminGroupsPage }))
+);
+const GroupEditorPage = React.lazy(() =>
+  import('@/pages/GroupEditorPage').then((m) => ({ default: m.GroupEditorPage }))
+);
+const GroupMonitoringPage = React.lazy(() =>
+  import('@/pages/GroupMonitoringPage').then((m) => ({ default: m.GroupMonitoringPage }))
+);
+const JoinGroupPage = React.lazy(() =>
+  import('@/pages/JoinGroupPage').then((m) => ({ default: m.JoinGroupPage }))
+);
+const UserManagementPage = React.lazy(() =>
+  import('@/pages/UserManagementPage').then((m) => ({ default: m.UserManagementPage }))
+);
+const AddUserPage = React.lazy(() =>
+  import('@/pages/AddUserPage').then((m) => ({ default: m.AddUserPage }))
+);
+const UserDetailsPage = React.lazy(() =>
+  import('@/pages/UserDetailsPage').then((m) => ({ default: m.UserDetailsPage }))
+);
+const OrganizationCatalogPage = React.lazy(() =>
+  import('@/pages/OrganizationCatalogPage').then((m) => ({ default: m.OrganizationCatalogPage }))
+);
+const PermissionsMatrixPage = React.lazy(() =>
+  import('@/pages/PermissionsMatrixPage').then((m) => ({ default: m.PermissionsMatrixPage }))
+);
+const SecurityAuditPage = React.lazy(() =>
+  import('@/pages/SecurityAuditPage').then((m) => ({ default: m.SecurityAuditPage }))
+);
+const DepartmentTracksPage = React.lazy(() =>
+  import('@/pages/DepartmentTracksPage').then((m) => ({ default: m.DepartmentTracksPage }))
+);
+const CommentModerationPage = React.lazy(() =>
+  import('@/pages/CommentModerationPage').then((m) => ({ default: m.CommentModerationPage }))
+);
+const CoursePerformancePage = React.lazy(() =>
+  import('@/pages/CoursePerformancePage').then((m) => ({ default: m.CoursePerformancePage }))
+);
+
+const LazyPage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <React.Suspense fallback={<PageLoading />}>{children}</React.Suspense>
+);
 
 const AdminReviewParamRedirect: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -161,7 +223,9 @@ export const appRouteElements = (
       path="/design-system"
       element={
         <DeveloperRouteGuard redirectUnauthenticated={true}>
-          <DesignSystemPreviewPage />
+          <LazyPage>
+            <DesignSystemPreviewPage />
+          </LazyPage>
         </DeveloperRouteGuard>
       }
       errorElement={<RouteErrorBoundary />}
@@ -172,7 +236,9 @@ export const appRouteElements = (
       path="/"
       element={
         <ProtectedRoute>
-          <AppLayout />
+          <LazyPage>
+            <AppLayout />
+          </LazyPage>
         </ProtectedRoute>
       }
       errorElement={<RouteErrorBoundary />}
