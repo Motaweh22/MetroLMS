@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { GroupMaterialFile } from '@/core/groups/types';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
@@ -23,11 +23,29 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
   isOpen,
   onClose,
 }) => {
+  const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file || !isOpen) {
+      setBlobPreviewUrl(null);
+      return;
+    }
+    const registeredBlob = getMaterialBlob(file.id);
+    if (!registeredBlob) {
+      setBlobPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(registeredBlob);
+    setBlobPreviewUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [file, isOpen]);
+
   if (!file) return null;
 
   const meta = getFileTypeMeta(file.fileType);
-  const registeredBlob = getMaterialBlob(file.id);
-  const previewUrl = registeredBlob ? URL.createObjectURL(registeredBlob) : file.url;
+  const previewUrl = blobPreviewUrl || file.url;
 
   return (
     <Modal

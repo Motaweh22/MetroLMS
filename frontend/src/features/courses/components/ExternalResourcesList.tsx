@@ -3,6 +3,7 @@ import type { ExternalResource } from '@/core/courses/types';
 import { Card } from '@/shared/ui/Card';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
 import { QRCodeModal } from '@/shared/ui/QRCodeModal';
+import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
 
 export interface ExternalResourcesListProps {
   resources?: ExternalResource[];
@@ -75,7 +76,7 @@ export const ExternalResourcesList: React.FC<ExternalResourcesListProps> = ({
               <div className="flex items-center gap-2 pt-2 border-t border-border">
                 {/* Direct Open Link */}
                 <a
-                  href={res.url}
+                  href={sanitizeSafeUrl(res.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors"

@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { useToast } from '@/shared/ui/Toast';
 import { groupsApi } from '../services/groupsApi';
 import { formatMaterialDate } from '../utils/materialUtils';
+import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
 import { isMeetingResource } from '../utils/meetingUtils';
 
 export interface GroupAttachmentsTabProps {
@@ -214,7 +215,7 @@ export const GroupAttachmentsTab: React.FC<GroupAttachmentsTabProps> = ({
 
                 <div className="flex items-center justify-between pt-3 border-t border-border/70 text-xs">
                   <a
-                    href={res.url}
+                    href={sanitizeSafeUrl(res.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block"

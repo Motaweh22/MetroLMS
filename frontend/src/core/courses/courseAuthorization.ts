@@ -93,8 +93,8 @@ export function isAuthorizedForCoursePerformance(
 ): boolean {
   if (!user) return false;
 
-  // System Administrator: Platform-wide performance oversight
-  if (user.role === 'admin') return true;
+  // System Administrators: Platform-wide performance oversight
+  if (user.role === 'developer' || user.role === 'super_admin' || user.role === 'admin') return true;
 
   // Assistant Administrator: Approved platform-wide read-only performance oversight
   if (user.role === 'assistant_admin') return true;

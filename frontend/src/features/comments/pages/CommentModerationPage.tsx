@@ -54,7 +54,11 @@ export const CommentModerationPage: React.FC = () => {
     actionLabel: string;
   } | null>(null);
 
-  const isAuthorized = user?.role === 'admin' || user?.role === 'assistant_admin';
+  const isAuthorized =
+    user?.role === 'developer' ||
+    user?.role === 'super_admin' ||
+    user?.role === 'admin' ||
+    user?.role === 'assistant_admin';
   const isAssistantAdmin = user?.role === 'assistant_admin';
 
   // Load All Moderation Data

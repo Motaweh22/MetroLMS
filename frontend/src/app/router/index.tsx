@@ -64,6 +64,16 @@ const AdminMonitoringParamRedirect: React.FC = () => {
   return <Navigate to={`/admin/groups/${groupId ?? ''}/monitoring`} replace />;
 };
 
+const BuilderParamRedirect: React.FC = () => {
+  const { courseId } = useParams<{ courseId: string }>();
+  return <Navigate to={`/lecturer/builder/${courseId ?? ''}`} replace />;
+};
+
+const PerformanceParamRedirect: React.FC = () => {
+  const { courseId } = useParams<{ courseId: string }>();
+  return <Navigate to={`/lecturer/performance/${courseId ?? ''}`} replace />;
+};
+
 const GroupsAdaptiveRedirect: React.FC = () => {
   const { user } = useAuth();
   const { effectiveUiRole, isPreviewing } = useRolePreview();
@@ -340,7 +350,7 @@ export const appRouteElements = (
         path="builder/:courseId"
         element={
           <ProtectedRoute allowedRoles={['developer', 'super_admin', 'admin', 'lecturer']}>
-            <Navigate to="/lecturer/builder/:courseId" replace />
+            <BuilderParamRedirect />
           </ProtectedRoute>
         }
       />
@@ -353,7 +363,7 @@ export const appRouteElements = (
           </ProtectedRoute>
         }
       />
-      <Route path="performance/:courseId" element={<Navigate to="/lecturer/performance/:courseId" replace />} />
+      <Route path="performance/:courseId" element={<PerformanceParamRedirect />} />
       {/* Increment 9: Review & Quality Audit Workflow */}
       <Route
         path="approvals"

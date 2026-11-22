@@ -22,6 +22,7 @@ import {
   buildWhatsAppUrl,
   buildContextMessage,
 } from '@/features/whatsapp';
+import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
 
 export const GroupDetailPage: React.FC = () => {
   const toast = useToast();
@@ -460,7 +461,7 @@ export const GroupDetailPage: React.FC = () => {
 
                                 return (
                                   <a
-                                    href={res.url}
+                                    href={sanitizeSafeUrl(res.url)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-block"
@@ -545,7 +546,7 @@ export const GroupDetailPage: React.FC = () => {
                             </div>
                             <div className="pt-2 border-t border-border/40">
                               <a
-                                href={res.url}
+                                href={sanitizeSafeUrl(res.url)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-block"

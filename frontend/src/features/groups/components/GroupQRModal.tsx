@@ -46,7 +46,8 @@ export const GroupQRModal: React.FC<GroupQRModalProps> = ({
 }) => {
   const { user } = useAuth();
   const toast = useToast();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin =
+    user?.role === 'developer' || user?.role === 'super_admin' || user?.role === 'admin';
 
   // Staged modal state initialized strictly from the last persisted group state
   const [localPolicy, setLocalPolicy] = useState<GroupEnrollmentPolicy>(

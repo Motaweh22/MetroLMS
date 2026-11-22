@@ -228,10 +228,13 @@ export async function apiClient<T>(
   }
 
   const session = authStorage.getSession();
-  const defaultHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
+  const isFormData = typeof FormData !== 'undefined' && customConfig.body instanceof FormData;
+  const defaultHeaders: Record<string, string> = isFormData
+    ? { Accept: 'application/json' }
+    : {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      };
 
   // In Demo/Test mode only, provide Bearer token fallback for current MSW prototype handlers.
   // In real Django development/production builds, authentication is strictly cookie-based.

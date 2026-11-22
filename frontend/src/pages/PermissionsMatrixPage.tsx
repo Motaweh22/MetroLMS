@@ -77,7 +77,12 @@ export const PermissionsMatrixPage: React.FC = () => {
   }, [loadData]);
 
   // Authorization check
-  const isAuthorized = user && (user.role === 'admin' || user.role === 'assistant_admin');
+  const isAuthorized =
+    user &&
+    (user.role === 'developer' ||
+      user.role === 'super_admin' ||
+      user.role === 'admin' ||
+      user.role === 'assistant_admin');
   if (!user || !isAuthorized) {
     return (
       <div className="container mx-auto p-6 max-w-4xl text-right" data-testid="unauthorized-permissions-view">
@@ -90,7 +95,8 @@ export const PermissionsMatrixPage: React.FC = () => {
     );
   }
 
-  const isReadOnly = user.role !== 'admin';
+  const isReadOnly =
+    user.role !== 'developer' && user.role !== 'super_admin' && user.role !== 'admin';
 
   // Quick stats
   const pendingApprovalsCount = requests.filter((r) => r.status === 'pending').length;

@@ -12,6 +12,7 @@ import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
+import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
 
 export interface ReviewContentPreviewProps {
   course: Course;
@@ -798,9 +799,9 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                               <Badge variant="neutral" size="sm">PDF</Badge>
                             </div>
                             <a
-                              href={activeItem.url || activeItem.externalUrl}
+                              href={sanitizeSafeUrl(activeItem.url || activeItem.externalUrl)}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted hover:bg-neutral-light border border-border text-text rounded-md text-xs font-medium transition-colors"
                             >
                               <Icon name="externalLink" size="sm" />
@@ -859,9 +860,9 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                               </Badge>
                             </div>
                             <a
-                              href={activeItem.url || activeItem.externalUrl}
+                              href={sanitizeSafeUrl(activeItem.url || activeItem.externalUrl)}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted hover:bg-neutral-light border border-border text-text rounded-md text-xs font-medium transition-colors"
                             >
                               <Icon name="externalLink" size="sm" />
@@ -890,9 +891,9 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                               </Badge>
                             </div>
                             <a
-                              href={activeItem.url || activeItem.externalUrl}
+                              href={sanitizeSafeUrl(activeItem.url || activeItem.externalUrl)}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted hover:bg-neutral-light border border-border text-text rounded-md text-xs font-medium transition-colors"
                             >
                               <Icon name="externalLink" size="sm" />
@@ -920,9 +921,9 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                             المعاينة المباشرة داخل المتصفح لملفات Office الثنائية تتطلب استضافتها على موفر متوافق (مثل Google Drive أو OneDrive).
                           </p>
                           <a
-                            href={activeItem.url || activeItem.externalUrl}
+                            href={sanitizeSafeUrl(activeItem.url || activeItem.externalUrl)}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-surface rounded-lg text-xs font-semibold hover:bg-primary-dark transition-colors"
                           >
                             <Icon name="externalLink" size="sm" />

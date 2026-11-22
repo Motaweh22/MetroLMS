@@ -187,7 +187,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         if (!container) return;
 
         // Clear any previous mount contents
-        container.innerHTML = '';
+        container.replaceChildren();
 
         // Safely destroy existing player instance if any
         if (playerRef.current) {
@@ -367,7 +367,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
         playerRef.current = null;
       }
       if (container) {
-        container.innerHTML = '';
+        container.replaceChildren();
       }
     };
   }, [videoId, effectiveBlockPopups]);
