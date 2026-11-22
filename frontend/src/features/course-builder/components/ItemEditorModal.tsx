@@ -35,6 +35,7 @@ const CONTENT_TYPE_CONFIG: Record<
   ContentItemType,
   {
     label: string;
+    shortLabel: string;
     icon: SemanticIconName;
     accept: string;
     maxSizeMB: number;
@@ -45,6 +46,7 @@ const CONTENT_TYPE_CONFIG: Record<
 > = {
   video: {
     label: 'محاضرة فيديو',
+    shortLabel: 'فيديو',
     icon: 'video',
     accept: 'video/mp4,video/webm,video/ogg',
     maxSizeMB: 100,
@@ -54,6 +56,7 @@ const CONTENT_TYPE_CONFIG: Record<
   },
   pdf: {
     label: 'مستند رقمي PDF',
+    shortLabel: 'ملف PDF',
     icon: 'fileText',
     accept: 'application/pdf',
     maxSizeMB: 25,
@@ -63,7 +66,8 @@ const CONTENT_TYPE_CONFIG: Record<
   },
   image: {
     label: 'مخطط / صورة توضيحية',
-    icon: 'info',
+    shortLabel: 'صورة / مخطط',
+    icon: 'image',
     accept: 'image/png,image/jpeg,image/webp,image/svg+xml',
     maxSizeMB: 5,
     isInAppViewer: true,
@@ -72,7 +76,8 @@ const CONTENT_TYPE_CONFIG: Record<
   },
   powerpoint: {
     label: 'عرض تقديمي (PowerPoint)',
-    icon: 'file',
+    shortLabel: 'عرض PowerPoint',
+    icon: 'presentation',
     accept: '.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation',
     maxSizeMB: 25,
     isInAppViewer: false,
@@ -81,7 +86,8 @@ const CONTENT_TYPE_CONFIG: Record<
   },
   docx: {
     label: 'مستند وورد (Word)',
-    icon: 'fileText',
+    shortLabel: 'ملف Word',
+    icon: 'filePen',
     accept: '.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     maxSizeMB: 20,
     isInAppViewer: false,
@@ -90,7 +96,8 @@ const CONTENT_TYPE_CONFIG: Record<
   },
   zip: {
     label: 'أرشيف مضغوط (ZIP)',
-    icon: 'download',
+    shortLabel: 'ملف مضغوط ZIP',
+    icon: 'fileArchive',
     accept: '.zip,application/zip,application/x-zip-compressed',
     maxSizeMB: 25,
     isInAppViewer: false,
@@ -99,7 +106,8 @@ const CONTENT_TYPE_CONFIG: Record<
   },
   audio: {
     label: 'تسجيل صوتي (Audio)',
-    icon: 'info',
+    shortLabel: 'ملف صوتي',
+    icon: 'headphones',
     accept: 'audio/mpeg,audio/wav,audio/aac,audio/ogg',
     maxSizeMB: 25,
     isInAppViewer: false,
@@ -108,7 +116,8 @@ const CONTENT_TYPE_CONFIG: Record<
   },
   other: {
     label: 'ملحق تدريبي إضافي',
-    icon: 'file',
+    shortLabel: 'ملف مرفق',
+    icon: 'attachment',
     accept: '*/*',
     maxSizeMB: 20,
     isInAppViewer: false,
@@ -491,10 +500,10 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
           <button
             type="button"
             onClick={handleCancel}
-            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-neutral-light transition-colors"
+            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-neutral-light transition-colors cursor-pointer"
             aria-label="إغلاق النافذة"
           >
-            ✕
+            <Icon name="close" size="sm" />
           </button>
         </div>
 
@@ -584,9 +593,9 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                         }`}
                         data-testid={`item-type-btn-${t}`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className={`text-xs font-bold ${isSelected ? 'text-primary' : 'text-text-heading'}`}>
-                            {itemCfg.label.split(' ')[0]}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className={`text-xs font-bold leading-snug ${isSelected ? 'text-primary' : 'text-text-heading'}`}>
+                            {itemCfg.shortLabel}
                           </span>
                           <Icon name={itemCfg.icon} size="sm" className={isSelected ? 'text-primary' : 'text-text-muted'} />
                         </div>
@@ -608,8 +617,8 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                   <div className="grid grid-cols-3 gap-2">
                     {[
                       { id: 'upload', label: 'رفع ملف فيديو', icon: 'upload' },
-                      { id: 'youtube', label: 'رابط YouTube', icon: 'video' },
-                      { id: 'drive', label: 'رابط Google Drive', icon: 'file' },
+                      { id: 'youtube', label: 'رابط YouTube', icon: 'playCircle' },
+                      { id: 'drive', label: 'رابط Google Drive', icon: 'cloud' },
                     ].map((srcOption) => (
                       <button
                         key={srcOption.id}
