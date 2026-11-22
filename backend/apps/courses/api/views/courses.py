@@ -17,6 +17,7 @@ from apps.courses.api.serializers.courses import (
 )
 from apps.courses.models import (
     Course,
+    CourseAssistantLecturer,
     CourseAudienceDepartment,
     CourseAudienceJobTitle,
     CourseAudienceMetroLine,
