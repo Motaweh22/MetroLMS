@@ -60,7 +60,7 @@ def run_scheduled_job_with_idempotency(
     now = timezone.now()
     run = ScheduledJobRun.objects.filter(idempotency_key=idempotency_key).first()
     if run is not None:
-        if run.status in {"Succeeded", "Skipped"}:
+        if run.status in {"Succeeded", "Skipped", "Running"}:
             return run
         if run.status == "Failed":
             if run.retry_count >= 2:

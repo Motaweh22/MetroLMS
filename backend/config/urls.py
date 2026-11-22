@@ -19,7 +19,9 @@ if getattr(settings, "METROLMS_SERVE_FRONTEND", False):
         index_path = settings.FRONTEND_DIST_DIR / "index.html"
         if not index_path.is_file():
             return HttpResponseNotFound("Frontend build (dist/index.html) not found.")
-        return HttpResponse(index_path.read_bytes(), content_type="text/html; charset=utf-8")
+        resp = HttpResponse(index_path.read_bytes(), content_type="text/html; charset=utf-8")
+        resp["Cache-Control"] = "no-cache"
+        return resp
 
     urlpatterns += [
         re_path(r"^(?!api/).*$", _serve_spa_index, name="spa-index"),

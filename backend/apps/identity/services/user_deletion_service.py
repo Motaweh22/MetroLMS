@@ -17,6 +17,7 @@ from apps.courses.models import (
 from apps.governance.services.governance_service import record_audit_log
 from apps.groups.models import GroupAssistantAssignment, GroupJoinRequest, GroupMembership
 from apps.identity.models import (
+    DelegatedAuthority,
     DeletedUserTombstone,
     ServerSession,
     User,
@@ -66,6 +67,9 @@ def delete_user_with_d01_cascade(
     if target_user.role_id == "super_admin" and actor.role_id != "developer":
         raise UserDeletionError("PERMISSION_DENIED", "حذف السوبر أدمن مقصور على المطور فقط (INV-R4).", 403)
 
+    if target_user.role_id == "admin" and actor.role_id not in {"developer", "super_admin"}:
+        raise UserDeletionError("PERMISSION_DENIED", "حذف مدير النظام مقصور على مدير النظام الأعلى أو المطور (INV-R3).", 403)
+
     if Course.objects.filter(primary_lecturer=target_user).exists():
         raise UserDeletionError(
             "PRIMARY_LECTURER_ACTIVE",
@@ -106,6 +110,12 @@ def delete_user_with_d01_cascade(
     )
     HistoricalServiceTrainingRecord.objects.filter(user=target_user).update(
         user=None, tombstone=tombstone
+    )
+    DelegatedAuthority.objects.filter(user=target_user).update(
+        user=None, grantee_tombstone=tombstone, is_active=False
+    )
+    DelegatedAuthority.objects.filter(granted_by_user=target_user).update(
+        granted_by_user=None, granted_by_tombstone=tombstone
     )
 
     # 2. Preserve issued CertificateRecords (D-01 / TR-C3-03) while detaching from CourseAttempt

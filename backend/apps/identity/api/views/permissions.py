@@ -66,6 +66,18 @@ class RolePolicyDetailView(APIView):
         role_key = self._normalize_role_key(role_key)
         if role_key == "developer" and request.user.role_id != "developer":
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if role_key == "super_admin" and request.user.role_id != "developer":
+            return error_response(
+                "PERMISSION_DENIED",
+                "تعديل صلاحيات دور المدير الأعلى مقصور على المطور فقط.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        if role_key == "admin" and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response(
+                "PERMISSION_DENIED",
+                "تعديل صلاحيات دور مدير النظام مقصور على المدير الأعلى أو المطور.",
+                status.HTTP_403_FORBIDDEN,
+            )
         policy = RolePolicy.objects.filter(role_key=role_key).first()
         if policy is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)

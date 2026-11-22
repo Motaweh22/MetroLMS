@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.utils.dateparse import parse_date
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -12,6 +13,7 @@ from rest_framework.views import APIView
 
 from apps.identity.api.serializers.auth import AuthenticatedUserSerializer
 from apps.identity.models import User
+from apps.identity.services.auth_service import invalidate_user_sessions
 from apps.identity.services.user_deletion_service import UserDeletionError, delete_user_with_d01_cascade
 from apps.identity.services.user_overview_service import get_user_courses_and_groups_overview
 from apps.learning.models import Enrollment
@@ -26,7 +28,16 @@ from apps.organization.models import (
 )
 from shared.api import error_response, success_response
 from shared.permissions import get_visible_user_or_none
-from shared.validators import normalize_national_id, normalize_phone_e164
+from shared.validators import EGYPT_PHONE_RE, normalize_email_optional, normalize_national_id, normalize_phone_e164
+
+
+def _safe_pk(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    s = str(value).strip()
+    if s.isdigit():
+        return int(s)
+    return None
 
 
 class ProfileView(APIView):
@@ -181,12 +192,24 @@ class AdminUserListView(APIView):
             return error_response("VALIDATION_ERROR", "الاسم ورقم الهاتف مطلوبان.", status.HTTP_400_BAD_REQUEST)
         if role_id not in {"super_admin", "admin", "assistant_admin", "lecturer", "trainee"}:
             return error_response("VALIDATION_ERROR", "الدور المحدد غير صالح.", status.HTTP_400_BAD_REQUEST)
+        if role_id in {"super_admin", "admin"} and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response(
+                "PERMISSION_DENIED",
+                "إنشاء حسابات مديري النظام أو المدير الأعلى مقتصر على المدير الأعلى أو المطور.",
+                status.HTTP_403_FORBIDDEN,
+            )
 
         phone = normalize_phone_e164(raw_phone)
         if phone.startswith("01") and len(phone) == 11 and phone.isdigit():
             phone = f"+2{phone}"
+        if not EGYPT_PHONE_RE.match(phone):
+            return error_response("VALIDATION_ERROR", "يرجى إدخال رقم هاتف مصري صحيح بصيغة +201XXXXXXXXX.", status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(phone_e164=phone).exists():
             return error_response("CONFLICT", "رقم الهاتف مسجل بالفعل.", status.HTTP_409_CONFLICT)
+
+        email = normalize_email_optional(str(email)) if email is not None else None
+        if email and User.objects.filter(email=email).exists():
+            return error_response("CONFLICT", "البريد الإلكتروني مسجل بالفعل.", status.HTTP_409_CONFLICT)
 
         raw_national_id = str(request.data.get("nationalId") or request.data.get("national_id") or "").strip()
         if not raw_national_id:
@@ -209,6 +232,12 @@ class AdminUserListView(APIView):
 
         raw_service_end = str(request.data.get("serviceEndDate") or request.data.get("service_end_date") or "").strip()
         service_end_date = parse_date(raw_service_end) if raw_service_end else None
+        if service_end_date is not None and service_end_date < appointment_date:
+            return error_response(
+                "VALIDATION_ERROR",
+                "تاريخ انتهاء الخدمة لا يمكن أن يسبق تاريخ التعيين.",
+                status.HTTP_400_BAD_REQUEST,
+            )
 
         address = str(request.data.get("address") or "").strip()
         educational_qualification = str(
@@ -221,23 +250,23 @@ class AdminUserListView(APIView):
                 status.HTTP_400_BAD_REQUEST,
             )
 
-        marital_id = request.data.get("maritalStatusId") or request.data.get("marital_status_id")
-        military_id = request.data.get("militaryServiceStatusId") or request.data.get("military_service_status_id")
-        metro_line_id = request.data.get("metroLineId") or request.data.get("metro_line_id")
+        marital_id = _safe_pk(request.data.get("maritalStatusId") or request.data.get("marital_status_id"))
+        military_id = _safe_pk(request.data.get("militaryServiceStatusId") or request.data.get("military_service_status_id"))
+        metro_line_id = _safe_pk(request.data.get("metroLineId") or request.data.get("metro_line_id"))
 
         marital_obj = (
             MaritalStatusCatalog.objects.filter(pk=marital_id).first()
-            if marital_id
+            if marital_id is not None
             else MaritalStatusCatalog.objects.order_by("id").first()
         )
         military_obj = (
             MilitaryServiceStatusCatalog.objects.filter(pk=military_id).first()
-            if military_id
+            if military_id is not None
             else MilitaryServiceStatusCatalog.objects.order_by("id").first()
         )
         metro_line_obj = (
             MetroLine.objects.filter(pk=metro_line_id).first()
-            if metro_line_id
+            if metro_line_id is not None
             else MetroLine.objects.order_by("id").first()
         )
         if marital_obj is None or military_obj is None or metro_line_obj is None:
@@ -267,6 +296,8 @@ class AdminUserListView(APIView):
             )
         except ValidationError as exc:
             return error_response("VALIDATION_ERROR", "; ".join(exc.messages), status.HTTP_400_BAD_REQUEST)
+        except IntegrityError:
+            return error_response("CONFLICT", "تعارض في البيانات الفريدة (رقم الهاتف أو الرقم القومي أو البريد).", status.HTTP_409_CONFLICT)
 
         dept_name = str(request.data.get("department") or "").strip()
         job_name = str(request.data.get("jobTitle") or "").strip()
@@ -392,17 +423,19 @@ class AdminUserDeleteView(APIView):
             target.educational_qualification = qual
 
         if "maritalStatusId" in data or "marital_status_id" in data:
-            mid = data.get("maritalStatusId") or data.get("marital_status_id")
-            if mid:
-                m_obj = MaritalStatusCatalog.objects.filter(pk=mid).first()
+            raw_mid = data.get("maritalStatusId") or data.get("marital_status_id")
+            if raw_mid is not None and raw_mid != "":
+                mid = _safe_pk(raw_mid)
+                m_obj = MaritalStatusCatalog.objects.filter(pk=mid).first() if mid is not None else None
                 if m_obj is None:
                     return error_response("VALIDATION_ERROR", "الحالة الاجتماعية غير صالحة.", status.HTTP_400_BAD_REQUEST)
                 target.marital_status = m_obj
 
         if "militaryServiceStatusId" in data or "military_service_status_id" in data:
-            mil_id = data.get("militaryServiceStatusId") or data.get("military_service_status_id")
-            if mil_id:
-                mil_obj = MilitaryServiceStatusCatalog.objects.filter(pk=mil_id).first()
+            raw_mil = data.get("militaryServiceStatusId") or data.get("military_service_status_id")
+            if raw_mil is not None and raw_mil != "":
+                mil_id = _safe_pk(raw_mil)
+                mil_obj = MilitaryServiceStatusCatalog.objects.filter(pk=mil_id).first() if mil_id is not None else None
                 if mil_obj is None:
                     return error_response("VALIDATION_ERROR", "الموقف من التجنيد غير صالح.", status.HTTP_400_BAD_REQUEST)
                 target.military_service_status = mil_obj
@@ -412,9 +445,10 @@ class AdminUserDeleteView(APIView):
         old_job_ids = set(target.user_job_titles.values_list("job_title_id", flat=True))
 
         if "metroLineId" in data or "metro_line_id" in data:
-            line_id = data.get("metroLineId") or data.get("metro_line_id")
-            if line_id:
-                line_obj = MetroLine.objects.filter(pk=line_id).first()
+            raw_line = data.get("metroLineId") or data.get("metro_line_id")
+            if raw_line is not None and raw_line != "":
+                line_id = _safe_pk(raw_line)
+                line_obj = MetroLine.objects.filter(pk=line_id).first() if line_id is not None else None
                 if line_obj is None:
                     return error_response("VALIDATION_ERROR", "خط المترو غير صالح.", status.HTTP_400_BAD_REQUEST)
                 target.metro_line = line_obj
@@ -435,11 +469,23 @@ class AdminUserDeleteView(APIView):
                 target.set_password(raw_pw)
                 password_changed = True
 
+        if target.service_end_date is not None and target.appointment_date is not None and target.service_end_date < target.appointment_date:
+            return error_response(
+                "VALIDATION_ERROR",
+                "تاريخ انتهاء الخدمة لا يمكن أن يسبق تاريخ التعيين.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             target.full_clean()
             target.save()
         except ValidationError as exc:
             return error_response("VALIDATION_ERROR", "; ".join(exc.messages), status.HTTP_400_BAD_REQUEST)
+        except IntegrityError:
+            return error_response("CONFLICT", "تعارض في البيانات الفريدة (رقم الهاتف أو الرقم القومي أو البريد).", status.HTTP_409_CONFLICT)
+
+        if password_changed and target.id != request.user.id:
+            invalidate_user_sessions(target.id)
 
         if "department" in data or "jobTitle" in data:
             dept_name = str(data.get("department") or "").strip()
@@ -553,16 +599,30 @@ class AdminUserRoleView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
         if target.id == request.user.id:
             return error_response("SELF_MUTATION_BLOCKED", "لا يمكنك تعديل دور حسابك الشخصي.", status.HTTP_403_FORBIDDEN)
-        if target.role_id == "super_admin" and request.user.role_id not in {"developer", "super_admin"}:
-            return error_response("PERMISSION_DENIED", "لا يمكن تعديل دور المدير الأعلى إلا بواسطة مدير أعلى.", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "developer":
+            return error_response("PERMISSION_DENIED", "لا يمكن تعديل دور حساب المطور.", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "super_admin" and request.user.role_id != "developer":
+            return error_response("PERMISSION_DENIED", "تعديل دور المدير الأعلى مقصور على المطور فقط (INV-R6).", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "admin" and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response("PERMISSION_DENIED", "تعديل دور مدير النظام مقصور على المدير الأعلى أو المطور (INV-R3).", status.HTTP_403_FORBIDDEN)
         raw_role = str(request.data.get("role") or request.data.get("newRole") or "").strip()
         mapped_role = "trainee" if raw_role == "user" else raw_role
         if mapped_role not in {"super_admin", "admin", "assistant_admin", "lecturer", "trainee"}:
             return error_response("VALIDATION_ERROR", "الدور المحدد غير صالح.", status.HTTP_400_BAD_REQUEST)
-        if mapped_role == "super_admin" and request.user.role_id not in {"developer", "super_admin"}:
-            return error_response("PERMISSION_DENIED", "منح دور المدير الأعلى مقتصر على المدير الأعلى.", status.HTTP_403_FORBIDDEN)
+        if mapped_role in {"super_admin", "admin"} and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response("PERMISSION_DENIED", "منح دور المدير أو المدير الأعلى مقتصر على المدير الأعلى أو المطور.", status.HTTP_403_FORBIDDEN)
+        old_role = target.role_id
         target.role_id = mapped_role
         target.save(update_fields=["role"])
+        from apps.governance.services.governance_service import record_audit_log
+
+        record_audit_log(
+            action="user.role_changed",
+            actor=request.user,
+            target_entity_type="User",
+            target_entity_id=str(target.id),
+            details_snapshot={"oldRole": old_role, "newRole": mapped_role},
+        )
         return success_response(
             {
                 "id": str(target.id),
@@ -594,18 +654,30 @@ class AdminUserStatusView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
         if target.id == request.user.id:
             return error_response("SELF_MUTATION_BLOCKED", "لا يمكنك إيقاف أو تعديل حالة حسابك الشخصي.", status.HTTP_403_FORBIDDEN)
-        if target.role_id == "super_admin" and request.user.role_id not in {"developer", "super_admin"}:
-            return error_response("PERMISSION_DENIED", "لا يمكن تعديل حالة المدير الأعلى إلا بواسطة مدير أعلى.", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "developer":
+            return error_response("PERMISSION_DENIED", "لا يمكن تعديل حالة حساب المطور.", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "super_admin" and request.user.role_id != "developer":
+            return error_response("PERMISSION_DENIED", "تعديل حالة المدير الأعلى مقصور على المطور فقط (INV-R6).", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "admin" and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response("PERMISSION_DENIED", "تعديل حالة مدير النظام مقصور على المدير الأعلى أو المطور (INV-R3).", status.HTTP_403_FORBIDDEN)
         raw_status = str(request.data.get("status") or "").strip().lower()
         mapped_status = {"active": "Active", "suspended": "Suspended", "inactive": "Suspended"}.get(raw_status)
         if not mapped_status:
             return error_response("VALIDATION_ERROR", "حالة الحساب غير صالحة.", status.HTTP_400_BAD_REQUEST)
+        old_status = target.status
         target.status = mapped_status
         target.save(update_fields=["status"])
         if mapped_status == "Suspended":
-            from apps.identity.models import UserSession
+            invalidate_user_sessions(target.id)
+        from apps.governance.services.governance_service import record_audit_log
 
-            UserSession.objects.filter(user=target).delete()
+        record_audit_log(
+            action="user.status_changed",
+            actor=request.user,
+            target_entity_type="User",
+            target_entity_id=str(target.id),
+            details_snapshot={"oldStatus": old_status, "newStatus": mapped_status},
+        )
         return success_response({"id": str(target.id), "status": target.status})
 
     def put(self, request: Request, user_id: int):

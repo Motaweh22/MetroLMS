@@ -100,7 +100,9 @@ def validate_https_url(value: str | None) -> None:
     """Validate that a non-null URL uses the https scheme and includes a network host."""
     if value is None:
         return
-    parsed = urlparse(value)
+    if any(ch in value for ch in ("\r", "\n", "\x00")):
+        raise ValidationError("URL contains invalid control characters.")
+    parsed = urlparse(value.strip())
     if parsed.scheme.lower() != "https" or not parsed.netloc:
         raise ValidationError("URL must be a valid HTTPS URL.")
 

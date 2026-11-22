@@ -94,7 +94,13 @@ class LocalMediaStorage:
         if spec is None:
             raise MediaStorageError("UNSUPPORTED_MEDIA_TYPE", "نوع الملف غير مدعوم.", 415)
 
-        max_mb = int(os.environ.get(str(spec["max_mb_env"]), str(spec["default_mb"])))
+        raw_max_mb = (os.environ.get(str(spec["max_mb_env"])) or "").strip()
+        try:
+            max_mb = int(raw_max_mb) if raw_max_mb else int(spec["default_mb"])
+        except ValueError:
+            max_mb = int(spec["default_mb"])
+        if max_mb <= 0:
+            max_mb = int(spec["default_mb"])
         max_bytes = max_mb * 1024 * 1024
 
         staging_dir = self.root / "staging"
