@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
-import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
+import { useUnsavedChangesGuard } from '@/core/navigation/useUnsavedChangesGuard';
 import { AddUserForm } from '@/features/user-management/components/AddUserForm';
 
 /**
@@ -13,25 +14,19 @@ export const AddUserPage: React.FC = () => {
   const navigate = useNavigate();
   const [isDirty, setIsDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false);
 
-  useEffect(() => {
-    if (!isDirty || isSubmitting) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty, isSubmitting]);
+  const { guardDialog, handleSafeNavigate } = useUnsavedChangesGuard({
+    isDirty: isDirty && !isSubmitting,
+    title: 'تأكيد مغادرة الصفحة',
+    message:
+      'لديك بيانات غير محفوظة في نموذج إضافة المستخدم. هل أنت متأكد من رغبتك في المغادرة وتجاهل هذه التغييرات؟',
+    confirmLabel: 'نعم، مغادرة الصفحة',
+    cancelLabel: 'البقاء والمتابعة',
+  });
 
   const handleNavigateBack = () => {
     if (isSubmitting) return;
-    if (isDirty) {
-      setIsLeaveConfirmOpen(true);
-      return;
-    }
-    navigate('/admin/users');
+    handleSafeNavigate('/admin/users');
   };
 
   return (
@@ -44,12 +39,6 @@ export const AddUserPage: React.FC = () => {
       <nav aria-label="مسار التنقل" className="flex items-center gap-2 text-xs text-text-muted">
         <Link
           to="/admin/users"
-          onClick={(e) => {
-            if (isDirty && !isSubmitting) {
-              e.preventDefault();
-              handleNavigateBack();
-            }
-          }}
           data-testid="breadcrumb-users-link"
           className="hover:text-primary transition-colors flex items-center gap-1 font-medium"
         >
@@ -97,23 +86,14 @@ export const AddUserPage: React.FC = () => {
         onCancel={handleNavigateBack}
         onDirtyChange={setIsDirty}
         onSubmittingChange={setIsSubmitting}
-        onUserCreated={() => navigate('/admin/users')}
-      />
-
-      {/* Styled Unsaved Changes Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={isLeaveConfirmOpen}
-        title="تأكيد مغادرة الصفحة"
-        message="لديك بيانات غير محفوظة في نموذج إضافة المستخدم. هل أنت متأكد من رغبتك في المغادرة وتجاهل هذه التغييرات؟"
-        confirmLabel="نعم، مغادرة الصفحة"
-        cancelLabel="البقاء والمتابعة"
-        variant="warning"
-        onCancel={() => setIsLeaveConfirmOpen(false)}
-        onConfirm={() => {
-          setIsLeaveConfirmOpen(false);
+        onUserCreated={() => {
+          flushSync(() => setIsDirty(false));
           navigate('/admin/users');
         }}
       />
+
+      {/* Global Navigation Guard Dialog (blocks Sidebar, Topbar, Breadcrumb, Back/Forward, and Cancel) */}
+      {guardDialog}
     </div>
   );
 };
