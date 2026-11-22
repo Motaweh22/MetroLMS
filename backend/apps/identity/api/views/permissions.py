@@ -129,6 +129,20 @@ class UserOverrideDetailView(APIView):
     def patch(self, request: Request, user_id: int):
         return self._update(request, user_id)
 
+    def delete(self, request: Request, user_id: int):
+        target = get_visible_user_or_none(request.user, user_id)
+        if target is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        decision = evaluate_permission(request.user, "permissions.configure_users", target_user=target)
+        if not decision.granted:
+            return error_response(
+                decision.invariant_code or "PERMISSION_DENIED",
+                decision.reason_ar,
+                status.HTTP_403_FORBIDDEN,
+            )
+        UserPermissionOverride.objects.filter(user=target).delete()
+        return success_response({"success": True, "message": "تم إعادة تعيين صلاحيات المستخدم للوضع الافتراضي."})
+
     def _update(self, request: Request, user_id: int):
         target = get_visible_user_or_none(request.user, user_id)
         if target is None:

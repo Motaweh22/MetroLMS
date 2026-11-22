@@ -162,6 +162,43 @@ class CourseWhatsAppContactsView(APIView):
             status_code=status.HTTP_201_CREATED,
         )
 
+    def put(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_allowed = (
+            request.user.role_id in {"developer", "super_admin", "admin"}
+            or course.primary_lecturer_id == request.user.id
+            or course.assistant_lecturers.filter(user=request.user).exists()
+        )
+        if not is_allowed:
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعديل جهات دعم هذه الدورة.", status.HTTP_403_FORBIDDEN)
+        raw_contacts = request.data.get("contacts")
+        if raw_contacts is not None and not isinstance(raw_contacts, list):
+            return error_response("VALIDATION_ERROR", "قائمة جهات الاتصال غير صالحة.", status.HTTP_400_BAD_REQUEST)
+        from django.db import transaction
+
+        with transaction.atomic():
+            WhatsAppContact.objects.filter(course=course).delete()
+            saved = []
+            for entry in raw_contacts or []:
+                if not isinstance(entry, dict):
+                    continue
+                raw_phone = str(entry.get("phoneE164") or entry.get("number") or "").strip()
+                if raw_phone.startswith("01") and len(raw_phone) == 11 and raw_phone.isdigit():
+                    raw_phone = f"+2{raw_phone}"
+                elif raw_phone.startswith("201") and len(raw_phone) == 12 and raw_phone.isdigit():
+                    raw_phone = f"+{raw_phone}"
+                label = str(entry.get("label") or entry.get("name") or "دعم المقرر").strip()
+                if not raw_phone:
+                    continue
+                try:
+                    c = add_course_whatsapp_contact(course=course, phone_e164=raw_phone, label=label)
+                    saved.append({"id": c.id, "phoneE164": c.phone_e164, "label": c.label})
+                except CommunicationsDomainError as exc:
+                    return error_response(exc.code, exc.message, exc.status_code)
+        return success_response({"courseId": str(course.id), "contacts": saved})
+
 
 class CourseWhatsAppContactDeleteView(APIView):
     """DELETE /api/courses/<course_id>/whatsapp-contacts/<contact_id>."""

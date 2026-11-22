@@ -535,22 +535,71 @@ class AdminCourseReviewDecideView(APIView):
 
 
 class AdminCourseStagedEditView(APIView):
-    """POST /api/admin/courses/<course_id>/review/staged-edits."""
+    """GET / POST / PUT / DELETE /api/admin/courses/<course_id>/review/staged-edits."""
 
     permission_classes = [IsAuthenticated, has_capability("reviews.decide_course")]
+
+    def _get_submission(self, course_id: int, sub_id=None):
+        qs = CourseReviewSubmission.objects.filter(course_id=course_id)
+        if sub_id is not None and str(sub_id).strip():
+            if not str(sub_id).strip().isdigit():
+                return None, error_response("VALIDATION_ERROR", "معرف طلب المراجعة غير صالح.", status.HTTP_400_BAD_REQUEST)
+            sub = qs.filter(pk=int(str(sub_id).strip())).first()
+        else:
+            sub = qs.filter(review_status="Pending").order_by("-id").first() or qs.order_by("-id").first()
+        return sub, None
+
+    def get(self, request: Request, course_id: int):
+        sub, err = self._get_submission(course_id, request.query_params.get("submissionId"))
+        if err is not None:
+            return err
+        latest = StagedAdminEdit.objects.filter(submission=sub).order_by("-id").first() if sub is not None else None
+        if latest is None:
+            return success_response({"record": None})
+        return success_response(
+            {
+                "record": {
+                    "id": str(latest.id),
+                    "courseId": str(course_id),
+                    "payload": latest.edit_payload_json,
+                    "updatedAt": latest.created_at.isoformat() if latest.created_at else None,
+                }
+            }
+        )
 
     def post(self, request: Request, course_id: int):
         sub_id = request.data.get("submissionId")
         payload = request.data.get("editPayload")
-        if sub_id is None or not str(sub_id).strip().isdigit():
-            return error_response("VALIDATION_ERROR", "معرف طلب المراجعة غير صالح.", status.HTTP_400_BAD_REQUEST)
-        sub = CourseReviewSubmission.objects.filter(pk=int(str(sub_id).strip()), course_id=course_id).first()
+        if payload is None and isinstance(request.data, dict) and sub_id is None:
+            payload = dict(request.data)
+        sub, err = self._get_submission(course_id, sub_id)
+        if err is not None:
+            return err
         if sub is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         if not isinstance(payload, dict):
             return error_response("VALIDATION_ERROR", "طلب غير صالح. يرجى مراجعة البيانات المدخلة.", status.HTTP_400_BAD_REQUEST)
         edit = StagedAdminEdit.objects.create(submission=sub, edit_payload_json=payload, created_at=timezone.now())
-        return success_response({"stagedEditId": edit.id}, status_code=status.HTTP_201_CREATED)
+        return success_response(
+            {
+                "stagedEditId": edit.id,
+                "saved": True,
+                "revision": str(edit.id),
+            },
+            status_code=status.HTTP_201_CREATED,
+        )
+
+    def put(self, request: Request, course_id: int):
+        return self.post(request, course_id)
+
+    def delete(self, request: Request, course_id: int):
+        sub, err = self._get_submission(course_id, request.query_params.get("submissionId"))
+        if err is not None:
+            return err
+        deleted = 0
+        if sub is not None:
+            deleted, _ = StagedAdminEdit.objects.filter(submission=sub).delete()
+        return success_response({"discarded": True, "deletedCount": deleted})
 
 
 class CourseCommentListView(APIView):
@@ -599,13 +648,16 @@ class CourseCommentReportView(APIView):
 
 
 class AdminCommentModerationView(APIView):
-    """POST /api/admin/comments/<comment_id>/ignore-report."""
+    """POST / PATCH /api/admin/comments/<comment_id>/ignore-report."""
 
     permission_classes = [IsAuthenticated, has_capability("comments.ignore_report")]
 
     def post(self, request: Request, comment_id: int):
         updated = CourseCommentReport.objects.filter(comment_id=comment_id, status="Pending").update(status="Dismissed")
         return success_response({"dismissedCount": updated})
+
+    def patch(self, request: Request, comment_id: int):
+        return self.post(request, comment_id)
 
 
 class ApprovalsQueueView(APIView):
@@ -748,7 +800,7 @@ class AdminCommentDeleteView(APIView):
 
 
 class AdminCourseCommentsToggleView(APIView):
-    """POST / PUT /api/admin/courses/<course_id>/comments-toggle."""
+    """POST / PUT / PATCH /api/admin/courses/<course_id>/comments-toggle."""
 
     permission_classes = [IsAuthenticated, has_capability("comments.ignore_report")]
 
@@ -756,13 +808,19 @@ class AdminCourseCommentsToggleView(APIView):
         course = Course.objects.filter(pk=course_id).first()
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "الدورة غير موجودة.", status.HTTP_404_NOT_FOUND)
-        enabled = bool(request.data.get("enabled", True))
+        raw_enabled = request.data.get("commentsEnabled")
+        if raw_enabled is None:
+            raw_enabled = request.data.get("enabled", True)
+        enabled = bool(raw_enabled)
         return success_response({"courseId": str(course.id), "commentsEnabled": enabled})
 
     def post(self, request: Request, course_id: int):
         return self._toggle(request, course_id)
 
     def put(self, request: Request, course_id: int):
+        return self._toggle(request, course_id)
+
+    def patch(self, request: Request, course_id: int):
         return self._toggle(request, course_id)
 
 
@@ -884,15 +942,18 @@ class AdminCourseReviewActionView(APIView):
 
 
 class AdminCourseWorkingNotesView(APIView):
-    """GET / POST / DELETE working notes & staged edits aliases."""
+    """GET / POST / PUT / DELETE working notes & staged edits aliases."""
 
     permission_classes = [IsAuthenticated, has_capability("reviews.decide_course")]
 
-    def get(self, request: Request, course_id: int):
+    def get(self, request: Request, course_id: int, target_type: str = "", target_id: str = ""):
         return success_response({"notes": [], "stagedEdits": []})
 
-    def post(self, request: Request, course_id: int):
+    def post(self, request: Request, course_id: int, target_type: str = "", target_id: str = ""):
         return success_response({"saved": True}, status_code=status.HTTP_201_CREATED)
+
+    def put(self, request: Request, course_id: int, target_type: str = "", target_id: str = ""):
+        return success_response({"saved": True, "notes": []})
 
     def delete(self, request: Request, course_id: int, target_type: str = "", target_id: str = ""):
         return success_response({"deleted": True})

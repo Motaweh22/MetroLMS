@@ -1173,6 +1173,9 @@ class AdminGroupMaterialFileDetailView(APIView):
                     return success_response(f)
         return error_response("RESOURCE_NOT_FOUND", "الملف غير موجود.", status.HTTP_404_NOT_FOUND)
 
+    def patch(self, request: Request, group_id: int, file_id: str):
+        return self.put(request, group_id, file_id)
+
     def delete(self, request: Request, group_id: int, file_id: str):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
