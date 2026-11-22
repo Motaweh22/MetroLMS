@@ -58,8 +58,8 @@ export interface LessonDiffItem {
   adminTitle?: string;
   baselineType?: string;
   adminType?: string;
-  baselineDuration?: string;
-  adminDuration?: string;
+  baselineDuration?: string | number;
+  adminDuration?: string | number;
   baselineDownloadPolicy?: string;
   adminDownloadPolicy?: string;
   baselineOrder?: number;
@@ -931,9 +931,17 @@ export const CourseDiffViewerModal: React.FC<CourseDiffViewerModalProps> = ({
                             {item.baselineDuration !== item.adminDuration && (
                               <div className="flex items-center gap-1">
                                 <span>المدة:</span>
-                                <span className="line-through text-danger">{item.baselineDuration || 'غير محدد'}</span>
+                                <span className="line-through text-danger">
+                                  {item.baselineDuration !== undefined && item.baselineDuration !== ''
+                                    ? item.baselineDuration
+                                    : 'غير محدد'}
+                                </span>
                                 <Icon name="chevronLeft" size="sm" className="text-text-muted" />
-                                <span className="font-bold text-success">{item.adminDuration}</span>
+                                <span className="font-bold text-success">
+                                  {item.adminDuration !== undefined && item.adminDuration !== ''
+                                    ? item.adminDuration
+                                    : 'غير محدد'}
+                                </span>
                               </div>
                             )}
 
