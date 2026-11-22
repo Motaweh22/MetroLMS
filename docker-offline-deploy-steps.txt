@@ -1,0 +1,164 @@
+================================================================================
+MetroLMS - Windows Docker Container Offline Build, Transfer & Deploy Guide
+================================================================================
+
+Overview:
+- Build the Docker image once on a build machine (with internet access and
+  Docker set to Windows Containers mode).
+- Export the image to a single archive (metrolms-app.tar) and copy it to the
+  target server.
+- On the target server: load the image and run it directly with `docker run`
+  (no `docker compose` or internet access required).
+- SQL Server database, media folder, and `backend\.env.docker` live OUTSIDE the
+  container on the host, so they are preserved across container updates.
+
+
+================================================================================
+Phase 1: On the Build Machine (with Internet Access)
+================================================================================
+
+Note: Make sure Docker on the build machine is switched to "Windows Containers".
+
+1) Open PowerShell or CMD inside the project folder and pull the latest code:
+   git pull origin main
+
+2) Build the Docker image from Dockerfile.windows:
+   docker build -f Dockerfile.windows --build-arg WINDOWS_BASE_TAG=ltsc2022 -t metrolms-app:latest .
+
+   - Note: Builds the full production Frontend + Django Backend image tagged
+     as `metrolms-app:latest`.
+   - Optional: To hide login test cards in production, add:
+     --build-arg VITE_SHOW_TEST_CARDS=false
+
+3) Export the image to a single `.tar` file for transfer:
+   docker save -o metrolms-app.tar metrolms-app:latest
+
+   - Note: Creates `metrolms-app.tar` in the project directory. Copy this file
+     to the target server (USB drive / network share).
+
+
+================================================================================
+Phase 2: Server Preparation (One-Time Setup)
+================================================================================
+
+1) Prepare SQL Server on the server:
+   - Create the database (e.g., `MetroLMS`) or restore it from a backup.
+   - In SQL Server Configuration Manager: enable `TCP/IP` on port `1433`
+     (IPAll -> clear TCP Dynamic Ports, set TCP Port = 1433) and restart the
+     SQL Server service.
+   - Enable Mixed Mode Authentication (SQL Server and Windows Authentication)
+     so SQL logins (`DB_USER` / `DB_PASSWORD`) are accepted.
+   - Ensure Windows Firewall allows inbound TCP on port `1433` (for container
+     to SQL Server) and port `8000` (for users accessing the web app).
+
+2) Create the persistent host media folder (stores uploaded course videos/PDFs
+   outside the container):
+   mkdir D:\MetroLMSMedia
+
+3) Create `backend\.env.docker` on the server with your environment settings:
+
+   --- Start of backend\.env.docker ---
+   DJANGO_SETTINGS_MODULE=config.settings.development
+   DJANGO_SECRET_KEY=REPLACE_WITH_LONG_RANDOM_SECRET_KEY
+   DJANGO_DEBUG=False
+   DJANGO_ALLOWED_HOSTS=SERVER_IP,localhost,127.0.0.1
+
+   DB_ENGINE=mssql
+   DB_NAME=MetroLMS
+   DB_USER=sa
+   DB_PASSWORD=YOUR_SQL_PASSWORD
+   DB_HOST=AUTO
+   DB_PORT=1433
+   DB_ODBC_DRIVER=ODBC Driver 18 for SQL Server
+   DB_TRUST_SERVER_CERTIFICATE=True
+
+   SESSION_COOKIE_SECURE=False
+   CSRF_COOKIE_SECURE=False
+   CSRF_TRUSTED_ORIGINS=http://SERVER_IP:8000,http://localhost:8000,http://127.0.0.1:8000
+
+   METROLMS_SERVE_FRONTEND=True
+   METROLMS_MEDIA_HOST_DIR=D:\MetroLMSMedia
+   METROLMS_DOCKER_BIND=8000
+   DJANGO_LOG_LEVEL=INFO
+   --- End of backend\.env.docker ---
+
+   Important Notes for `backend\.env.docker`:
+   - DB_HOST=AUTO: Automatically detects the container's active Default Gateway
+     IP on startup to reach SQL Server on the SAME host, even if the gateway
+     IP changes on every container run. If SQL Server is on a SEPARATE machine,
+     set `DB_HOST` to that machine's IP or hostname instead.
+   - Never use `localhost` or `127.0.0.1` for `DB_HOST` (inside a container,
+     localhost refers to the container itself).
+   - If running behind IIS Reverse Proxy with HTTPS:
+     * Set `DJANGO_SETTINGS_MODULE=config.settings.production`
+     * Set `SESSION_COOKIE_SECURE=True` and `CSRF_COOKIE_SECURE=True`
+     * Set `CSRF_TRUSTED_ORIGINS=https://your-domain.com`
+
+
+================================================================================
+Phase 3: On the Target Server — Load & Run the Container
+================================================================================
+
+1) Copy `metrolms-app.tar` to the server and open CMD or PowerShell in the
+   folder containing `backend\.env.docker`.
+
+2) Load the image into Docker:
+   docker load -i metrolms-app.tar
+
+   (Optional) Verify the image is loaded:
+   docker images
+
+3) If an older container with the same name exists, remove it first:
+   docker rm -f metrolms-app
+
+4) Start the container (single-line command, works in both CMD and PowerShell):
+   docker run -d --name metrolms-app --restart unless-stopped -p 8000:8000 --env-file backend\.env.docker -e METROLMS_SERVE_FRONTEND=True -e METROLMS_FRONTEND_DIST_DIR="C:\app\frontend\dist" -e METROLMS_MEDIA_ROOT="C:\MetroLMSMedia" -e METROLMS_RUN_MIGRATIONS_ON_START=True -v D:\MetroLMSMedia:C:\MetroLMSMedia metrolms-app:latest
+
+   Flag Summary:
+   - `--name metrolms-app`                  : Container name.
+   - `--restart unless-stopped`             : Auto-starts after server reboot.
+   - `-p 8000:8000`                         : Maps host port 8000 to container port 8000.
+   - `--env-file backend\.env.docker`       : Loads runtime DB & Django settings.
+   - `-e METROLMS_RUN_MIGRATIONS_ON_START=True` : Runs Django migrations on start.
+   - `-v D:\MetroLMSMedia:C:\MetroLMSMedia` : Mounts host media folder inside container.
+
+5) Verify startup and logs:
+   docker ps
+   docker logs -f metrolms-app
+
+   - Once `Serving on http://0.0.0.0:8000` appears without DB errors, open:
+     http://localhost:8000  or  http://SERVER_IP:8000
+
+   (Optional) Seed demo/test accounts on a fresh database:
+   docker exec metrolms-app python manage.py seed_demo_roles
+
+
+================================================================================
+Phase 4: Updating the Application Later (Preserves DB & Media)
+================================================================================
+
+1) On the build machine:
+   git pull origin main
+   docker build -f Dockerfile.windows --build-arg WINDOWS_BASE_TAG=ltsc2022 -t metrolms-app:latest .
+   docker save -o metrolms-app.tar metrolms-app:latest
+
+2) Copy the new `metrolms-app.tar` to the server, then run on the server:
+   docker load -i metrolms-app.tar
+   docker rm -f metrolms-app
+   docker run -d --name metrolms-app --restart unless-stopped -p 8000:8000 --env-file backend\.env.docker -e METROLMS_SERVE_FRONTEND=True -e METROLMS_FRONTEND_DIST_DIR="C:\app\frontend\dist" -e METROLMS_MEDIA_ROOT="C:\MetroLMSMedia" -e METROLMS_RUN_MIGRATIONS_ON_START=True -v D:\MetroLMSMedia:C:\MetroLMSMedia metrolms-app:latest
+
+   - Note: SQL Server data, `D:\MetroLMSMedia`, and `backend\.env.docker`
+     remain untouched, and any new database migrations run automatically.
+
+
+================================================================================
+Quick Maintenance Commands on the Server
+================================================================================
+
+- List running containers     : docker ps
+- Follow live logs            : docker logs -f metrolms-app
+- Stop container temporarily  : docker stop metrolms-app
+- Restart container           : docker restart metrolms-app
+- Remove container            : docker rm -f metrolms-app
+- Open shell inside container : docker exec -it metrolms-app cmd
+================================================================================
