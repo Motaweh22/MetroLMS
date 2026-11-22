@@ -1434,9 +1434,13 @@ class CourseArchiveZipDownloadView(APIView):
 
         safe_course = _re.sub(r'[\\/:*?"<>|]+', "_", course.title).strip() or f"Course_{course.id}"
         filename = f"{safe_course}_Bundle.zip"
-        response = StreamingHttpResponse(_stream_chunks(), content_type="application/zip")
+        is_blob_fetch = request.headers.get("X-MetroLMS-Blob") == "1"
+        content_type = "application/x-metrolms-bundle" if is_blob_fetch else "application/zip"
+        response = StreamingHttpResponse(_stream_chunks(), content_type=content_type)
         response["Content-Length"] = str(total_size)
-        response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+        response["Cache-Control"] = "no-store"
+        if not is_blob_fetch:
+            response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
         return response
 
 

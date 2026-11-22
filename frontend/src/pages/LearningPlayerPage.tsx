@@ -567,9 +567,12 @@ export const LearningPlayerPage: React.FC = () => {
                           {
                             method: 'GET',
                             credentials: 'include',
+                            headers: {
+                              'X-MetroLMS-Blob': '1',
+                            },
                           }
                         );
-                        if (!res.ok) {
+                        if (!res.ok || res.status === 204) {
                           let errMsg = 'تعذر تنزيل أرشيف الدورة.';
                           try {
                             const errJson = await res.json();
@@ -584,7 +587,12 @@ export const LearningPlayerPage: React.FC = () => {
                           setZipDownloadError(errMsg);
                           return;
                         }
-                        const blob = await res.blob();
+                        const buffer = await res.arrayBuffer();
+                        if (!buffer || buffer.byteLength === 0) {
+                          setZipDownloadError('تم اعتراض التحميل أو أن الأرشيف فارغ.');
+                          return;
+                        }
+                        const blob = new Blob([buffer], { type: 'application/zip' });
                         const blobUrl = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = blobUrl;
