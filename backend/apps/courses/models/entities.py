@@ -255,6 +255,7 @@ class CourseDraft(models.Model):
         related_name="draft",
     )
     title_snapshot = models.CharField(max_length=255)
+    course_zip_policy = models.CharField(max_length=32, default="disabled", db_default="disabled")
     refresher_config_json = models.JSONField(null=True, blank=True, default=None)
     updated_at = models.DateTimeField()
     updated_by_user = models.ForeignKey(
@@ -298,6 +299,7 @@ class PublishedCourseVersion(models.Model):
         related_name="published_versions",
     )
     version_number = models.IntegerField()
+    course_zip_policy = models.CharField(max_length=32, default="disabled", db_default="disabled")
     refresher_config_json = models.JSONField(null=True, blank=True, default=None)
     published_at = models.DateTimeField()
     published_by_user = models.ForeignKey(

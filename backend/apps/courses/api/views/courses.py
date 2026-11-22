@@ -428,6 +428,9 @@ class LecturerCourseDraftView(APIView):
                 refresher_config=request.data.get("refresherConfig")
                 if isinstance(request.data.get("refresherConfig"), dict)
                 else None,
+                course_zip_policy=str(request.data.get("courseZipPolicy"))
+                if request.data.get("courseZipPolicy") is not None
+                else None,
             )
             _purge_unreferenced_course_media(previous_draft_asset_ids)
             if course.lifecycle_status == "Draft":
@@ -1261,5 +1264,154 @@ class AdminScopeCourseVisibilityUpdateView(APIView):
                 "message": "تم حفظ تخصيص الكورسات بنجاح.",
             }
         )
+
+
+class CourseArchiveZipDownloadView(APIView):
+    """Stream a ZIP archive of eligible downloadable course files when courseZipPolicy allows."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, course_id: int):
+        import re as _re
+        import tempfile
+        import zipfile
+        from urllib.parse import quote
+        from django.http import FileResponse
+        from apps.learning.models import CourseAttempt, Enrollment, LessonProgress
+        from apps.media.models import MediaContentReference
+        from infrastructure.storage import LocalMediaStorage
+
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response(
+                "RESOURCE_NOT_FOUND",
+                "المقرر المطلوب غير موجود.",
+                status.HTTP_404_NOT_FOUND,
+            )
+
+        is_staff_or_lecturer = (
+            request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
+            or course.primary_lecturer_id == request.user.id
+            or CourseAssistantLecturer.objects.filter(course=course, user=request.user).exists()
+        )
+
+        pub = PublishedCourseVersion.objects.filter(course=course).order_by("-version_number").first()
+        draft = CourseDraft.objects.filter(course=course).first()
+        source_obj = pub if pub is not None else draft
+        zip_policy = getattr(source_obj, "course_zip_policy", "disabled") or "disabled"
+
+        if not is_staff_or_lecturer:
+            if zip_policy == "disabled":
+                return error_response(
+                    "ZIP_DOWNLOAD_DISABLED",
+                    "تنزيل أرشيف الدورة المجمع غير مفعل لهذا المقرر.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+            enrolled = Enrollment.objects.filter(
+                user=request.user,
+                course=course,
+                grant_status="active",
+            ).exists()
+            if not enrolled:
+                return error_response(
+                    "ENROLLMENT_REQUIRED",
+                    "يجب التسجيل في الدورة أولاً لتنزيل الأرشيف.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+
+        # Compute trainee completion status if needed
+        is_course_completed = is_staff_or_lecturer
+        completed_lesson_ids: set[int] = set()
+        if not is_staff_or_lecturer:
+            attempts = CourseAttempt.objects.filter(
+                enrollment__user=request.user,
+                enrollment__course=course,
+            )
+            if attempts.filter(completion_status="Completed").exists():
+                is_course_completed = True
+            completed_lesson_ids = set(
+                LessonProgress.objects.filter(
+                    attempt__in=attempts,
+                    is_completed=True,
+                ).values_list("lesson_item_id", flat=True)
+            )
+
+        if not is_staff_or_lecturer and zip_policy == "after_course_completion" and not is_course_completed:
+            return error_response(
+                "COURSE_NOT_COMPLETED",
+                "الأرشيف المجمع متاح فقط بعد إتمام الدورة التدريبية بنسبة 100%.",
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        if pub is not None:
+            mods = Module.objects.filter(published_version=pub).order_by("sort_order", "id")
+            refs = {
+                r.title: r
+                for r in MediaContentReference.objects.filter(
+                    published_version=pub, detached_at__isnull=True
+                ).select_related("media_asset")
+            }
+        elif draft is not None:
+            mods = Module.objects.filter(course_draft=draft).order_by("sort_order", "id")
+            refs = {
+                r.title: r
+                for r in MediaContentReference.objects.filter(
+                    course_draft=draft, detached_at__isnull=True
+                ).select_related("media_asset")
+            }
+        else:
+            mods = []
+            refs = {}
+
+        storage = LocalMediaStorage()
+        tmp = tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024)
+        added_count = 0
+        used_arcnames: set[str] = set()
+
+        with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for mod in mods:
+                safe_ch = _re.sub(r'[\\/:*?"<>|]+', "_", mod.title).strip() or f"Chapter_{mod.id}"
+                lessons = LessonItem.objects.filter(module=mod).order_by("sort_order", "id")
+                for lesson in lessons:
+                    dl_policy = getattr(lesson, "download_policy", "never") or "never"
+                    if not is_staff_or_lecturer:
+                        if dl_policy == "never":
+                            continue
+                        if dl_policy == "after_item_completion" and lesson.id not in completed_lesson_ids:
+                            continue
+                        if dl_policy == "after_course_completion" and not is_course_completed:
+                            continue
+                    ref = refs.get(lesson.title)
+                    if ref is None or not ref.media_asset.storage_key:
+                        continue
+                    try:
+                        file_path = storage.resolve_safe_path(ref.media_asset.storage_key)
+                    except Exception:
+                        continue
+                    if not file_path.exists() or not file_path.is_file():
+                        continue
+                    ext = file_path.suffix or ""
+                    safe_item = _re.sub(r'[\\/:*?"<>|]+', "_", lesson.title).strip() or f"Lesson_{lesson.id}"
+                    arcname = f"{safe_ch}/{safe_item}{ext}"
+                    if arcname in used_arcnames:
+                        arcname = f"{safe_ch}/{safe_item}_{lesson.id}{ext}"
+                    used_arcnames.add(arcname)
+                    zf.write(file_path, arcname=arcname)
+                    added_count += 1
+
+        if added_count == 0:
+            tmp.close()
+            return error_response(
+                "NO_DOWNLOADABLE_FILES",
+                "لا توجد ملفات مرفقة مؤهلة للتنزيل في هذا المقرر حالياً.",
+                status.HTTP_404_NOT_FOUND,
+            )
+
+        tmp.seek(0)
+        safe_course = _re.sub(r'[\\/:*?"<>|]+', "_", course.title).strip() or f"Course_{course.id}"
+        filename = f"{safe_course}_Bundle.zip"
+        response = FileResponse(tmp, content_type="application/zip")
+        response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+        return response
 
 

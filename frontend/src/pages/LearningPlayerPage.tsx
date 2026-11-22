@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from 'react-router-dom';
 import { getEffectiveRefresherChapters } from '@/core/courses/refresher';
+import { canDownloadCourseZip } from '@/core/courses/downloadPolicy';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
 import { useCourseDetail } from '@/features/courses/hooks/useCourseDetail';
@@ -534,14 +535,62 @@ export const LearningPlayerPage: React.FC = () => {
         </section>
 
         {/* Curriculum Navigation Sidebar (Left in RTL) */}
-        <CurriculumSidebar
-          chapters={effectiveCourse?.chapters || course.chapters}
-          flatItems={flatItems}
-          currentItemId={currentItem?.id || null}
-          onSelectItem={(selectedId) => {
-            selectItem(selectedId);
-          }}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {effectiveCourse?.courseZipPolicy && effectiveCourse.courseZipPolicy !== 'disabled' && (() => {
+            const isCourseCompleted =
+              (progress?.completionPercent ?? 0) >= 100 ||
+              (flatItems.length > 0 && flatItems.every((it) => it.isCompleted));
+            const zipPerm = canDownloadCourseZip(
+              effectiveCourse,
+              isCourseCompleted,
+              isEnrolled,
+              user?.role
+            );
+            return (
+              <div
+                className="p-3 rounded-xl border border-border bg-surface flex flex-col gap-1.5"
+                data-testid="course-zip-archive-box"
+              >
+                {zipPerm.allowed ? (
+                  <a
+                    href={`/api/courses/${encodeURIComponent(effectiveCourse.id)}/archive-zip`}
+                    download={`${effectiveCourse.title || 'Course'}_Bundle.zip`}
+                    className="w-full py-2 px-3 rounded-lg bg-primary text-white text-xs font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
+                    data-testid="course-zip-download-btn"
+                  >
+                    <Icon name="download" size="sm" />
+                    <span>تنزيل أرشيف الدورة (ZIP)</span>
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title={zipPerm.reasonAr}
+                    className="w-full py-2 px-3 rounded-lg border border-border bg-bg-alt text-text-muted text-xs font-bold flex items-center justify-center gap-2 opacity-70 cursor-not-allowed"
+                    data-testid="course-zip-download-disabled-btn"
+                  >
+                    <Icon name="lock" size="sm" />
+                    <span>تنزيل أرشيف الدورة (ZIP)</span>
+                  </button>
+                )}
+                {!zipPerm.allowed && zipPerm.reasonAr && (
+                  <p className="text-[11px] text-text-muted text-center leading-snug">
+                    {zipPerm.reasonAr}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          <CurriculumSidebar
+            chapters={effectiveCourse?.chapters || course.chapters}
+            flatItems={flatItems}
+            currentItemId={currentItem?.id || null}
+            onSelectItem={(selectedId) => {
+              selectItem(selectedId);
+            }}
+          />
+        </div>
       </div>
 
       {/* 100% Course Completion Celebration Modal */}

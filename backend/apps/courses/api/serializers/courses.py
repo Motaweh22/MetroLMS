@@ -47,6 +47,7 @@ class CourseSerializer(serializers.ModelSerializer):
     prerequisites = serializers.SerializerMethodField()
     modules = serializers.SerializerMethodField()
     chapters = serializers.SerializerMethodField()
+    courseZipPolicy = serializers.SerializerMethodField()
     refresherConfig = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
@@ -82,6 +83,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "targetLeadershipTitles",
             "modules",
             "chapters",
+            "courseZipPolicy",
             "refresherConfig",
             "createdAt",
             "updatedAt",
@@ -270,6 +272,15 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_chapters(self, obj: Course) -> list:
         return self.get_modules(obj)
+
+    def get_courseZipPolicy(self, obj: Course) -> str:
+        draft = CourseDraft.objects.filter(course=obj).first()
+        if draft is not None:
+            return getattr(draft, "course_zip_policy", "disabled") or "disabled"
+        pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
+        if pub is not None:
+            return getattr(pub, "course_zip_policy", "disabled") or "disabled"
+        return "disabled"
 
     def get_refresherConfig(self, obj: Course):
         import copy

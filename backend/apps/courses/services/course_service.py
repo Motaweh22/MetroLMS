@@ -125,6 +125,7 @@ def save_course_draft(
     modules_payload: list[dict[str, Any]],
     thumbnail_asset_id: int | None = None,
     refresher_config: dict[str, Any] | None = None,
+    course_zip_policy: str | None = None,
 ) -> CourseDraft:
     """Replace mutable CourseDraft curriculum structure cleanly (Rule B)."""
     if not can_edit_course_draft(actor, course):
@@ -142,6 +143,12 @@ def save_course_draft(
     }
     if refresher_config is not None:
         defaults["refresher_config_json"] = refresher_config
+    if isinstance(course_zip_policy, str) and course_zip_policy in {
+        "disabled",
+        "immediate",
+        "after_course_completion",
+    }:
+        defaults["course_zip_policy"] = course_zip_policy
 
     draft, _ = CourseDraft.objects.update_or_create(
         course=course,
@@ -323,6 +330,7 @@ def decide_course_review(
     pub_ver = PublishedCourseVersion.objects.create(
         course=course,
         version_number=max_ver + 1,
+        course_zip_policy=draft.course_zip_policy if draft is not None else "disabled",
         refresher_config_json=draft.refresher_config_json if draft is not None else None,
         published_at=now,
         published_by_user=reviewer,
