@@ -99,6 +99,45 @@ function inputClass(hasError?: string, extra = ''): string {
   } ${extra}`.trim();
 }
 
+interface SectionWrapperProps {
+  variant: 'page' | 'modal';
+  title: string;
+  description: string;
+  iconName: string;
+  children: React.ReactNode;
+}
+
+const SectionWrapper: React.FC<SectionWrapperProps> = ({
+  variant,
+  title,
+  description,
+  iconName,
+  children,
+}) => {
+  if (variant === 'modal') {
+    return (
+      <div className="space-y-3 pt-2 border-t border-border first:border-t-0 first:pt-0">
+        <h3 className="text-sm font-bold text-text-heading">{title}</h3>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <Card className="p-5 sm:p-6 space-y-5">
+      <div className="flex items-start gap-3 pb-3 border-b border-border">
+        <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+          <Icon name={iconName} size="md" />
+        </span>
+        <div>
+          <h2 className="text-base font-bold text-text-heading">{title}</h2>
+          <p className="text-xs text-text-muted mt-0.5">{description}</p>
+        </div>
+      </div>
+      {children}
+    </Card>
+  );
+};
+
 export interface AddUserFormProps {
   /** Active only when embedded inside a modal; true by default on standalone page */
   isActive?: boolean;
@@ -382,36 +421,6 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
     }
   };
 
-  const SectionWrapper: React.FC<{
-    title: string;
-    description: string;
-    iconName: string;
-    children: React.ReactNode;
-  }> = ({ title, description, iconName, children }) => {
-    if (variant === 'modal') {
-      return (
-        <div className="space-y-3 pt-2 border-t border-border first:border-t-0 first:pt-0">
-          <h3 className="text-sm font-bold text-text-heading">{title}</h3>
-          {children}
-        </div>
-      );
-    }
-    return (
-      <Card className="p-5 sm:p-6 space-y-5">
-        <div className="flex items-start gap-3 pb-3 border-b border-border">
-          <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
-            <Icon name={iconName} size="md" />
-          </span>
-          <div>
-            <h2 className="text-base font-bold text-text-heading">{title}</h2>
-            <p className="text-xs text-text-muted mt-0.5">{description}</p>
-          </div>
-        </div>
-        {children}
-      </Card>
-    );
-  };
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6 text-right" noValidate>
       {generalError && (
@@ -422,6 +431,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
       {/* 1. Personal Information */}
       <SectionWrapper
+        variant={variant}
         title="البيانات الشخصية"
         description="الهوية الأساسية وبيانات التواصل للموظف"
         iconName="user"
@@ -612,6 +622,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
       {/* 2. Employment Information */}
       <SectionWrapper
+        variant={variant}
         title="البيانات الوظيفية"
         description="الموقع التنظيمي وخط المترو وتواريخ الخدمة"
         iconName="calendar"
@@ -839,6 +850,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
       {/* 3. Education Information */}
       <SectionWrapper
+        variant={variant}
         title="المؤهلات العلمية"
         description="المؤهل الدراسي المسجل بملف الموظف"
         iconName="award"
@@ -868,6 +880,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
       {/* 4. Account & Permissions */}
       <SectionWrapper
+        variant={variant}
         title="الحساب والصلاحيات"
         description="الدور الوظيفي في المنصة وحالة التفعيل وبيانات الدخول"
         iconName="shield"
