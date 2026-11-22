@@ -27,7 +27,7 @@ export const ExternalResourcesList: React.FC<ExternalResourcesListProps> = ({
       <div className="flex items-center justify-between border-b border-border pb-2">
         <div>
           <h3 className="text-sm font-bold text-text-heading flex items-center gap-2">
-            <Icon name="link" size="sm" className="text-primary" />
+            <Icon name="library" size="sm" className="text-primary" />
             <span>{title}</span>
           </h3>
           {description && (
@@ -84,19 +84,19 @@ export const ExternalResourcesList: React.FC<ExternalResourcesListProps> = ({
                   data-testid={`open-resource-btn-${res.id}`}
                 >
                   <span>فتح المورد</span>
-                  <Icon name="link" size="sm" />
+                  <Icon name="externalLink" size="sm" />
                 </a>
 
                 {/* QR Code trigger */}
                 <button
                   type="button"
                   onClick={() => setSelectedQr(res)}
-                  className="p-1.5 rounded-lg border border-border hover:bg-neutral-light text-text-muted hover:text-text transition-colors text-xs"
+                  className="p-1.5 rounded-lg border border-border hover:bg-primary/10 hover:border-primary/40 text-text-muted hover:text-primary transition-colors text-xs cursor-pointer"
                   title="عرض رمز QR للمورد"
                   aria-label={`رمز QR للمورد ${res.title}`}
                   data-testid={`qr-resource-btn-${res.id}`}
                 >
-                  <Icon name="link" size="sm" />
+                  <Icon name="qrCode" size="sm" />
                 </button>
               </div>
             </Card>

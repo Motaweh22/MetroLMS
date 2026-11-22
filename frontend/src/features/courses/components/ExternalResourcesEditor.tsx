@@ -136,7 +136,7 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-xs font-bold text-text-heading flex items-center gap-1.5">
-            <Icon name="link" size="sm" className="text-primary" />
+            <Icon name="globe" size="sm" className="text-primary" />
             <span>المصادر والمراجع التعليمية الخارجية ({scopeLabel})</span>
           </h3>
           <p className="text-[11px] text-text-muted mt-0.5">
@@ -181,40 +181,44 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
                   type="button"
                   onClick={() => handleMove(idx, 'up')}
                   disabled={idx === 0}
-                  className="p-1 rounded-md text-text-muted hover:text-text hover:bg-neutral-light disabled:opacity-30"
+                  className="p-1.5 rounded-lg border border-border text-text-muted hover:text-text hover:bg-neutral-light disabled:opacity-30 transition-colors cursor-pointer"
                   title="تحريك لأعلى"
+                  aria-label="تحريك لأعلى"
                   data-testid={`resource-reorder-up-${res.id}`}
                 >
-                  ▲
+                  <Icon name="chevronUp" size="sm" />
                 </button>
                 <button
                   type="button"
                   onClick={() => handleMove(idx, 'down')}
                   disabled={idx === resources.length - 1}
-                  className="p-1 rounded-md text-text-muted hover:text-text hover:bg-neutral-light disabled:opacity-30"
+                  className="p-1.5 rounded-lg border border-border text-text-muted hover:text-text hover:bg-neutral-light disabled:opacity-30 transition-colors cursor-pointer"
                   title="تحريك لأسفل"
+                  aria-label="تحريك لأسفل"
                   data-testid={`resource-reorder-down-${res.id}`}
                 >
-                  ▼
+                  <Icon name="chevronDown" size="sm" />
                 </button>
 
                 {/* QR Code Button */}
                 <button
                   type="button"
                   onClick={() => setQrResource(res)}
-                  className="p-1.5 rounded-lg border border-border hover:bg-neutral-light text-primary transition-colors text-xs"
+                  className="p-1.5 rounded-lg border border-border hover:bg-primary/10 hover:border-primary/40 text-primary transition-colors text-xs cursor-pointer"
                   title="عرض رمز QR للمورد"
+                  aria-label="عرض رمز QR للمورد"
                   data-testid={`resource-qr-${res.id}`}
                 >
-                  <Icon name="link" size="sm" />
+                  <Icon name="qrCode" size="sm" />
                 </button>
 
                 {/* Edit Button */}
                 <button
                   type="button"
                   onClick={() => handleStartEdit(res)}
-                  className="p-1.5 rounded-lg border border-border hover:bg-neutral-light text-text transition-colors text-xs"
+                  className="p-1.5 rounded-lg border border-border hover:bg-neutral-light text-text transition-colors text-xs cursor-pointer"
                   title="تعديل المورد"
+                  aria-label="تعديل المورد"
                   data-testid={`resource-edit-${res.id}`}
                 >
                   <Icon name="edit" size="sm" />
@@ -224,11 +228,12 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
                 <button
                   type="button"
                   onClick={() => handleDeleteResource(res.id)}
-                  className="p-1.5 rounded-lg border border-border hover:bg-danger/10 text-danger transition-colors text-xs"
+                  className="p-1.5 rounded-lg border border-border hover:bg-danger/10 hover:border-danger/40 text-danger transition-colors text-xs cursor-pointer"
                   title="حذف المورد"
+                  aria-label="حذف المورد"
                   data-testid={`resource-delete-${res.id}`}
                 >
-                  ✕
+                  <Icon name="trash" size="sm" />
                 </button>
               </div>
             </div>

@@ -1326,7 +1326,7 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
         aria-labelledby="section-e-heading"
       >
         <SectionHeader
-          icon="externalLink"
+          icon="library"
           title="المصادر والمراجع الخارجية للمقرر"
           subtitle="روابط ومراجع إثرائية عامة تدعم دراسة المقرر التدريبي ككل مع إمكانية إنشاء وتنزيل رموز QR المباشرة"
         />
