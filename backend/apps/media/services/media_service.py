@@ -359,9 +359,30 @@ def delete_media_asset_if_unreferenced(
 
 
 def authorize_stream_reference(actor: User, ref: MediaContentReference) -> None:
-    """Enforce logical detachment & INV-DOM21-15 immediate visibility before streaming."""
+    """Enforce logical detachment, INV-DOM21-15 immediate visibility, and group/course access before streaming."""
     if ref.detached_at is not None:
         raise MediaDomainError("REFERENCE_DETACHED", "هذا المحتوى لم يعد متاحًا للعرض.", 403)
-    if actor.role_id == "trainee" and not ref.is_visible:
-        raise MediaDomainError("REFERENCE_HIDDEN", "هذا المحتوى غير متاح للعرض حاليًا.", 403)
+    if actor.role_id == "trainee":
+        if not ref.is_visible:
+            raise MediaDomainError("REFERENCE_HIDDEN", "هذا المحتوى غير متاح للعرض حاليًا.", 403)
+        if ref.group_renewal_cycle_id is not None:
+            from apps.groups.models import GroupMembership
+
+            cycle = ref.group_renewal_cycle
+            if cycle is not None and not GroupMembership.objects.filter(
+                training_group_id=cycle.training_group_id,
+                user=actor,
+            ).exists():
+                raise MediaDomainError("PERMISSION_DENIED", "غير مصرح لك بعرض ملفات هذه المجموعة التدريبية.", 403)
+        elif ref.title != "__course_cover__":
+            course = None
+            if ref.course_draft_id is not None and ref.course_draft is not None:
+                course = ref.course_draft.course
+            elif ref.published_version_id is not None and ref.published_version is not None:
+                course = ref.published_version.course
+            if course is not None and (course.access_mode == "hidden" or course.lifecycle_status != "Published"):
+                from apps.learning.models import Enrollment
+
+                if not Enrollment.objects.filter(user=actor, course=course).exists():
+                    raise MediaDomainError("PERMISSION_DENIED", "غير مصرح لك بالوصول إلى محتوى هذا المقرر.", 403)
 

@@ -32,6 +32,14 @@ from shared.api import error_response, success_response
 _RANGE_HEADER_RE = re.compile(r"\Abytes=(\d*)-(\d*)\Z", re.ASCII)
 
 
+def _parse_pos_int(val: object) -> int | None:
+    try:
+        num = int(str(val).strip())
+        return num if num > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 class MediaAssetUploadView(APIView):
     """POST /api/media/assets/upload — Step 1 multipart upload creating MediaAsset."""
 
@@ -43,13 +51,6 @@ class MediaAssetUploadView(APIView):
         if uploaded is None:
             return error_response("VALIDATION_ERROR", "يرجى إرفاق الملف المطلوب.", status.HTTP_400_BAD_REQUEST)
         declared_mime = request.data.get("mimeType") or getattr(uploaded, "content_type", None)
-
-        def _parse_pos_int(val: object) -> int | None:
-            try:
-                num = int(str(val).strip())
-                return num if num > 0 else None
-            except (TypeError, ValueError):
-                return None
 
         course_id = _parse_pos_int(request.data.get("courseId"))
         group_id = _parse_pos_int(request.data.get("groupId"))
@@ -82,6 +83,19 @@ class MediaAssetDetailView(APIView):
         asset = MediaAsset.objects.filter(pk=asset_id).first()
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        is_staff_or_lecturer = request.user.role_id in {
+            "developer",
+            "super_admin",
+            "admin",
+            "assistant_admin",
+            "lecturer",
+        }
+        if not is_staff_or_lecturer and asset.uploaded_by_user_id != request.user.id:
+            return error_response(
+                "PERMISSION_DENIED",
+                "غير مصرح لك باستعراض بيانات هذا الأصل.",
+                status.HTTP_403_FORBIDDEN,
+            )
         return success_response({"asset": MediaAssetSerializer(asset).data})
 
     def delete(self, request: Request, asset_id: int):
@@ -102,14 +116,17 @@ class MediaReferenceListCreateView(APIView):
     parser_classes = [JSONParser]
 
     def post(self, request: Request):
-        asset_id = request.data.get("mediaAssetId")
-        asset = MediaAsset.objects.filter(pk=asset_id).first()
+        asset_id = _parse_pos_int(request.data.get("mediaAssetId"))
+        asset = MediaAsset.objects.filter(pk=asset_id).first() if asset_id else None
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
 
-        draft = CourseDraft.objects.filter(pk=request.data.get("courseDraftId")).first() if request.data.get("courseDraftId") else None
-        pub = PublishedCourseVersion.objects.filter(pk=request.data.get("publishedVersionId")).first() if request.data.get("publishedVersionId") else None
-        cycle = GroupRenewalCycle.objects.filter(pk=request.data.get("groupRenewalCycleId")).first() if request.data.get("groupRenewalCycleId") else None
+        draft_id = _parse_pos_int(request.data.get("courseDraftId"))
+        pub_id = _parse_pos_int(request.data.get("publishedVersionId"))
+        cycle_id = _parse_pos_int(request.data.get("groupRenewalCycleId"))
+        draft = CourseDraft.objects.filter(pk=draft_id).first() if draft_id else None
+        pub = PublishedCourseVersion.objects.filter(pk=pub_id).first() if pub_id else None
+        cycle = GroupRenewalCycle.objects.filter(pk=cycle_id).first() if cycle_id else None
 
         try:
             ref = attach_media_reference(
@@ -162,13 +179,16 @@ class MediaReferenceLifecycleView(APIView):
             elif action == "restore":
                 updated = restore_media_reference(actor=request.user, ref=ref)
             elif action == "repoint":
-                new_asset = MediaAsset.objects.filter(pk=request.data.get("mediaAssetId")).first()
+                new_asset_id = _parse_pos_int(request.data.get("mediaAssetId"))
+                new_asset = MediaAsset.objects.filter(pk=new_asset_id).first() if new_asset_id else None
                 if new_asset is None:
                     return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
                 updated = repoint_media_reference(actor=request.user, ref=ref, new_asset=new_asset)
             elif action == "move":
-                draft = CourseDraft.objects.filter(pk=request.data.get("courseDraftId")).first() if request.data.get("courseDraftId") else None
-                cycle = GroupRenewalCycle.objects.filter(pk=request.data.get("groupRenewalCycleId")).first() if request.data.get("groupRenewalCycleId") else None
+                draft_id = _parse_pos_int(request.data.get("courseDraftId"))
+                cycle_id = _parse_pos_int(request.data.get("groupRenewalCycleId"))
+                draft = CourseDraft.objects.filter(pk=draft_id).first() if draft_id else None
+                cycle = GroupRenewalCycle.objects.filter(pk=cycle_id).first() if cycle_id else None
                 updated = move_media_reference(
                     actor=request.user,
                     ref=ref,
@@ -201,6 +221,19 @@ class MediaReferenceStreamView(APIView):
         range_header = request.META.get("HTTP_RANGE", "").strip()
         storage = LocalMediaStorage()
 
+        # Support ?format=json base64 payload for DocumentViewer (bypasses IDM on PDFs)
+        if request.query_params.get("format") == "json" and file_size <= 25 * 1024 * 1024:
+            import base64
+
+            try:
+                raw_bytes = b"".join(storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1)))
+            except MediaStorageError as exc:
+                return error_response(exc.code, exc.message, exc.status_code)
+            return HttpResponse(
+                content=f'{{"base64":"{base64.b64encode(raw_bytes).decode("ascii")}","mimeType":"{asset.mime_type}"}}',
+                content_type="application/json",
+            )
+
         is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
         has_stream_token = request.headers.get("X-MetroLMS-Stream") == "1"
         is_test_server = request.META.get("SERVER_NAME") == "testserver"
@@ -225,6 +258,7 @@ class MediaReferenceStreamView(APIView):
             resp["Content-Length"] = str(file_size)
             resp["Accept-Ranges"] = "bytes"
             resp["X-Original-Mime-Type"] = asset.mime_type
+            resp["X-Content-Type-Options"] = "nosniff"
             resp["Cache-Control"] = "no-store"
             return resp
 
@@ -264,6 +298,7 @@ class MediaReferenceStreamView(APIView):
         resp["Content-Length"] = str(content_length)
         resp["Accept-Ranges"] = "bytes"
         resp["X-Original-Mime-Type"] = asset.mime_type
+        resp["X-Content-Type-Options"] = "nosniff"
         resp["Cache-Control"] = "no-store"
         return resp
 
@@ -277,6 +312,48 @@ class MediaAssetStreamView(APIView):
         asset = MediaAsset.objects.filter(pk=asset_id).first()
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if request.user.role_id == "trainee" and asset.uploaded_by_user_id != request.user.id:
+            active_refs = list(
+                MediaContentReference.objects.filter(
+                    media_asset=asset,
+                    detached_at__isnull=True,
+                    is_visible=True,
+                )
+            )
+            if not active_refs:
+                return error_response(
+                    "PERMISSION_DENIED",
+                    "غير مصرح لك بالوصول إلى هذا الملف.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+            authorized_any = False
+            for candidate_ref in active_refs:
+                try:
+                    authorize_stream_reference(request.user, candidate_ref)
+                    authorized_any = True
+                    break
+                except MediaDomainError:
+                    continue
+            if not authorized_any:
+                return error_response(
+                    "PERMISSION_DENIED",
+                    "غير مصرح لك بالوصول إلى هذا الملف.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+
+        if request.query_params.get("format") == "json" and asset.size_bytes <= 25 * 1024 * 1024:
+            import base64
+
+            storage = LocalMediaStorage()
+            try:
+                raw_bytes = b"".join(storage.open_range_stream(asset.storage_key, 0, max(0, asset.size_bytes - 1)))
+            except MediaStorageError as exc:
+                return error_response(exc.code, exc.message, exc.status_code)
+            return HttpResponse(
+                content=f'{{"base64":"{base64.b64encode(raw_bytes).decode("ascii")}","mimeType":"{asset.mime_type}"}}',
+                content_type="application/json",
+            )
+
         is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
         has_stream_token = request.headers.get("X-MetroLMS-Stream") == "1"
         is_test_server = request.META.get("SERVER_NAME") == "testserver"
@@ -300,6 +377,7 @@ class MediaAssetStreamView(APIView):
         resp["Content-Length"] = str(asset.size_bytes)
         resp["Accept-Ranges"] = "bytes"
         resp["X-Original-Mime-Type"] = asset.mime_type
+        resp["X-Content-Type-Options"] = "nosniff"
         resp["Cache-Control"] = "no-store"
         return resp
 
