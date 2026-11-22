@@ -24,7 +24,12 @@ class DashboardView(APIView):
         now = timezone.now()
 
         if role_id == "trainee":
-            enrollments = Enrollment.objects.filter(user=user).select_related("course__primary_lecturer").prefetch_related("attempts")
+            enrollments = (
+                Enrollment.objects.filter(user=user, source_grants__isnull=False)
+                .select_related("course__primary_lecturer")
+                .prefetch_related("attempts")
+                .distinct()
+            )
             enrolled_count = enrollments.count()
             completed_count = 0
             continue_card = None
@@ -78,7 +83,7 @@ class DashboardView(APIView):
                     "title": c.title,
                     "level": c.course_type,
                     "duration": "—",
-                    "enrolledCount": Enrollment.objects.filter(course=c).count(),
+                    "enrolledCount": Enrollment.objects.filter(course=c, source_grants__isnull=False).distinct().count(),
                     "rating": 0,
                     "status": c.lifecycle_status,
                 }
@@ -94,7 +99,7 @@ class DashboardView(APIView):
                     },
                     "stats": {
                         "assignedCoursesCount": Course.objects.filter(primary_lecturer=user).count(),
-                        "totalTraineesCount": Enrollment.objects.filter(course__primary_lecturer=user).count(),
+                        "totalTraineesCount": Enrollment.objects.filter(course__primary_lecturer=user, source_grants__isnull=False).distinct().count(),
                         "averageRating": "0.0",
                         "supervisedGroupsCount": 0,
                     },
@@ -109,7 +114,7 @@ class DashboardView(APIView):
                 "id": str(c.id),
                 "title": c.title,
                 "lecturerName": c.primary_lecturer.full_name,
-                "enrollmentCount": Enrollment.objects.filter(course=c).count(),
+                "enrollmentCount": Enrollment.objects.filter(course=c, source_grants__isnull=False).distinct().count(),
                 "completionRate": 0,
                 "rating": 0,
             }
@@ -135,7 +140,7 @@ class DashboardView(APIView):
                 },
                 "stats": {
                     "totalCoursesCount": Course.objects.count(),
-                    "totalEnrollmentsCount": Enrollment.objects.count(),
+                    "totalEnrollmentsCount": Enrollment.objects.filter(source_grants__isnull=False).distinct().count(),
                     "activeGroupsCount": TrainingGroup.objects.filter(is_archived=False).count(),
                     "totalAttentionFlagsCount": 0,
                 },

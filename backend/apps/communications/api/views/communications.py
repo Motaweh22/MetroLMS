@@ -123,6 +123,11 @@ class CourseWhatsAppContactsView(APIView):
         course = Course.objects.filter(pk=course_id).first()
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if request.user.role_id == "trainee":
+            from apps.courses.services.course_service import is_course_visible_to_trainee
+
+            if not is_course_visible_to_trainee(request.user, course):
+                return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض جهات دعم هذه الدورة.", status.HTTP_403_FORBIDDEN)
         vis = UserWhatsAppVisibility.objects.filter(user=request.user, scenario_key="course_support").first()
         if vis is not None and not vis.is_visible:
             return success_response({"visible": False, "contacts": []})
@@ -220,7 +225,7 @@ class AdminUserWhatsAppVisibilityView(APIView):
         assignments = request.data.get("assignments")
         if isinstance(assignments, list):
             for item in assignments:
-                if isinstance(item, dict) and item.get("scenario"):
+                if isinstance(item, dict) and str(item.get("scenario") or "").strip():
                     set_user_whatsapp_visibility(
                         user=target,
                         scenario_key=str(item["scenario"]).strip(),

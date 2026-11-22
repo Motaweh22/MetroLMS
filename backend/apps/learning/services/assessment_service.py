@@ -1,7 +1,7 @@
 """Quiz scoring (WP55-PT-03), Version-Scoped Certificates (D-13, TR-C3-03) & Lecturer Performance."""
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import secrets
 
@@ -60,6 +60,24 @@ def submit_quiz_attempt(
         module__published_version_id=attempt.published_version_id,
     ).first()
     if lesson is None:
+        draft_lesson = (
+            LessonItem.objects.select_related("module")
+            .filter(pk=lesson_item_id, module__course_draft__course=course)
+            .first()
+        )
+        if draft_lesson is not None:
+            lesson = (
+                LessonItem.objects.filter(
+                    module__published_version_id=attempt.published_version_id,
+                    module__sort_order=draft_lesson.module.sort_order,
+                    sort_order=draft_lesson.sort_order,
+                ).first()
+                or LessonItem.objects.filter(
+                    module__published_version_id=attempt.published_version_id,
+                    title=draft_lesson.title,
+                ).first()
+            )
+    if lesson is None:
         raise AssessmentDomainError("LESSON_NOT_IN_ATTEMPT", "الدرس غير موجود في نسخة المحاولة الحالية.", 404)
 
     quiz_def = QuizDefinition.objects.filter(lesson_item=lesson).first()
@@ -76,7 +94,10 @@ def submit_quiz_attempt(
     for idx, q in enumerate(questions):
         if not isinstance(q, dict):
             continue
-        pts = Decimal(str(q.get("points", 1)))
+        try:
+            pts = Decimal(str(q.get("points", 1) or 1))
+        except (InvalidOperation, ValueError, TypeError):
+            pts = Decimal("1")
         if pts <= 0:
             continue
         total_points += pts

@@ -49,7 +49,7 @@ def compute_course_progress(attempt: CourseAttempt) -> dict:
                 "lastPositionSeconds": r.last_position_seconds,
                 "furthestWatchedSeconds": r.furthest_watched_seconds,
                 "eligibleViewingSeconds": r.eligible_viewing_seconds,
-                "updatedAt": attempt.started_at.isoformat() if hasattr(attempt, "started_at") and attempt.started_at else "",
+                "updatedAt": r.updated_at.isoformat() if r.updated_at else "",
             }
         completed = len(completed_ids)
         if completed >= total:
@@ -67,6 +67,7 @@ def compute_course_progress(attempt: CourseAttempt) -> dict:
         "completedLessons": completed,
         "totalLessons": total,
         "progressPercent": percent,
+        "percentage": percent,
         "completedItemIds": completed_ids,
         "itemsProgress": items_progress,
     }

@@ -111,6 +111,7 @@ class AuditLogListView(APIView):
 
     def get(self, request: Request):
         from django.db.models import Q
+        from django.utils.dateparse import parse_date
 
         qs = AuditLogEntry.objects.all().order_by("-created_at", "-id")
         search = (request.query_params.get("search") or "").strip()
@@ -124,11 +125,17 @@ class AuditLogListView(APIView):
         action = (request.query_params.get("action") or "").strip()
         if action:
             qs = qs.filter(action__icontains=action)
-        start_date = (request.query_params.get("startDate") or "").strip()
-        if start_date:
+        start_date_raw = (request.query_params.get("startDate") or "").strip()
+        if start_date_raw:
+            start_date = parse_date(start_date_raw)
+            if start_date is None:
+                return error_response("VALIDATION_ERROR", "صيغة تاريخ البداية غير صالحة (YYYY-MM-DD).", status.HTTP_400_BAD_REQUEST)
             qs = qs.filter(created_at__date__gte=start_date)
-        end_date = (request.query_params.get("endDate") or "").strip()
-        if end_date:
+        end_date_raw = (request.query_params.get("endDate") or "").strip()
+        if end_date_raw:
+            end_date = parse_date(end_date_raw)
+            if end_date is None:
+                return error_response("VALIDATION_ERROR", "صيغة تاريخ النهاية غير صالحة (YYYY-MM-DD).", status.HTTP_400_BAD_REQUEST)
             qs = qs.filter(created_at__date__lte=end_date)
 
         total = qs.count()
