@@ -70,4 +70,4 @@ ENV PYTHONUNBUFFERED=1 `
 
 EXPOSE 8000
 
-CMD ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; if ($env:METROLMS_RUN_MIGRATIONS_ON_START -ne 'False') { python manage.py migrate --noinput }; waitress-serve --host=0.0.0.0 --port=8000 --threads=8 config.wsgi:application"]
+CMD ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "$ErrorActionPreference = 'Stop'; if (-not $env:DB_HOST -or $env:DB_HOST -match '^(?i)auto$') { $gw = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object { $_.OperationalStatus -eq 'Up' } | ForEach-Object { $_.GetIPProperties().GatewayAddresses } | Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' } | Select-Object -First 1 -ExpandProperty Address | ForEach-Object { $_.IPAddressToString }; if ($gw) { $env:DB_HOST = $gw; Write-Host \"[INFO] Auto-detected DB_HOST gateway: $gw\" } }; if ($env:METROLMS_RUN_MIGRATIONS_ON_START -ne 'False') { python manage.py migrate --noinput }; waitress-serve --host=0.0.0.0 --port=8000 --threads=8 config.wsgi:application"]
