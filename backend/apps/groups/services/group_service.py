@@ -5,6 +5,7 @@ from datetime import timedelta
 import hashlib
 import secrets
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -54,17 +55,23 @@ def create_training_group(
 ) -> tuple[TrainingGroup, GroupRenewalCycle]:
     """Create a TrainingGroup and its initial GroupRenewalCycle (`CYC-<id>-01`)."""
     norm_name = normalize_nfc_stripped(name)
-    validate_non_empty_text(norm_name)
+    try:
+        validate_non_empty_text(norm_name)
+    except DjangoValidationError as exc:
+        raise GroupDomainError("VALIDATION_ERROR", "اسم المجموعة مطلوب.") from exc
 
     if group_type not in {"regular", "reminder"}:
         raise GroupDomainError("INVALID_GROUP_TYPE", "نوع المجموعة يجب أن يكون regular أو reminder.")
+
+    if interval_days is not None and not (1 <= interval_days <= 730):
+        raise GroupDomainError("INVALID_INTERVAL_DAYS", "فترة التجديد يجب أن تكون بين 1 و 730 يومًا.")
 
     if auto_renewal_enabled:
         if group_type != "reminder":
             raise GroupDomainError("AUTO_RENEWAL_REQUIRES_REMINDER", "التجديد التلقائي متاح للمجموعات التذكيرية فقط.")
         if deadline_datetime is None:
             raise GroupDomainError("DEADLINE_REQUIRED", "يرجى تحديد موعد انتهاء أولًا قبل تفعيل التجديد التلقائي.")
-        if interval_days is None or not (1 <= interval_days <= 730):
+        if interval_days is None:
             raise GroupDomainError("INVALID_INTERVAL_DAYS", "فترة التجديد يجب أن تكون بين 1 و 730 يومًا.")
 
     now = timezone.now()
@@ -221,6 +228,8 @@ def submit_qr_join_request(*, trainee: User, raw_token: str) -> GroupJoinRequest
         raise GroupDomainError("INVALID_QR_TOKEN", "رمز الانضمام غير صالح أو معطل.", 404)
 
     group = qr.training_group
+    if group.is_archived:
+        raise GroupDomainError("GROUP_ARCHIVED", "لا يمكن الانضمام إلى مجموعة مؤرشفة.", 409)
     if GroupMembership.objects.filter(training_group=group, user=trainee).exists():
         raise GroupDomainError("ALREADY_MEMBER", "أنت عضو بالفعل في هذه المجموعة التدريبية.", 409)
 
@@ -260,6 +269,27 @@ def decide_join_request(*, actor: User, join_request: GroupJoinRequest, decision
         user=locked.user,
         defaults={"joined_at": now},
     )
+    active_cycle = (
+        GroupRenewalCycle.objects.filter(training_group=locked.training_group, cycle_status="Active")
+        .order_by("-cycle_number")
+        .first()
+        or GroupRenewalCycle.objects.filter(training_group=locked.training_group).order_by("-cycle_number").first()
+    )
+    if active_cycle is not None:
+        from apps.learning.services.learning_service import LearningDomainError, enroll_user_in_course
+
+        for ca in active_cycle.course_assignments.select_related("course"):
+            try:
+                enroll_user_in_course(
+                    actor=actor,
+                    user=locked.user,
+                    course=ca.course,
+                    source_type="group",
+                    training_group=locked.training_group,
+                    group_renewal_cycle=active_cycle,
+                )
+            except LearningDomainError:
+                pass
     return locked
 
 
@@ -283,7 +313,10 @@ def add_group_resource(
     if provider not in {"teams", "zoom", "meet", "other"}:
         raise GroupDomainError("INVALID_PROVIDER", "مزود الاجتماع غير صالح.")
     norm_title = normalize_nfc_stripped(title)
-    validate_non_empty_text(norm_title)
+    try:
+        validate_non_empty_text(norm_title)
+    except DjangoValidationError as exc:
+        raise GroupDomainError("VALIDATION_ERROR", "عنوان رابط الاجتماع مطلوب.") from exc
     clean_url = meeting_url.strip()
     try:
         validate_https_url(clean_url)

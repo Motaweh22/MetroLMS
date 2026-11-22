@@ -1,6 +1,7 @@
 """MediaAsset & MediaContentReference domain services (INV-DOM21-05..21, TR-C2-06/07)."""
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -44,7 +45,10 @@ def upload_media_asset(
 
     raw_name = getattr(uploaded_file, "name", "") or "file"
     file_name = normalize_nfc_stripped(raw_name)[:255]
-    validate_non_empty_text(file_name)
+    try:
+        validate_non_empty_text(file_name)
+    except DjangoValidationError as exc:
+        raise MediaDomainError("INVALID_FILE_NAME", "اسم الملف غير صالح.", 400) from exc
 
     raw_mime = declared_mime_type or getattr(uploaded_file, "content_type", "") or ""
     mime_type = normalize_mime_type(raw_mime.split(";")[0])
@@ -187,7 +191,10 @@ def attach_media_reference(
         group_renewal_cycle=group_renewal_cycle,
     )
     norm_title = normalize_nfc_stripped(title)
-    validate_non_empty_text(norm_title)
+    try:
+        validate_non_empty_text(norm_title)
+    except DjangoValidationError as exc:
+        raise MediaDomainError("VALIDATION_ERROR", "عنوان مرجع الوسائط مطلوب.", 400) from exc
     ref = MediaContentReference.objects.create(
         media_asset=media_asset,
         course_draft=course_draft,
@@ -246,7 +253,10 @@ def update_media_reference_metadata(
     fields: list[str] = []
     if title is not None:
         norm = normalize_nfc_stripped(title)
-        validate_non_empty_text(norm)
+        try:
+            validate_non_empty_text(norm)
+        except DjangoValidationError as exc:
+            raise MediaDomainError("VALIDATION_ERROR", "عنوان مرجع الوسائط مطلوب.", 400) from exc
         ref.title = norm
         fields.append("title")
     if is_visible is not None:

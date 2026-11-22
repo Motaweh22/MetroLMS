@@ -197,6 +197,12 @@ class AdminGroupDetailView(APIView):
             group.deadline_datetime = parse_datetime(raw_dl) if isinstance(raw_dl, str) and raw_dl else None
         if "autoRenewalEnabled" in request.data or "renewalSchedule" in request.data or "intervalDays" in request.data:
             auto_renewal, interval = _extract_renewal_fields(request.data)
+            if interval is not None and not (1 <= interval <= 730):
+                return error_response(
+                    "INVALID_INTERVAL_DAYS",
+                    "فترة التجديد يجب أن تكون بين 1 و 730 يومًا.",
+                    status.HTTP_400_BAD_REQUEST,
+                )
             group.auto_renewal_enabled = auto_renewal
             group.interval_days = interval
         group.save()
@@ -225,16 +231,19 @@ class AdminGroupDetailView(APIView):
                     status.HTTP_403_FORBIDDEN,
                 )
             from django.db import transaction
-            from apps.groups.models import GroupQrCode
+            from apps.groups.models import GroupQrCode, GroupResource
             from apps.learning.models import CourseAttempt, EnrollmentSourceGrant
+            from apps.media.models import MediaContentReference
 
             with transaction.atomic():
                 CourseAttempt.objects.filter(group_renewal_cycle__training_group=group).update(
                     group_renewal_cycle=None
                 )
+                MediaContentReference.objects.filter(group_renewal_cycle__training_group=group).delete()
                 EnrollmentSourceGrant.objects.filter(training_group=group).delete()
                 GroupCourseAssignment.objects.filter(group_renewal_cycle__training_group=group).delete()
                 GroupRenewalCycle.objects.filter(training_group=group).delete()
+                GroupResource.objects.filter(training_group=group).delete()
                 GroupMembership.objects.filter(training_group=group).delete()
                 GroupJoinRequest.objects.filter(training_group=group).delete()
                 GroupAssistantAssignment.objects.filter(training_group=group).delete()
