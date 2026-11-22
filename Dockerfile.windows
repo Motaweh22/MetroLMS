@@ -10,7 +10,7 @@ ARG WINDOWS_BASE_TAG=ltsc2022
 # ------------------------------------------------------------------------------
 FROM mcr.microsoft.com/windows/servercore:${WINDOWS_BASE_TAG} AS frontend-builder
 
-SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
 ARG NODE_VERSION=24.11.0
 RUN Invoke-WebRequest -Uri "https://nodejs.org/dist/v$env:NODE_VERSION/node-v$env:NODE_VERSION-win-x64.zip" -OutFile C:\node.zip; `
@@ -22,20 +22,20 @@ ENV PATH="C:\nodejs;${PATH}"
 
 WORKDIR C:\build\frontend
 COPY frontend\package.json frontend\package-lock.json .\
-RUN npm ci
+RUN & "C:\nodejs\npm.cmd" ci
 
 COPY frontend\ .\
 COPY Demo\mocks C:\build\Demo\mocks
 ARG VITE_SHOW_TEST_CARDS=true
 ENV VITE_SHOW_TEST_CARDS=${VITE_SHOW_TEST_CARDS}
-RUN npx vite build
+RUN & "C:\nodejs\npx.cmd" vite build
 
 # ------------------------------------------------------------------------------
 # Stage 2: Python 3.12 + ODBC Driver 18 + Waitress + WhiteNoise Runtime
 # ------------------------------------------------------------------------------
 FROM mcr.microsoft.com/windows/servercore:${WINDOWS_BASE_TAG}
 
-SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+SHELL ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
 
 ARG PYTHON_VERSION=3.12.10
 RUN Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$env:PYTHON_VERSION/python-$env:PYTHON_VERSION-amd64.exe" -OutFile C:\python-installer.exe; `
