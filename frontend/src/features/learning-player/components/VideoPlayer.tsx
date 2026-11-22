@@ -90,8 +90,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     furthestWatchedRef.current = Math.max(furthestWatchedRef.current, safeMax);
   }, [initialPosition, furthestWatched]);
 
-  // Reset or initialize when lesson item changes
+  // Reset or initialize ONLY when the lesson item (itemId / src) changes
+  const initializedItemRef = useRef<string | undefined>(undefined);
   useEffect(() => {
+    const itemKey = `${itemId || ''}::${src || ''}`;
+    if (initializedItemRef.current === itemKey) {
+      return;
+    }
+    initializedItemRef.current = itemKey;
+
     const initialFurthest = Math.max(initialPosition, furthestWatched);
     setCurrentTime(initialPosition);
     setFurthestWatchedSecs(initialFurthest);
@@ -104,7 +111,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       videoRef.current.currentTime = initialPosition;
       videoRef.current.playbackRate = playbackRate;
     }
-  }, [itemId, initialPosition, furthestWatched, playbackRate]);
+  }, [itemId, src, initialPosition, furthestWatched, playbackRate]);
+
+  // Apply playbackRate changes without resetting currentTime or playback state
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   // Throttled background watch progress synchronization (suppressed in read-only mode)
   useVideoProgressSync({
