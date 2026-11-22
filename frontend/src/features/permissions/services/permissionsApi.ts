@@ -42,7 +42,10 @@ export const permissionsApi = {
         ...options,
       }
     );
-    return 'role' in res ? res.role : res;
+    if ('role' in res && typeof res.role === 'object' && res.role !== null) {
+      return res.role;
+    }
+    return res as RolePermissionsConfig;
   },
 
   /**
