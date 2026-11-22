@@ -1280,6 +1280,7 @@ class CourseArchiveZipDownloadView(APIView):
         import re as _re
         import tempfile
         import zipfile
+        from typing import IO, cast
         from urllib.parse import quote
         from django.http import FileResponse
         from apps.learning.models import CourseAttempt, Enrollment, LessonProgress
@@ -1348,6 +1349,8 @@ class CourseArchiveZipDownloadView(APIView):
                 status.HTTP_403_FORBIDDEN,
             )
 
+        mods: list[Module]
+        refs: dict[str, MediaContentReference]
         if pub is not None:
             mods = list(Module.objects.filter(published_version=pub).order_by("sort_order", "id"))
             refs = {
@@ -1369,7 +1372,7 @@ class CourseArchiveZipDownloadView(APIView):
             refs = {}
 
         storage = LocalMediaStorage()
-        tmp = tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024)
+        tmp = cast(IO[bytes], tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024))
         added_count = 0
         used_arcnames: set[str] = set()
 
