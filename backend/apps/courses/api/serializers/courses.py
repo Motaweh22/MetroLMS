@@ -47,6 +47,7 @@ class CourseSerializer(serializers.ModelSerializer):
     prerequisites = serializers.SerializerMethodField()
     modules = serializers.SerializerMethodField()
     chapters = serializers.SerializerMethodField()
+    refresherConfig = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
 
@@ -81,6 +82,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "targetLeadershipTitles",
             "modules",
             "chapters",
+            "refresherConfig",
             "createdAt",
             "updatedAt",
         ]
@@ -268,6 +270,71 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def get_chapters(self, obj: Course) -> list:
         return self.get_modules(obj)
+
+    def get_refresherConfig(self, obj: Course):
+        import copy
+        from apps.media.models import MediaContentReference
+
+        draft = CourseDraft.objects.filter(course=obj).first()
+        if draft is not None:
+            raw_cfg = draft.refresher_config_json
+            refs = {
+                r.title: r
+                for r in MediaContentReference.objects.filter(
+                    course_draft=draft,
+                    detached_at__isnull=True,
+                    title__startswith="__refresher__",
+                ).select_related("media_asset")
+            }
+        else:
+            pub = PublishedCourseVersion.objects.filter(course=obj).order_by("-version_number").first()
+            raw_cfg = pub.refresher_config_json if pub is not None else None
+            refs = (
+                {
+                    r.title: r
+                    for r in MediaContentReference.objects.filter(
+                        published_version=pub,
+                        detached_at__isnull=True,
+                        title__startswith="__refresher__",
+                    ).select_related("media_asset")
+                }
+                if pub is not None
+                else {}
+            )
+
+        if not isinstance(raw_cfg, dict):
+            return None
+
+        cfg = copy.deepcopy(raw_cfg)
+
+        def _hydrate_items(items_list):
+            if not isinstance(items_list, list):
+                return
+            for item in items_list:
+                if not isinstance(item, dict):
+                    continue
+                item_id = str(item.get("id") or "").strip()
+                ref = refs.get(f"__refresher__{item_id}") if item_id else None
+                if ref is not None:
+                    item["mediaId"] = str(ref.media_asset_id)
+                    item["mediaReferenceId"] = str(ref.id)
+                    item["url"] = f"/api/media/references/{ref.id}/stream"
+                    item["originalFileName"] = ref.media_asset.file_name
+                    item["fileSizeBytes"] = ref.media_asset.size_bytes
+                    item["mimeType"] = ref.media_asset.mime_type
+                    if item.get("type") == "video":
+                        item["videoSourceType"] = "upload"
+
+        for ch in cfg.get("extraChapters", []) or []:
+            if isinstance(ch, dict):
+                _hydrate_items(ch.get("items"))
+
+        extra_by_ch = cfg.get("extraItemsByChapter")
+        if isinstance(extra_by_ch, dict):
+            for items_list in extra_by_ch.values():
+                _hydrate_items(items_list)
+
+        return cfg
 
 
 class PublishedCourseVersionSerializer(serializers.ModelSerializer):

@@ -5,6 +5,20 @@ import type {
 } from './types';
 
 /**
+ * Checks whether an individual chapter is visible in the refresher version.
+ * Business Rule: Chapters default to visible (true) unless explicitly hidden.
+ */
+export function isChapterVisibleInRefresher(
+  chapterId: string,
+  config?: RefresherCourseConfig
+): boolean {
+  if (!config) return true;
+  const chSetting = config.chapters?.[chapterId];
+  if (!chSetting) return true;
+  return chSetting.isVisible !== false;
+}
+
+/**
  * Checks whether an individual content item is visible in the refresher version.
  * Business Rule: Content items default to visible (true) in the refresher version
  * unless an explicit saved setting specifies isVisible: false.
@@ -64,11 +78,68 @@ export function hasRefresherChapterTitleOverride(
 }
 
 /**
+ * Applies an explicit ID order array to a list of entities, appending any items
+ * whose IDs are not yet in `orderIds` in their original relative order.
+ */
+function applyIdOrder<T extends { id: string }>(list: T[], orderIds?: string[]): T[] {
+  if (!orderIds || orderIds.length === 0) return list;
+  const byId = new Map(list.map((entry) => [entry.id, entry]));
+  const ordered: T[] = [];
+  const seen = new Set<string>();
+  for (const id of orderIds) {
+    const match = byId.get(id);
+    if (match && !seen.has(id)) {
+      ordered.push(match);
+      seen.add(id);
+    }
+  }
+  for (const entry of list) {
+    if (!seen.has(entry.id)) {
+      ordered.push(entry);
+    }
+  }
+  return ordered;
+}
+
+/**
+ * Returns the full merged chapter list (original + refresher extraChapters)
+ * ordered by `config.chapterOrder` for editing or effective resolution.
+ */
+export function getOrderedRefresherChapters(
+  chapters: CourseChapter[],
+  config?: RefresherCourseConfig
+): Array<CourseChapter & { isRefresherExtra?: boolean }> {
+  const originals = chapters.map((ch) => ({ ...ch, isRefresherExtra: false }));
+  const extras = (config?.extraChapters || []).map((ch) => ({
+    ...ch,
+    isRefresherExtra: true,
+  }));
+  return applyIdOrder([...originals, ...extras], config?.chapterOrder);
+}
+
+/**
+ * Returns the merged item list for a chapter (original items + refresher extraItems)
+ * ordered by `config.itemOrderByChapter[chapterId]`.
+ */
+export function getOrderedRefresherChapterItems(
+  chapter: CourseChapter,
+  config?: RefresherCourseConfig
+): Array<ChapterItem & { isRefresherExtra?: boolean }> {
+  const extras = (config?.extraItemsByChapter?.[chapter.id] || []).map((it) => ({
+    ...it,
+    isRefresherExtra: true,
+  }));
+  const originals = chapter.items.map((it) => ({ ...it, isRefresherExtra: false }));
+  return applyIdOrder([...originals, ...extras], config?.itemOrderByChapter?.[chapter.id]);
+}
+
+/**
  * Generates the effective course structure for the refresher version.
+ * - Excludes chapters marked hidden in refresher mode.
  * - Filters out items that are marked as hidden in the refresher version.
- * - Applies refresher-specific display name overrides to both chapters and items.
+ * - Merges refresher-only extraChapters and extraItemsByChapter (with their own media/files).
+ * - Applies refresher-specific display name overrides and custom chapter/item ordering.
  * - Excludes chapters that have zero visible refresher items (never shows empty sections).
- * - Preserves original media references, URLs, durations, and download policies.
  */
 export function getEffectiveRefresherChapters(
   chapters: CourseChapter[],
@@ -78,9 +149,14 @@ export function getEffectiveRefresherChapters(
     return [];
   }
 
-  return chapters
+  return getOrderedRefresherChapters(chapters, config)
+    .filter((chapter) => isChapterVisibleInRefresher(chapter.id, config))
     .map((chapter) => {
-      const visibleItems = chapter.items
+      const mergedItems = chapter.isRefresherExtra
+        ? applyIdOrder(chapter.items, config?.itemOrderByChapter?.[chapter.id])
+        : getOrderedRefresherChapterItems(chapter, config);
+
+      const visibleItems = mergedItems
         .filter((item) => isItemVisibleInRefresher(item.id, config))
         .map((item) => ({
           ...item,
@@ -104,19 +180,24 @@ export function calculateRefresherStats(
   config?: RefresherCourseConfig
 ) {
   let totalOriginalItems = 0;
+  let visibleOriginalItems = 0;
   let visibleRefresherItems = 0;
   let customTitlesCount = 0;
   let activeChaptersCount = 0;
+  let extraItemsCount = 0;
+  const extraChapters = config?.extraChapters || [];
 
   chapters.forEach((chapter) => {
+    const chVisible = isChapterVisibleInRefresher(chapter.id, config);
     let chapterHasVisible = false;
     if (hasRefresherChapterTitleOverride(chapter.id, config)) {
       customTitlesCount += 1;
     }
     chapter.items.forEach((item) => {
       totalOriginalItems += 1;
-      const isVisible = isItemVisibleInRefresher(item.id, config);
+      const isVisible = chVisible && isItemVisibleInRefresher(item.id, config);
       if (isVisible) {
+        visibleOriginalItems += 1;
         visibleRefresherItems += 1;
         chapterHasVisible = true;
       }
@@ -124,18 +205,43 @@ export function calculateRefresherStats(
         customTitlesCount += 1;
       }
     });
+    const chExtras = config?.extraItemsByChapter?.[chapter.id] || [];
+    chExtras.forEach((extraItem) => {
+      extraItemsCount += 1;
+      if (chVisible && isItemVisibleInRefresher(extraItem.id, config)) {
+        visibleRefresherItems += 1;
+        chapterHasVisible = true;
+      }
+    });
     if (chapterHasVisible) {
       activeChaptersCount += 1;
     }
   });
 
+  extraChapters.forEach((ch) => {
+    const chVisible = isChapterVisibleInRefresher(ch.id, config);
+    let chHasVisible = false;
+    ch.items.forEach((it) => {
+      extraItemsCount += 1;
+      if (chVisible && isItemVisibleInRefresher(it.id, config)) {
+        visibleRefresherItems += 1;
+        chHasVisible = true;
+      }
+    });
+    if (chHasVisible) {
+      activeChaptersCount += 1;
+    }
+  });
+
   return {
-    totalChapters: chapters.length,
+    totalChapters: chapters.length + extraChapters.length,
     activeChaptersCount,
     totalOriginalItems,
     visibleRefresherItems,
-    hiddenItemsCount: totalOriginalItems - visibleRefresherItems,
+    hiddenItemsCount: totalOriginalItems - visibleOriginalItems,
     customTitlesCount,
+    extraChaptersCount: extraChapters.length,
+    extraItemsCount,
   };
 }
 

@@ -12,7 +12,10 @@ import { ConfirmDialog, type ConfirmDialogVariant } from '@/shared/ui/ConfirmDia
 import { Modal } from '@/shared/ui/Modal';
 import { ItemEditorModal } from './ItemEditorModal';
 import {
+  isChapterVisibleInRefresher,
   isItemVisibleInRefresher,
+  getOrderedRefresherChapters,
+  getOrderedRefresherChapterItems,
   calculateRefresherStats,
   assessRefresherImpact,
 } from '@/core/courses/refresher';
@@ -79,6 +82,9 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
 
   // Refresher Statistics
   const refresherStats = calculateRefresherStats(chapters, refresherConfig);
+  const displayedChapters = isRefresherMode
+    ? getOrderedRefresherChapters(chapters, refresherConfig)
+    : chapters.map((ch) => ({ ...ch, isRefresherExtra: false }));
 
   // =========================================================================
   // Refresher Mode Configuration Handlers
@@ -115,6 +121,111 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
       ...refresherConfig,
       enabled: true,
       items: updatedItems,
+    });
+  };
+
+  const handleToggleChapterVisibility = (chapterId: string, isVisible: boolean) => {
+    if (!onRefresherConfigChange) return;
+    const existing = refresherConfig?.chapters?.[chapterId] || { chapterId };
+    onRefresherConfigChange({
+      ...refresherConfig,
+      enabled: true,
+      chapters: {
+        ...(refresherConfig?.chapters || {}),
+        [chapterId]: {
+          ...existing,
+          chapterId,
+          isVisible,
+        },
+      },
+    });
+  };
+
+  const handleMoveRefresherChapter = (index: number, direction: 'up' | 'down') => {
+    if (!onRefresherConfigChange) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= displayedChapters.length) return;
+    const ids = displayedChapters.map((c) => c.id);
+    const tmp = ids[index];
+    ids[index] = ids[targetIndex];
+    ids[targetIndex] = tmp;
+    onRefresherConfigChange({
+      ...refresherConfig,
+      enabled: true,
+      chapterOrder: ids,
+    });
+  };
+
+  const handleDeleteRefresherExtraChapter = (chapterId: string) => {
+    if (!onRefresherConfigChange) return;
+    const nextExtra = (refresherConfig?.extraChapters || []).filter((ch) => ch.id !== chapterId);
+    const nextOrder = (refresherConfig?.chapterOrder || []).filter((id) => id !== chapterId);
+    onRefresherConfigChange({
+      ...refresherConfig,
+      enabled: true,
+      extraChapters: nextExtra,
+      chapterOrder: nextOrder,
+    });
+  };
+
+  const handleMoveRefresherItem = (
+    chapter: CourseChapter,
+    itemIndex: number,
+    direction: 'up' | 'down'
+  ) => {
+    if (!onRefresherConfigChange) return;
+    const mergedItems = getOrderedRefresherChapterItems(chapter, refresherConfig);
+    const targetIndex = direction === 'up' ? itemIndex - 1 : itemIndex + 1;
+    if (targetIndex < 0 || targetIndex >= mergedItems.length) return;
+    const ids = mergedItems.map((it) => it.id);
+    const tmp = ids[itemIndex];
+    ids[itemIndex] = ids[targetIndex];
+    ids[targetIndex] = tmp;
+    onRefresherConfigChange({
+      ...refresherConfig,
+      enabled: true,
+      itemOrderByChapter: {
+        ...(refresherConfig?.itemOrderByChapter || {}),
+        [chapter.id]: ids,
+      },
+    });
+  };
+
+  const handleDeleteRefresherExtraItem = (chapterId: string, itemId: string) => {
+    if (!onRefresherConfigChange) return;
+    const isExtraChapter = (refresherConfig?.extraChapters || []).some((ch) => ch.id === chapterId);
+    const nextOrder = (refresherConfig?.itemOrderByChapter?.[chapterId] || []).filter(
+      (id) => id !== itemId
+    );
+    if (isExtraChapter) {
+      const nextExtraChapters = (refresherConfig?.extraChapters || []).map((ch) =>
+        ch.id === chapterId
+          ? { ...ch, items: ch.items.filter((it) => it.id !== itemId) }
+          : ch
+      );
+      onRefresherConfigChange({
+        ...refresherConfig,
+        enabled: true,
+        extraChapters: nextExtraChapters,
+        itemOrderByChapter: {
+          ...(refresherConfig?.itemOrderByChapter || {}),
+          [chapterId]: nextOrder,
+        },
+      });
+      return;
+    }
+    const existingExtraItems = refresherConfig?.extraItemsByChapter?.[chapterId] || [];
+    onRefresherConfigChange({
+      ...refresherConfig,
+      enabled: true,
+      extraItemsByChapter: {
+        ...(refresherConfig?.extraItemsByChapter || {}),
+        [chapterId]: existingExtraItems.filter((it) => it.id !== itemId),
+      },
+      itemOrderByChapter: {
+        ...(refresherConfig?.itemOrderByChapter || {}),
+        [chapterId]: nextOrder,
+      },
     });
   };
 
@@ -209,8 +320,32 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
   // =========================================================================
   const handleAddChapter = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newChapterTitle.trim() || !onChange) return;
+    if (!newChapterTitle.trim()) return;
 
+    if (isRefresherMode) {
+      if (!onRefresherConfigChange) return;
+      const newChapter: CourseChapter = {
+        id: `CH_REF_${Date.now()}`,
+        title: newChapterTitle.trim(),
+        order: displayedChapters.length + 1,
+        items: [],
+      };
+      const baseOrder =
+        refresherConfig?.chapterOrder && refresherConfig.chapterOrder.length > 0
+          ? refresherConfig.chapterOrder
+          : displayedChapters.map((c) => c.id);
+      onRefresherConfigChange({
+        ...refresherConfig,
+        enabled: true,
+        extraChapters: [...(refresherConfig?.extraChapters || []), newChapter],
+        chapterOrder: [...baseOrder, newChapter.id],
+      });
+      setNewChapterTitle('');
+      setIsAddingChapter(false);
+      return;
+    }
+
+    if (!onChange) return;
     const newChapter: CourseChapter = {
       id: `CH_${Date.now()}`,
       title: newChapterTitle.trim(),
@@ -400,6 +535,68 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
   const handleSaveItem = (itemData: ChapterItem) => {
     if (!editingItemInfo) return;
     const { chapterId, item } = editingItemInfo;
+
+    if (isRefresherMode) {
+      if (!onRefresherConfigChange) return;
+      const targetChapter = displayedChapters.find((ch) => ch.id === chapterId);
+      const isExtraChapter = (refresherConfig?.extraChapters || []).some((ch) => ch.id === chapterId);
+      const currentMergedItems = targetChapter
+        ? getOrderedRefresherChapterItems(targetChapter, refresherConfig)
+        : [];
+      const currentOrder =
+        refresherConfig?.itemOrderByChapter?.[chapterId] &&
+        refresherConfig.itemOrderByChapter[chapterId].length > 0
+          ? refresherConfig.itemOrderByChapter[chapterId]
+          : currentMergedItems.map((it) => it.id);
+
+      if (isExtraChapter) {
+        const nextExtraChapters = (refresherConfig?.extraChapters || []).map((ch) => {
+          if (ch.id !== chapterId) return ch;
+          const exists = ch.items.some((it) => it.id === itemData.id);
+          return {
+            ...ch,
+            items:
+              item && exists
+                ? ch.items.map((it) => (it.id === itemData.id ? itemData : it))
+                : [...ch.items, itemData],
+          };
+        });
+        onRefresherConfigChange({
+          ...refresherConfig,
+          enabled: true,
+          extraChapters: nextExtraChapters,
+          itemOrderByChapter: {
+            ...(refresherConfig?.itemOrderByChapter || {}),
+            [chapterId]: currentOrder.includes(itemData.id)
+              ? currentOrder
+              : [...currentOrder, itemData.id],
+          },
+        });
+      } else {
+        const existingExtras = refresherConfig?.extraItemsByChapter?.[chapterId] || [];
+        const exists = existingExtras.some((it) => it.id === itemData.id);
+        const nextExtras =
+          item && exists
+            ? existingExtras.map((it) => (it.id === itemData.id ? itemData : it))
+            : [...existingExtras, itemData];
+        onRefresherConfigChange({
+          ...refresherConfig,
+          enabled: true,
+          extraItemsByChapter: {
+            ...(refresherConfig?.extraItemsByChapter || {}),
+            [chapterId]: nextExtras,
+          },
+          itemOrderByChapter: {
+            ...(refresherConfig?.itemOrderByChapter || {}),
+            [chapterId]: currentOrder.includes(itemData.id)
+              ? currentOrder
+              : [...currentOrder, itemData.id],
+          },
+        });
+      }
+      setEditingItemInfo(null);
+      return;
+    }
 
     // 1. Adding a new item to an existing chapter
     if (!item) {
@@ -641,6 +838,21 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
                   </span>
                 </div>
               )}
+              {!isAddingChapter && !readOnly && (
+                <div className="mr-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    leftIcon="plus"
+                    onClick={() => setIsAddingChapter(true)}
+                    className="font-bold"
+                    data-testid="refresher-add-chapter-btn"
+                  >
+                    إضافة فصل للنسخة التذكيرية
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -689,8 +901,8 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
         </div>
       )}
 
-      {/* Curriculum Mode: Add Chapter Inline Form */}
-      {!isRefresherMode && isAddingChapter && (
+      {/* Curriculum & Refresher Mode: Add Chapter Inline Form */}
+      {(!isRefresherMode || isRefresherEnabled) && isAddingChapter && (
         <form
           onSubmit={handleAddChapter}
           className="p-4 rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 space-y-3"
@@ -735,7 +947,7 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
       )}
 
       {/* Chapters Empty State */}
-      {chapters.length === 0 && !isAddingChapter && (
+      {displayedChapters.length === 0 && !isAddingChapter && (
         <div className="text-center py-12 px-4 rounded-2xl border-2 border-dashed border-border bg-bg-alt/30 space-y-3">
           <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
             <Icon name="courses" size="md" />
@@ -743,10 +955,10 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
           <h3 className="text-sm font-bold text-text-heading">لا توجد فصول دراسية في هذا المقرر بعد</h3>
           <p className="text-xs text-text-muted max-w-sm mx-auto">
             {isRefresherMode
-              ? 'يجب إضافة فصول ومحتويات في تبويب "هيكل المنهج والمحتوى" أولاً لتتمكن من إعداد النسخة التذكيرية.'
+              ? 'يمكنك إضافة فصول خاصة بالنسخة التذكيرية أو إضافة فصول في هيكل المنهج الأساسي.'
               : 'ابدأ بإضافة الفصل الأول لتتمكن من رفع المحاضرات ومستندات التدريب والمخططات.'}
           </p>
-          {!isRefresherMode && (
+          {(!isRefresherMode || isRefresherEnabled) && !readOnly && (
             <Button
               type="button"
               variant="primary"
@@ -767,12 +979,19 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
         }`}
         data-testid="curriculum-tree-list"
       >
-        {chapters.map((chapter, chIdx) => {
+        {displayedChapters.map((chapter, chIdx) => {
+          const isChapterVisible = isChapterVisibleInRefresher(chapter.id, refresherConfig);
+          const displayedItems = isRefresherMode
+            ? getOrderedRefresherChapterItems(chapter, refresherConfig)
+            : chapter.items.map((it) => ({ ...it, isRefresherExtra: false }));
           // In refresher mode, compute count of visible items in this chapter
-          const visibleItemsInChapter = chapter.items.filter((it) =>
+          const visibleItemsInChapter = displayedItems.filter((it) =>
             isItemVisibleInRefresher(it.id, refresherConfig)
           );
-          const allItemsHidden = isRefresherMode && isRefresherEnabled && chapter.items.length > 0 && visibleItemsInChapter.length === 0;
+          const allItemsHidden =
+            isRefresherMode &&
+            isRefresherEnabled &&
+            (!isChapterVisible || (displayedItems.length > 0 && visibleItemsInChapter.length === 0));
           const customChapterTitle = refresherConfig?.chapters?.[chapter.id]?.customTitle?.trim();
           const isEditingChapterTitle = editingTitleChapterId === chapter.id;
 
@@ -885,9 +1104,66 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
                   </div>
                 )}
 
-                {/* Refresher Mode: Chapter Custom Title Controls */}
+                {/* Refresher Mode: Chapter Visibility, Reorder, Delete Extra & Custom Title Controls */}
                 {isRefresherMode && isRefresherEnabled && !isEditingChapterTitle && (
-                  <div className="flex items-center gap-2 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    {chapter.isRefresherExtra && (
+                      <Badge variant="info" className="text-[10px]">
+                        فصل مضاف للتذكيري
+                      </Badge>
+                    )}
+
+                    {!readOnly && (
+                      <>
+                        <label className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border bg-surface cursor-pointer hover:bg-neutral-light/50 select-none">
+                          <input
+                            type="checkbox"
+                            checked={isChapterVisible}
+                            onChange={(e) => handleToggleChapterVisibility(chapter.id, e.target.checked)}
+                            className="w-3.5 h-3.5 rounded text-primary focus:ring-primary border-border cursor-pointer"
+                            data-testid={`refresher-chapter-visibility-${chapter.id}`}
+                          />
+                          <span className="font-semibold text-text-heading text-[11px]">
+                            إظهار الفصل بالتذكيري
+                          </span>
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => handleMoveRefresherChapter(chIdx, 'up')}
+                          disabled={chIdx === 0}
+                          className="p-1 rounded-lg border border-border hover:bg-neutral-light disabled:opacity-30 disabled:cursor-not-allowed text-text-muted"
+                          title="نقل الفصل للأعلى في التذكيري"
+                          data-testid={`refresher-chapter-move-up-${chapter.id}`}
+                        >
+                          <Icon name="chevronUp" size="sm" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleMoveRefresherChapter(chIdx, 'down')}
+                          disabled={chIdx === displayedChapters.length - 1}
+                          className="p-1 rounded-lg border border-border hover:bg-neutral-light disabled:opacity-30 disabled:cursor-not-allowed text-text-muted"
+                          title="نقل الفصل للأسفل في التذكيري"
+                          data-testid={`refresher-chapter-move-down-${chapter.id}`}
+                        >
+                          <Icon name="chevronDown" size="sm" />
+                        </button>
+
+                        {chapter.isRefresherExtra && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRefresherExtraChapter(chapter.id)}
+                            className="p-1 rounded-lg border border-danger/20 text-danger hover:bg-danger/10"
+                            title="حذف الفصل المضاف للتذكيري"
+                            data-testid={`refresher-chapter-delete-${chapter.id}`}
+                          >
+                            <Icon name="trash" size="sm" />
+                          </button>
+                        )}
+                      </>
+                    )}
+
                     {customChapterTitle ? (
                       <Badge
                         variant="primary"
@@ -1028,13 +1304,13 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
 
               {/* Chapter Items List */}
               <div className="p-4 space-y-2.5">
-                {chapter.items.length === 0 ? (
+                {displayedItems.length === 0 ? (
                   <div className="text-center py-6 border border-dashed border-border rounded-xl text-xs text-text-muted">
                     لا توجد دروس أو ملفات مضافة في هذا الفصل بعد.
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {chapter.items.map((item, itIdx) => {
+                    {displayedItems.map((item, itIdx) => {
                       const isItemVisible = isItemVisibleInRefresher(item.id, refresherConfig);
                       const customTitle = refresherConfig?.items?.[item.id]?.customTitle;
                       const isEditingTitle = editingTitleItemId === item.id;
@@ -1206,26 +1482,87 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
                           {/* Controls (Refresher vs Curriculum Mode) */}
                           <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                             {isRefresherMode ? (
-                              /* Refresher Mode: Visibility Checkbox */
-                              <label
-                                className={`flex items-center gap-2 p-2 rounded-xl border border-border bg-surface text-xs select-none ${
-                                  !isRefresherEnabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-neutral-light/50'
-                                }`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isItemVisible}
-                                  disabled={!isRefresherEnabled}
-                                  onChange={(e) =>
-                                    handleToggleItemVisibility(item.id, e.target.checked)
-                                  }
-                                  className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer disabled:cursor-not-allowed"
-                                  data-testid={`refresher-item-visibility-${item.id}`}
-                                />
-                                <span className="font-semibold text-text-heading text-[11px]">
-                                  إظهار هذا المحتوى في النسخة التذكيرية
-                                </span>
-                              </label>
+                              /* Refresher Mode: Reorder + Visibility (original) or Edit/Delete (extra) */
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {isRefresherEnabled && !readOnly && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveRefresherItem(chapter, itIdx, 'up')}
+                                      disabled={itIdx === 0}
+                                      className="p-1 rounded-lg border border-border hover:bg-neutral-light disabled:opacity-30 disabled:cursor-not-allowed text-text-muted"
+                                      title="نقل الدرس للأعلى في التذكيري"
+                                      data-testid={`refresher-item-move-up-${item.id}`}
+                                    >
+                                      <Icon name="chevronUp" size="sm" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveRefresherItem(chapter, itIdx, 'down')}
+                                      disabled={itIdx === displayedItems.length - 1}
+                                      className="p-1 rounded-lg border border-border hover:bg-neutral-light disabled:opacity-30 disabled:cursor-not-allowed text-text-muted"
+                                      title="نقل الدرس للأسفل في التذكيري"
+                                      data-testid={`refresher-item-move-down-${item.id}`}
+                                    >
+                                      <Icon name="chevronDown" size="sm" />
+                                    </button>
+                                  </>
+                                )}
+
+                                {item.isRefresherExtra ? (
+                                  isRefresherEnabled && !readOnly && (
+                                    <>
+                                      <Badge variant="info" className="text-[10px]">
+                                        مضاف للتذكيري
+                                      </Badge>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setEditingItemInfo({
+                                            chapterId: chapter.id,
+                                            chapterTitle: chapter.title,
+                                            item,
+                                          })
+                                        }
+                                        className="p-1 rounded-lg border border-border hover:bg-neutral-light text-text-muted"
+                                        title="تعديل الدرس أو الملف"
+                                        data-testid={`refresher-item-edit-${item.id}`}
+                                      >
+                                        <Icon name="edit" size="sm" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteRefresherExtraItem(chapter.id, item.id)}
+                                        className="p-1 rounded-lg border border-danger/20 text-danger hover:bg-danger/10"
+                                        title="حذف الدرس المضاف للتذكيري"
+                                        data-testid={`refresher-item-delete-${item.id}`}
+                                      >
+                                        <Icon name="trash" size="sm" />
+                                      </button>
+                                    </>
+                                  )
+                                ) : (
+                                  <label
+                                    className={`flex items-center gap-2 p-2 rounded-xl border border-border bg-surface text-xs select-none ${
+                                      !isRefresherEnabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-neutral-light/50'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isItemVisible}
+                                      disabled={!isRefresherEnabled}
+                                      onChange={(e) =>
+                                        handleToggleItemVisibility(item.id, e.target.checked)
+                                      }
+                                      className="w-4 h-4 rounded text-primary focus:ring-primary border-border cursor-pointer disabled:cursor-not-allowed"
+                                      data-testid={`refresher-item-visibility-${item.id}`}
+                                    />
+                                    <span className="font-semibold text-text-heading text-[11px]">
+                                      إظهار هذا المحتوى في النسخة التذكيرية
+                                    </span>
+                                  </label>
+                                )}
+                              </div>
                             ) : !readOnly ? (
                               /* Curriculum Mode: Standard Item Manipulation Controls */
                               <div className="flex items-center gap-1">
@@ -1286,8 +1623,8 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
                   </div>
                 )}
 
-                {/* Add Item Trigger Button (Curriculum Mode Only) */}
-                {!isRefresherMode && !readOnly && (
+                {/* Add Item Trigger Button (Curriculum & Enabled Refresher Mode) */}
+                {(!isRefresherMode || isRefresherEnabled) && !readOnly && (
                   <button
                     type="button"
                     onClick={() =>
@@ -1298,10 +1635,18 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
                       })
                     }
                     className="w-full py-2.5 px-3 border border-dashed border-border rounded-xl text-xs font-bold text-primary hover:bg-primary/5 hover:border-primary transition-colors flex items-center justify-center gap-1.5"
-                    data-testid={`chapter-add-item-btn-${chapter.id}`}
+                    data-testid={
+                      isRefresherMode
+                        ? `refresher-chapter-add-item-btn-${chapter.id}`
+                        : `chapter-add-item-btn-${chapter.id}`
+                    }
                   >
                     <Icon name="plus" size="sm" />
-                    <span>إضافة درس أو محتوى لهذا الفصل</span>
+                    <span>
+                      {isRefresherMode
+                        ? 'إضافة درس أو رفع ملف للنسخة التذكيرية'
+                        : 'إضافة درس أو محتوى لهذا الفصل'}
+                    </span>
                   </button>
                 )}
               </div>
@@ -1310,8 +1655,8 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
         })}
       </div>
 
-      {/* Item Editor Modal (Curriculum Mode Only) */}
-      {!isRefresherMode && editingItemInfo && (
+      {/* Item Editor Modal (Curriculum & Refresher Mode) */}
+      {(!isRefresherMode || isRefresherEnabled) && editingItemInfo && (
         <ItemEditorModal
           isOpen={true}
           chapterId={editingItemInfo.chapterId}

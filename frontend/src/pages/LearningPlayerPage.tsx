@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, Navigate, useSearchParams, useLocation } from 'react-router-dom';
+import { getEffectiveRefresherChapters } from '@/core/courses/refresher';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRolePreview } from '@/core/auth/useRolePreview';
 import { useCourseDetail } from '@/features/courses/hooks/useCourseDetail';
@@ -81,6 +82,22 @@ export const LearningPlayerPage: React.FC = () => {
     navigate('/courses');
   }, [navigate]);
 
+  const isRefresherContext =
+    searchParams.get('version') === 'refresher' ||
+    searchParams.get('refresher') === 'true' ||
+    (progress as { courseRole?: string } | null)?.courseRole === 'reminder';
+
+  const effectiveCourse = useMemo(() => {
+    if (!course) return course;
+    if (isRefresherContext && course.refresherConfig?.enabled) {
+      return {
+        ...course,
+        chapters: getEffectiveRefresherChapters(course.chapters, course.refresherConfig),
+      };
+    }
+    return course;
+  }, [course, isRefresherContext]);
+
   const {
     flatItems,
     currentItem,
@@ -92,7 +109,7 @@ export const LearningPlayerPage: React.FC = () => {
     goToPrev,
     goToNext,
   } = useLearningPlayer({
-    course,
+    course: effectiveCourse,
     progress,
     userRole: user?.role,
     initialItemId: itemId,
@@ -518,7 +535,7 @@ export const LearningPlayerPage: React.FC = () => {
 
         {/* Curriculum Navigation Sidebar (Left in RTL) */}
         <CurriculumSidebar
-          chapters={course.chapters}
+          chapters={effectiveCourse?.chapters || course.chapters}
           flatItems={flatItems}
           currentItemId={currentItem?.id || null}
           onSelectItem={(selectedId) => {

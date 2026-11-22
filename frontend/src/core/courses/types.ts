@@ -261,6 +261,7 @@ export interface Course {
 
 export interface RefresherChapterConfig {
   chapterId: string;
+  isVisible?: boolean;
   customTitle?: string;
 }
 
@@ -274,6 +275,10 @@ export interface RefresherCourseConfig {
   enabled: boolean;
   chapters?: Record<string, RefresherChapterConfig>;
   items?: Record<string, RefresherItemConfig>;
+  extraChapters?: CourseChapter[];
+  extraItemsByChapter?: Record<string, ChapterItem[]>;
+  chapterOrder?: string[];
+  itemOrderByChapter?: Record<string, string[]>;
 }
 
 export interface CourseFilterParams {

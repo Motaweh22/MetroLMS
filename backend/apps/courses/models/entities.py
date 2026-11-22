@@ -255,6 +255,7 @@ class CourseDraft(models.Model):
         related_name="draft",
     )
     title_snapshot = models.CharField(max_length=255)
+    refresher_config_json = models.JSONField(null=True, blank=True, default=None)
     updated_at = models.DateTimeField()
     updated_by_user = models.ForeignKey(
         "identity.User",
@@ -297,6 +298,7 @@ class PublishedCourseVersion(models.Model):
         related_name="published_versions",
     )
     version_number = models.IntegerField()
+    refresher_config_json = models.JSONField(null=True, blank=True, default=None)
     published_at = models.DateTimeField()
     published_by_user = models.ForeignKey(
         "identity.User",

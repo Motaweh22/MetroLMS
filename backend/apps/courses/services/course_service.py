@@ -124,6 +124,7 @@ def save_course_draft(
     title_snapshot: str,
     modules_payload: list[dict[str, Any]],
     thumbnail_asset_id: int | None = None,
+    refresher_config: dict[str, Any] | None = None,
 ) -> CourseDraft:
     """Replace mutable CourseDraft curriculum structure cleanly (Rule B)."""
     if not can_edit_course_draft(actor, course):
@@ -133,14 +134,18 @@ def save_course_draft(
     validate_non_empty_text(norm_title)
     now = timezone.now()
 
+    defaults: dict[str, Any] = {
+        "title_snapshot": norm_title,
+        "updated_at": now,
+        "updated_by_user": actor,
+        "updated_by_tombstone": None,
+    }
+    if refresher_config is not None:
+        defaults["refresher_config_json"] = refresher_config
+
     draft, _ = CourseDraft.objects.update_or_create(
         course=course,
-        defaults={
-            "title_snapshot": norm_title,
-            "updated_at": now,
-            "updated_by_user": actor,
-            "updated_by_tombstone": None,
-        },
+        defaults=defaults,
     )
 
     # Clear existing draft modules -> quizzes -> lessons -> modules & draft media refs (ON DELETE NO ACTION)
@@ -214,6 +219,33 @@ def save_course_draft(
                     questions_json=quiz_data.get("questions", []),
                     passing_score=Decimal(str(quiz_data.get("passingScore", "70.00"))),
                 )
+
+    # Register MediaContentReference for any media uploaded in refresher-only items/chapters
+    effective_refresher = draft.refresher_config_json if isinstance(draft.refresher_config_json, dict) else {}
+    refresher_items_to_ref: list[dict[str, Any]] = []
+    for r_ch in effective_refresher.get("extraChapters", []) or []:
+        if isinstance(r_ch, dict):
+            refresher_items_to_ref.extend(
+                [it for it in (r_ch.get("items") or []) if isinstance(it, dict)]
+            )
+    extra_by_ch = effective_refresher.get("extraItemsByChapter") or {}
+    if isinstance(extra_by_ch, dict):
+        for r_items in extra_by_ch.values():
+            if isinstance(r_items, list):
+                refresher_items_to_ref.extend([it for it in r_items if isinstance(it, dict)])
+
+    for r_item in refresher_items_to_ref:
+        raw_media_id = r_item.get("mediaId") or r_item.get("mediaAssetId")
+        r_item_id = str(r_item.get("id") or "").strip()
+        if raw_media_id is not None and str(raw_media_id).isdigit() and r_item_id:
+            asset = MediaAsset.objects.filter(pk=int(raw_media_id)).first()
+            if asset is not None:
+                MediaContentReference.objects.create(
+                    media_asset=asset,
+                    course_draft=draft,
+                    title=f"__refresher__{r_item_id}",
+                    is_visible=True,
+                )
     return draft
 
 
@@ -286,16 +318,17 @@ def decide_course_review(
     submission.save(update_fields=["review_status", "reviewed_by_user", "decided_at"])
 
     course = submission.course
+    draft = CourseDraft.objects.filter(course=course).first()
     max_ver = PublishedCourseVersion.objects.filter(course=course).aggregate(m=Max("version_number"))["m"] or 0
     pub_ver = PublishedCourseVersion.objects.create(
         course=course,
         version_number=max_ver + 1,
+        refresher_config_json=draft.refresher_config_json if draft is not None else None,
         published_at=now,
         published_by_user=reviewer,
     )
 
     # Snapshot CourseDraft -> PublishedCourseVersion (Rule B)
-    draft = CourseDraft.objects.filter(course=course).first()
     if draft is not None:
         for mod in Module.objects.filter(course_draft=draft).order_by("sort_order", "id"):
             pub_mod = Module.objects.create(

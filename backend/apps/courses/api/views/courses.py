@@ -425,6 +425,9 @@ class LecturerCourseDraftView(APIView):
                 title_snapshot=title_snapshot,
                 modules_payload=modules_payload,
                 thumbnail_asset_id=thumb_asset_id,
+                refresher_config=request.data.get("refresherConfig")
+                if isinstance(request.data.get("refresherConfig"), dict)
+                else None,
             )
             _purge_unreferenced_course_media(previous_draft_asset_ids)
             if course.lifecycle_status == "Draft":
