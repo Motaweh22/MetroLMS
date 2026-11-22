@@ -548,14 +548,14 @@ export const LearningPlayerPage: React.FC = () => {
             );
             return (
               <div
-                className="p-3 rounded-xl border border-border bg-surface flex flex-col gap-1.5"
+                className="p-3 rounded-xl border border-white/10 bg-[#0F172A]/90 flex flex-col gap-2"
                 data-testid="course-zip-archive-box"
               >
                 {zipPerm.allowed ? (
                   <a
                     href={`/api/courses/${encodeURIComponent(effectiveCourse.id)}/archive-zip`}
                     download={`${effectiveCourse.title || 'Course'}_Bundle.zip`}
-                    className="w-full py-2 px-3 rounded-lg bg-primary text-white text-xs font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
+                    className="w-full py-2.5 px-3 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
                     data-testid="course-zip-download-btn"
                   >
                     <Icon name="download" size="sm" />
@@ -566,7 +566,7 @@ export const LearningPlayerPage: React.FC = () => {
                     type="button"
                     disabled
                     title={zipPerm.reasonAr}
-                    className="w-full py-2 px-3 rounded-lg border border-border bg-bg-alt text-text-muted text-xs font-bold flex items-center justify-center gap-2 opacity-70 cursor-not-allowed"
+                    className="w-full py-2.5 px-3 rounded-lg border border-white/10 bg-white/5 text-slate-400 text-xs font-bold flex items-center justify-center gap-2 opacity-75 cursor-not-allowed"
                     data-testid="course-zip-download-disabled-btn"
                   >
                     <Icon name="lock" size="sm" />
@@ -574,7 +574,7 @@ export const LearningPlayerPage: React.FC = () => {
                   </button>
                 )}
                 {!zipPerm.allowed && zipPerm.reasonAr && (
-                  <p className="text-[11px] text-text-muted text-center leading-snug">
+                  <p className="text-[11px] text-slate-400 text-center leading-snug">
                     {zipPerm.reasonAr}
                   </p>
                 )}
