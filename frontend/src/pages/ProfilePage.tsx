@@ -168,6 +168,15 @@ export const ProfilePage: React.FC = () => {
 
                 <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
                   <span className="text-xs text-text-muted font-medium block mb-1">
+                    النوع
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading">
+                    {profileData.user.genderLabel || (profileData.user.gender === 'female' ? 'أنثى' : 'ذكر')}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
                     الحالة الاجتماعية
                   </span>
                   <span className="text-sm font-semibold text-text-heading">

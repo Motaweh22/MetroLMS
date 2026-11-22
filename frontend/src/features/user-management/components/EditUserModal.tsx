@@ -5,7 +5,12 @@ import { Button } from '@/shared/ui/Button';
 import { Alert } from '@/shared/ui/Alert';
 import { Icon } from '@/shared/ui/Icon';
 import { useToast } from '@/shared/ui/Toast';
-import { type ManagedUserDTO } from '@/core/user-management/types';
+import {
+  formatMaritalStatusByGender,
+  detectGenderFromNationalId,
+  type ManagedUserDTO,
+  type UserGender,
+} from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
 import { StyledSelect } from './StyledSelect';
 
@@ -38,6 +43,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [gender, setGender] = useState<UserGender>('male');
   const [nationalId, setNationalId] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [address, setAddress] = useState('');
@@ -81,6 +87,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     setName(user.name || '');
     setPhone(user.phone || '');
     setEmail(user.email && user.email !== user.phone ? user.email : '');
+    const initialGender: UserGender =
+      user.gender === 'female' || user.gender === 'male'
+        ? user.gender
+        : detectGenderFromNationalId(user.nationalId || '') || 'male';
+    setGender(initialGender);
     setNationalId(user.nationalId || '');
     setDateOfBirth(user.dateOfBirth || '');
     setAddress(user.address || '');
@@ -115,13 +126,32 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       setDepartmentRecords(dList);
       setJobTitleRecords(jList);
 
-      const matchedMarital = mList.find((m) => (m.nameAr || m.name) === user.maritalStatus);
-      const matchedMilitary = milList.find((m) => (m.nameAr || m.name) === user.militaryServiceStatus);
+      const matchedMarital =
+        (user.maritalStatusId != null
+          ? mList.find((m) => String(m.id) === String(user.maritalStatusId))
+          : undefined) ||
+        mList.find(
+          (m) =>
+            (m.nameAr || m.name) === user.maritalStatus ||
+            formatMaritalStatusByGender(m.code, initialGender, m.nameAr || '') === user.maritalStatus
+        );
+      const matchedMilitary =
+        (user.militaryServiceStatusId != null
+          ? milList.find((m) => String(m.id) === String(user.militaryServiceStatusId))
+          : undefined) ||
+        milList.find((m) => (m.nameAr || m.name) === user.militaryServiceStatus);
       const matchedLine = lList.find((l) => (l.nameAr || l.name) === user.metroLine);
 
       setMaritalStatusId(matchedMarital ? String(matchedMarital.id) : mList[0] ? String(mList[0].id) : '');
+      const naMil = milList.find((m) => m.code === 'not_applicable');
       setMilitaryServiceStatusId(
-        matchedMilitary ? String(matchedMilitary.id) : milList[0] ? String(milList[0].id) : ''
+        matchedMilitary
+          ? String(matchedMilitary.id)
+          : initialGender === 'female' && naMil
+          ? String(naMil.id)
+          : milList[0]
+          ? String(milList[0].id)
+          : ''
       );
       setMetroLineId(matchedLine ? String(matchedLine.id) : lList[0] ? String(lList[0].id) : '');
       if (!user.department && dList[0]) {
@@ -157,6 +187,28 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     return matches.length > 0 ? matches : jobTitleOptionsForDept;
   }, [jobTitle, jobTitleOptionsForDept]);
 
+  const handleGenderChange = (nextGender: UserGender) => {
+    setGender(nextGender);
+    if (militaryStatuses.length > 0) {
+      const naItem = militaryStatuses.find((m) => m.code === 'not_applicable');
+      const firstMale = militaryStatuses.find((m) => m.code !== 'not_applicable');
+      if (nextGender === 'female' && naItem) {
+        setMilitaryServiceStatusId(String(naItem.id));
+      } else if (nextGender === 'male' && naItem && String(naItem.id) === militaryServiceStatusId && firstMale) {
+        setMilitaryServiceStatusId(String(firstMale.id));
+      }
+    }
+  };
+
+  const visibleMilitaryStatuses = useMemo(() => {
+    if (gender === 'female') {
+      const na = militaryStatuses.filter((m) => m.code === 'not_applicable');
+      return na.length > 0 ? na : militaryStatuses;
+    }
+    const maleOnly = militaryStatuses.filter((m) => m.code !== 'not_applicable');
+    return maleOnly.length > 0 ? maleOnly : militaryStatuses;
+  }, [militaryStatuses, gender]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || isSubmitting) return;
@@ -185,6 +237,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         name: name.trim(),
         phone: phone.trim(),
         email: email.trim() || '',
+        gender,
         nationalId: nationalId.trim(),
         dateOfBirth,
         address: address.trim(),
@@ -285,7 +338,14 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               dir="ltr"
               disabled={isSubmitting}
               value={nationalId}
-              onChange={(e) => setNationalId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setNationalId(val);
+                const detected = detectGenderFromNationalId(val);
+                if (detected) {
+                  handleGenderChange(detected);
+                }
+              }}
               className={`${INPUT_CLASS} text-left`}
             />
           </div>
@@ -305,6 +365,23 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <label htmlFor="edit-user-gender" className="text-xs font-semibold text-text">
+              النوع
+            </label>
+            <StyledSelect
+              id="edit-user-gender"
+              dataTestId="edit-user-gender-select"
+              disabled={isSubmitting}
+              value={gender}
+              onChange={(val) => handleGenderChange(val as UserGender)}
+              options={[
+                { value: 'male', label: 'ذكر' },
+                { value: 'female', label: 'أنثى' },
+              ]}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-user-marital" className="text-xs font-semibold text-text">
               الحالة الاجتماعية
             </label>
@@ -318,7 +395,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               emptyMessage="لا توجد حالات اجتماعية مسجلة"
               options={maritalStatuses.map((m) => ({
                 value: String(m.id),
-                label: m.nameAr || m.name || m.code || String(m.id),
+                label: formatMaritalStatusByGender(
+                  m.code,
+                  gender,
+                  m.nameAr || m.name || m.code || String(m.id)
+                ),
               }))}
             />
           </div>
@@ -468,12 +549,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <StyledSelect
               id="edit-user-military"
               dataTestId="edit-user-military-select"
-              disabled={isSubmitting}
+              disabled={isSubmitting || gender === 'female'}
               value={militaryServiceStatusId}
               onChange={(val) => setMilitaryServiceStatusId(val)}
               placeholder="اختر الموقف من التجنيد"
               emptyMessage="لا توجد حالات تجنيد مسجلة"
-              options={militaryStatuses.map((m) => ({
+              options={visibleMilitaryStatuses.map((m) => ({
                 value: String(m.id),
                 label: m.nameAr || m.name || m.code || String(m.id),
               }))}

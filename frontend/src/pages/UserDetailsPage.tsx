@@ -331,6 +331,12 @@ export const UserDetailsPage: React.FC = () => {
             </span>
           </div>
           <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">النوع</span>
+            <span className="font-medium text-text">
+              {user.genderLabel || (user.gender === 'female' ? 'أنثى' : 'ذكر')}
+            </span>
+          </div>
+          <div>
             <span className="text-text-muted block text-[11px] mb-0.5">الحالة الاجتماعية</span>
             <span className="font-medium text-text">{user.maritalStatus || '—'}</span>
           </div>

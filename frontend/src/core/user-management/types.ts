@@ -6,6 +6,44 @@ export type { CertificateRecord, UserRole };
 
 export type UserStatus = 'active' | 'suspended';
 
+export type UserGender = 'male' | 'female';
+
+export const USER_GENDER_LABELS_AR: Record<UserGender, string> = {
+  male: 'ذكر',
+  female: 'أنثى',
+};
+
+const MARITAL_BY_GENDER: Record<UserGender, Record<string, string>> = {
+  male: {
+    single: 'أعزب',
+    married: 'متزوج',
+    divorced: 'مطلّق',
+    widowed: 'أرمل',
+  },
+  female: {
+    single: 'آنسة',
+    married: 'متزوجة',
+    divorced: 'مطلّقة',
+    widowed: 'أرملة',
+  },
+};
+
+export function formatMaritalStatusByGender(
+  code: string | undefined,
+  gender: UserGender,
+  fallback: string
+): string {
+  const key = (code || '').trim().toLowerCase();
+  return MARITAL_BY_GENDER[gender]?.[key] || fallback;
+}
+
+export function detectGenderFromNationalId(nationalId: string): UserGender | null {
+  const clean = nationalId.trim();
+  if (!/^\d{14}$/.test(clean)) return null;
+  const digit13 = parseInt(clean[12], 10);
+  return digit13 % 2 === 0 ? 'female' : 'male';
+}
+
 /**
  * Centrally Managed User Directory DTO
  * 
@@ -33,13 +71,17 @@ export interface ManagedUserDTO {
   /** Organizational unit / department */
   department: string;
   /** Canonical HR / Employee fields */
+  gender?: UserGender;
+  genderLabel?: string;
   nationalId?: string;
   dateOfBirth?: string | null;
   appointmentDate?: string | null;
   serviceEndDate?: string | null;
   address?: string;
   educationalQualification?: string;
+  maritalStatusId?: number | string;
   maritalStatus?: string;
+  militaryServiceStatusId?: number | string;
   militaryServiceStatus?: string;
   metroLine?: string;
   /** Core application role */
@@ -72,6 +114,7 @@ export interface CreateUserRequestDTO {
   /** Optional development password provisioned separately from directory records */
   password?: string;
   /** Canonical Egyptian HR / Employee fields (identity.User) */
+  gender?: UserGender;
   nationalId?: string;
   dateOfBirth?: string;
   appointmentDate?: string;

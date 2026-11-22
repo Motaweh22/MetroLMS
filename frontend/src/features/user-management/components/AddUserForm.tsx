@@ -10,8 +10,11 @@ import { useToast } from '@/shared/ui/Toast';
 import {
   USER_ROLE_LABELS_AR,
   USER_STATUS_LABELS_AR,
+  formatMaritalStatusByGender,
+  detectGenderFromNationalId,
   type CreateUserRequestDTO,
   type ManagedUserDTO,
+  type UserGender,
   type UserRole,
   type UserStatus,
 } from '@/core/user-management/types';
@@ -32,6 +35,7 @@ interface FormState {
   username: string;
   email: string;
   phone: string;
+  gender: UserGender;
   nationalId: string;
   dateOfBirth: string;
   address: string;
@@ -68,6 +72,7 @@ const INITIAL_FORM_STATE: FormState = {
   username: '',
   email: '',
   phone: '',
+  gender: 'male',
   nationalId: '',
   dateOfBirth: '',
   address: '',
@@ -243,6 +248,32 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
     }
   };
 
+  const handleGenderChange = (nextGender: UserGender) => {
+    setHasEdited(true);
+    setFormData((prev) => {
+      let nextMilitaryId = prev.militaryServiceStatusId;
+      if (militaryStatuses.length > 0) {
+        const naItem = militaryStatuses.find((m) => m.code === 'not_applicable');
+        const firstMaleItem = militaryStatuses.find((m) => m.code !== 'not_applicable');
+        if (nextGender === 'female' && naItem) {
+          nextMilitaryId = String(naItem.id);
+        } else if (nextGender === 'male' && naItem && String(naItem.id) === prev.militaryServiceStatusId && firstMaleItem) {
+          nextMilitaryId = String(firstMaleItem.id);
+        }
+      }
+      return { ...prev, gender: nextGender, militaryServiceStatusId: nextMilitaryId };
+    });
+  };
+
+  const visibleMilitaryStatuses = useMemo(() => {
+    if (formData.gender === 'female') {
+      const na = militaryStatuses.filter((m) => m.code === 'not_applicable');
+      return na.length > 0 ? na : militaryStatuses;
+    }
+    const maleOnly = militaryStatuses.filter((m) => m.code !== 'not_applicable');
+    return maleOnly.length > 0 ? maleOnly : militaryStatuses;
+  }, [militaryStatuses, formData.gender]);
+
   const validate = (): boolean => {
     const errs: FormErrors = {};
 
@@ -312,6 +343,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
         username: formData.username.trim().toLowerCase(),
         email: formData.email.trim() ? formData.email.trim().toLowerCase() : undefined,
         phone: formData.phone.trim(),
+        gender: formData.gender,
         nationalId: formData.nationalId.trim(),
         dateOfBirth: formData.dateOfBirth,
         address: formData.address.trim(),
@@ -447,7 +479,14 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               dir="ltr"
               placeholder="29501010100001"
               value={formData.nationalId}
-              onChange={(e) => updateField('nationalId', e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateField('nationalId', val);
+                const detected = detectGenderFromNationalId(val);
+                if (detected) {
+                  handleGenderChange(detected);
+                }
+              }}
               className={inputClass(errors.nationalId, 'text-left')}
             />
             {errors.nationalId && (
@@ -512,6 +551,23 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-gender" className="text-xs font-semibold text-text">
+              النوع <span className="text-danger" aria-hidden="true">*</span>
+            </label>
+            <StyledSelect
+              id="add-user-gender"
+              dataTestId="add-user-gender-input"
+              disabled={isSubmitting}
+              value={formData.gender}
+              onChange={(val) => handleGenderChange(val as UserGender)}
+              options={[
+                { value: 'male', label: 'ذكر' },
+                { value: 'female', label: 'أنثى' },
+              ]}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-marital" className="text-xs font-semibold text-text">
               الحالة الاجتماعية <span className="text-danger" aria-hidden="true">*</span>
             </label>
@@ -525,7 +581,11 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               emptyMessage="لا توجد حالات اجتماعية مسجلة"
               options={maritalStatuses.map((item) => ({
                 value: String(item.id),
-                label: item.nameAr || item.name || item.label || item.code || String(item.id),
+                label: formatMaritalStatusByGender(
+                  item.code,
+                  formData.gender,
+                  item.nameAr || item.name || item.label || item.code || String(item.id)
+                ),
               }))}
             />
           </div>
@@ -729,12 +789,12 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
             <StyledSelect
               id="add-user-military"
               dataTestId="add-user-military-input"
-              disabled={isSubmitting}
+              disabled={isSubmitting || formData.gender === 'female'}
               value={formData.militaryServiceStatusId}
               onChange={(val) => updateField('militaryServiceStatusId', val)}
               placeholder="الافتراضي"
               emptyMessage="لا توجد حالات تجنيد مسجلة"
-              options={militaryStatuses.map((item) => ({
+              options={visibleMilitaryStatuses.map((item) => ({
                 value: String(item.id),
                 label: item.nameAr || item.name || item.label || item.code || String(item.id),
               }))}

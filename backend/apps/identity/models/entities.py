@@ -90,6 +90,12 @@ class User(AbstractBaseUser):
     )
     status = models.CharField(max_length=20, choices=USER_STATUS_CHOICES, default="Active", db_default="Active")
     full_name = models.CharField(max_length=200, validators=[validate_non_empty_text])
+    gender = models.CharField(
+        max_length=10,
+        choices=[("male", "ذكر"), ("female", "أنثى")],
+        default="male",
+        db_default="male",
+    )
     national_id = models.CharField(max_length=14, unique=True, validators=[validate_national_id])
     marital_status = models.ForeignKey(
         "organization.MaritalStatusCatalog",
@@ -134,6 +140,10 @@ class User(AbstractBaseUser):
             models.CheckConstraint(
                 condition=Q(status__in=["Active", "Suspended"]),
                 name="ck_identity_user_status_valid",
+            ),
+            models.CheckConstraint(
+                condition=Q(gender__in=["male", "female"]),
+                name="ck_identity_user_gender_valid",
             ),
             models.CheckConstraint(
                 condition=Q(service_end_date__isnull=True) | Q(service_end_date__gte=F("appointment_date")),

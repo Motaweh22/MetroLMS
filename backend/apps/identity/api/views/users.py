@@ -40,6 +40,45 @@ def _safe_pk(value: object) -> int | None:
     return None
 
 
+_MARITAL_LABELS_BY_GENDER: dict[str, dict[str, str]] = {
+    "male": {
+        "single": "أعزب",
+        "married": "متزوج",
+        "divorced": "مطلّق",
+        "widowed": "أرمل",
+    },
+    "female": {
+        "single": "آنسة",
+        "married": "متزوجة",
+        "divorced": "مطلّقة",
+        "widowed": "أرملة",
+    },
+}
+
+
+def _normalize_gender(raw_value: object, national_id: str = "") -> str:
+    raw = str(raw_value or "").strip().lower()
+    if raw in {"female", "f", "أنثى", "انثى"}:
+        return "female"
+    if raw in {"male", "m", "ذكر"}:
+        return "male"
+    if len(national_id) == 14 and national_id.isdigit():
+        return "female" if int(national_id[12]) % 2 == 0 else "male"
+    return "male"
+
+
+def _gender_label_ar(gender: str | None) -> str:
+    return "أنثى" if gender == "female" else "ذكر"
+
+
+def _format_marital_status_for_gender(marital_obj, gender: str | None) -> str:
+    if marital_obj is None:
+        return ""
+    g = "female" if gender == "female" else "male"
+    code = (getattr(marital_obj, "code", "") or "").strip().lower()
+    return _MARITAL_LABELS_BY_GENDER.get(g, {}).get(code) or marital_obj.name_ar
+
+
 class ProfileView(APIView):
     """GET /api/profile — Authenticated user profile & learning summary."""
 
@@ -79,12 +118,14 @@ class ProfileView(APIView):
         user_data["jobTitle"] = job_name
         user_data["leadershipTitle"] = user.leadership_title or ""
         user_data["nationalId"] = user.national_id
+        user_data["gender"] = user.gender or "male"
+        user_data["genderLabel"] = _gender_label_ar(user.gender)
         user_data["dateOfBirth"] = user.date_of_birth.isoformat() if user.date_of_birth else None
         user_data["appointmentDate"] = user.appointment_date.isoformat() if user.appointment_date else None
         user_data["serviceEndDate"] = user.service_end_date.isoformat() if user.service_end_date else None
         user_data["address"] = user.address or ""
         user_data["educationalQualification"] = user.educational_qualification or ""
-        user_data["maritalStatus"] = user.marital_status.name_ar if user.marital_status else ""
+        user_data["maritalStatus"] = _format_marital_status_for_gender(user.marital_status, user.gender)
         user_data["militaryServiceStatus"] = (
             user.military_service_status.name_ar if user.military_service_status else ""
         )
@@ -168,12 +209,16 @@ class AdminUserListView(APIView):
                 "jobTitle": job_map.get(u.id, ""),
                 "leadershipTitle": u.leadership_title or "",
                 "nationalId": u.national_id,
+                "gender": u.gender or "male",
+                "genderLabel": _gender_label_ar(u.gender),
                 "dateOfBirth": u.date_of_birth.isoformat() if u.date_of_birth else None,
                 "appointmentDate": u.appointment_date.isoformat() if u.appointment_date else None,
                 "serviceEndDate": u.service_end_date.isoformat() if u.service_end_date else None,
                 "address": u.address or "",
                 "educationalQualification": u.educational_qualification or "",
-                "maritalStatus": u.marital_status.name_ar if u.marital_status else "",
+                "maritalStatusId": u.marital_status_id,
+                "maritalStatus": _format_marital_status_for_gender(u.marital_status, u.gender),
+                "militaryServiceStatusId": u.military_service_status_id,
                 "militaryServiceStatus": (
                     u.military_service_status.name_ar if u.military_service_status else ""
                 ),
@@ -259,6 +304,7 @@ class AdminUserListView(APIView):
                 status.HTTP_400_BAD_REQUEST,
             )
 
+        gender = _normalize_gender(request.data.get("gender"), national_id=national_id)
         marital_id = _safe_pk(request.data.get("maritalStatusId") or request.data.get("marital_status_id"))
         military_id = _safe_pk(request.data.get("militaryServiceStatusId") or request.data.get("military_service_status_id"))
         metro_line_id = _safe_pk(request.data.get("metroLineId") or request.data.get("metro_line_id"))
@@ -268,11 +314,15 @@ class AdminUserListView(APIView):
             if marital_id is not None
             else MaritalStatusCatalog.objects.order_by("id").first()
         )
-        military_obj = (
-            MilitaryServiceStatusCatalog.objects.filter(pk=military_id).first()
-            if military_id is not None
-            else MilitaryServiceStatusCatalog.objects.order_by("id").first()
-        )
+        if military_id is not None:
+            military_obj = MilitaryServiceStatusCatalog.objects.filter(pk=military_id).first()
+        elif gender == "female":
+            military_obj = (
+                MilitaryServiceStatusCatalog.objects.filter(code="not_applicable").first()
+                or MilitaryServiceStatusCatalog.objects.order_by("id").first()
+            )
+        else:
+            military_obj = MilitaryServiceStatusCatalog.objects.order_by("id").first()
         metro_line_obj = (
             MetroLine.objects.filter(pk=metro_line_id).first()
             if metro_line_id is not None
@@ -289,6 +339,7 @@ class AdminUserListView(APIView):
             user = User.objects.create_user(
                 phone_e164=phone,
                 full_name=name,
+                gender=gender,
                 national_id=national_id,
                 marital_status=marital_obj,
                 appointment_date=appointment_date,
@@ -431,6 +482,9 @@ class AdminUserDeleteView(APIView):
                 return error_response("VALIDATION_ERROR", "المؤهل الدراسي مطلوب.", status.HTTP_400_BAD_REQUEST)
             target.educational_qualification = qual
 
+        if "gender" in data:
+            target.gender = _normalize_gender(data.get("gender"), national_id=target.national_id or "")
+
         if "maritalStatusId" in data or "marital_status_id" in data:
             raw_mid = data.get("maritalStatusId") or data.get("marital_status_id")
             if raw_mid is not None and raw_mid != "":
@@ -448,6 +502,10 @@ class AdminUserDeleteView(APIView):
                 if mil_obj is None:
                     return error_response("VALIDATION_ERROR", "الموقف من التجنيد غير صالح.", status.HTTP_400_BAD_REQUEST)
                 target.military_service_status = mil_obj
+        elif "gender" in data and target.gender == "female":
+            na_obj = MilitaryServiceStatusCatalog.objects.filter(code="not_applicable").first()
+            if na_obj is not None:
+                target.military_service_status = na_obj
 
         old_line_id = target.metro_line_id
         old_dept_ids = set(UserOrganizationalDepartment.objects.filter(user=target).values_list("department_id", flat=True))
@@ -554,12 +612,16 @@ class AdminUserDeleteView(APIView):
                 "jobTitle": job_out,
                 "leadershipTitle": target.leadership_title or "",
                 "nationalId": target.national_id,
+                "gender": target.gender or "male",
+                "genderLabel": _gender_label_ar(target.gender),
                 "dateOfBirth": target.date_of_birth.isoformat() if target.date_of_birth else None,
                 "appointmentDate": target.appointment_date.isoformat() if target.appointment_date else None,
                 "serviceEndDate": target.service_end_date.isoformat() if target.service_end_date else None,
                 "address": target.address or "",
                 "educationalQualification": target.educational_qualification or "",
-                "maritalStatus": target.marital_status.name_ar if target.marital_status else "",
+                "maritalStatusId": target.marital_status_id,
+                "maritalStatus": _format_marital_status_for_gender(target.marital_status, target.gender),
+                "militaryServiceStatusId": target.military_service_status_id,
                 "militaryServiceStatus": (
                     target.military_service_status.name_ar if target.military_service_status else ""
                 ),
@@ -811,13 +873,16 @@ class AdminUserTranscriptView(APIView):
             "status": target.status.lower(),
             "department": dept_name,
             "jobTitle": job_name,
+            "leadershipTitle": target.leadership_title or "",
             "nationalId": target.national_id,
+            "gender": target.gender or "male",
+            "genderLabel": _gender_label_ar(target.gender),
             "dateOfBirth": target.date_of_birth.isoformat() if target.date_of_birth else None,
             "appointmentDate": target.appointment_date.isoformat() if target.appointment_date else None,
             "serviceEndDate": target.service_end_date.isoformat() if target.service_end_date else None,
             "address": target.address or "",
             "educationalQualification": target.educational_qualification or "",
-            "maritalStatus": target.marital_status.name_ar if target.marital_status else "",
+            "maritalStatus": _format_marital_status_for_gender(target.marital_status, target.gender),
             "militaryServiceStatus": (
                 target.military_service_status.name_ar if target.military_service_status else ""
             ),

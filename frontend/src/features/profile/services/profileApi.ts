@@ -72,6 +72,8 @@ export interface UserProfileResponse {
   user: User & {
     status?: string;
     phoneE164?: string;
+    gender?: 'male' | 'female';
+    genderLabel?: string;
     nationalId?: string;
     dateOfBirth?: string | null;
     appointmentDate?: string | null;
