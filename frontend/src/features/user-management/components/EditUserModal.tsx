@@ -7,6 +7,7 @@ import { Icon } from '@/shared/ui/Icon';
 import { useToast } from '@/shared/ui/Toast';
 import { type ManagedUserDTO } from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
+import { StyledSelect } from './StyledSelect';
 
 interface CatalogItem {
   id: number | string;
@@ -307,31 +308,31 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <label htmlFor="edit-user-marital" className="text-xs font-semibold text-text">
               الحالة الاجتماعية
             </label>
-            <select
+            <StyledSelect
               id="edit-user-marital"
+              dataTestId="edit-user-marital-select"
               disabled={isSubmitting}
               value={maritalStatusId}
-              onChange={(e) => setMaritalStatusId(e.target.value)}
-              className={INPUT_CLASS}
-            >
-              {maritalStatuses.map((m) => (
-                <option key={String(m.id)} value={String(m.id)}>
-                  {m.nameAr || m.name || m.code}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setMaritalStatusId(val)}
+              placeholder="اختر الحالة الاجتماعية"
+              emptyMessage="لا توجد حالات اجتماعية مسجلة"
+              options={maritalStatuses.map((m) => ({
+                value: String(m.id),
+                label: m.nameAr || m.name || m.code || String(m.id),
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-user-dept" className="text-xs font-semibold text-text">
               القطاع / الإدارة
             </label>
-            <select
+            <StyledSelect
               id="edit-user-dept"
+              dataTestId="edit-user-dept-select"
               disabled={isSubmitting}
               value={department}
-              onChange={(e) => {
-                const nextDept = e.target.value;
+              onChange={(nextDept) => {
                 setDepartment(nextDept);
                 const matched = departmentRecords.find((d) => (d.nameAr || d.name || '') === nextDept);
                 if (matched && jobTitleRecords.length > 0) {
@@ -346,14 +347,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   }
                 }
               }}
-              className={INPUT_CLASS}
-            >
-              {departmentOptions.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
+              placeholder="اختر القطاع / الإدارة"
+              emptyMessage="لا توجد إدارات مسجلة"
+              options={departmentOptions.map((d) => ({
+                value: d,
+                label: d,
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5 relative" ref={jobDropdownRef}>
@@ -422,59 +422,62 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <label htmlFor="edit-user-leadership" className="text-xs font-semibold text-text">
               الصفة القيادية / الإشرافية (اختياري)
             </label>
-            <select
+            <StyledSelect
               id="edit-user-leadership"
+              dataTestId="edit-user-leadership-select"
               disabled={isSubmitting}
               value={leadershipTitle}
-              onChange={(e) => setLeadershipTitle(e.target.value)}
-              className={INPUT_CLASS}
-            >
-              <option value="">— بدون (فارغ) —</option>
-              <option value="رئيس قطاع / رئيس إدارة مركزية">رئيس قطاع / رئيس إدارة مركزية</option>
-              <option value="مدير عام">مدير عام</option>
-              <option value="مدير إدارة">مدير إدارة</option>
-              <option value="رئيس قسم / رئيس وحدة">رئيس قسم / رئيس وحدة</option>
-              <option value="مشرف / رئيس وردية">مشرف / رئيس وردية</option>
-              <option value="قائد فريق / منسق">قائد فريق / منسق</option>
-            </select>
+              onChange={(val) => setLeadershipTitle(val)}
+              placeholder="— بدون (فارغ) —"
+              emptyMessage="لا توجد صفات قيادية"
+              options={[
+                { value: '', label: '— بدون (فارغ) —' },
+                { value: 'رئيس قطاع / رئيس إدارة مركزية', label: 'رئيس قطاع / رئيس إدارة مركزية' },
+                { value: 'مدير عام', label: 'مدير عام' },
+                { value: 'مدير إدارة', label: 'مدير إدارة' },
+                { value: 'رئيس قسم / رئيس وحدة', label: 'رئيس قسم / رئيس وحدة' },
+                { value: 'مشرف / رئيس وردية', label: 'مشرف / رئيس وردية' },
+                { value: 'قائد فريق / منسق', label: 'قائد فريق / منسق' },
+              ]}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-user-line" className="text-xs font-semibold text-text">
               خط المترو
             </label>
-            <select
+            <StyledSelect
               id="edit-user-line"
+              dataTestId="edit-user-line-select"
               disabled={isSubmitting}
               value={metroLineId}
-              onChange={(e) => setMetroLineId(e.target.value)}
-              className={INPUT_CLASS}
-            >
-              {metroLines.map((l) => (
-                <option key={String(l.id)} value={String(l.id)}>
-                  {l.nameAr || l.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setMetroLineId(val)}
+              placeholder="اختر خط المترو"
+              emptyMessage="لا توجد خطوط مترو مسجلة"
+              options={metroLines.map((l) => ({
+                value: String(l.id),
+                label: l.nameAr || l.name || String(l.id),
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-user-military" className="text-xs font-semibold text-text">
               الموقف من التجنيد
             </label>
-            <select
+            <StyledSelect
               id="edit-user-military"
+              dataTestId="edit-user-military-select"
               disabled={isSubmitting}
               value={militaryServiceStatusId}
-              onChange={(e) => setMilitaryServiceStatusId(e.target.value)}
-              className={INPUT_CLASS}
-            >
-              {militaryStatuses.map((m) => (
-                <option key={String(m.id)} value={String(m.id)}>
-                  {m.nameAr || m.name || m.code}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setMilitaryServiceStatusId(val)}
+              placeholder="اختر الموقف من التجنيد"
+              emptyMessage="لا توجد حالات تجنيد مسجلة"
+              options={militaryStatuses.map((m) => ({
+                value: String(m.id),
+                label: m.nameAr || m.name || m.code || String(m.id),
+              }))}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
