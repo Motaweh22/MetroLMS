@@ -263,13 +263,13 @@ export const UserTable: React.FC<UserTableProps> = ({
                       >
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           disabled={isUpdating}
-                          className="text-xs text-text-muted hover:text-primary px-2"
+                          className="text-xs text-text-heading bg-bg-alt/60 hover:bg-primary/10 hover:text-primary border-border hover:border-primary/50 px-2.5 font-medium transition-all cursor-pointer"
                           title="عرض تفاصيل السجل التدريبي"
                         >
-                          <Icon name="bookOpen" size="sm" className="ml-1" />
+                          <Icon name="clipboardList" size="sm" className="ml-1 text-primary" />
                           السجل
                         </Button>
                       </Link>
