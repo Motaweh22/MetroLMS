@@ -9,7 +9,6 @@ import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
 import { Modal } from '@/shared/ui/Modal';
-import { ConfirmDialog } from '@/shared/ui/ConfirmDialog/ConfirmDialog';
 import { useToast } from '@/shared/ui/Toast';
 import { formatArabicDateTime } from '../utils/dateUtils';
 
