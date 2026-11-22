@@ -1283,7 +1283,7 @@ class CourseArchiveZipDownloadView(APIView):
         from typing import IO, cast
         from urllib.parse import quote
         from django.http import FileResponse
-        from apps.learning.models import CourseAttempt, Enrollment, LessonProgress
+        from apps.learning.models import CertificateRecord, CourseAttempt, Enrollment, LessonProgress
         from apps.media.models import MediaContentReference
         from infrastructure.storage import LocalMediaStorage
 
@@ -1316,7 +1316,6 @@ class CourseArchiveZipDownloadView(APIView):
             enrolled = Enrollment.objects.filter(
                 user=request.user,
                 course=course,
-                grant_status="active",
             ).exists()
             if not enrolled:
                 return error_response(
@@ -1333,14 +1332,20 @@ class CourseArchiveZipDownloadView(APIView):
                 enrollment__user=request.user,
                 enrollment__course=course,
             )
-            if attempts.filter(completion_status="Completed").exists():
-                is_course_completed = True
             completed_lesson_ids = set(
                 LessonProgress.objects.filter(
-                    attempt__in=attempts,
+                    course_attempt__in=attempts,
                     is_completed=True,
                 ).values_list("lesson_item_id", flat=True)
             )
+            if CertificateRecord.objects.filter(course_attempt__in=attempts).exists():
+                is_course_completed = True
+            elif pub is not None:
+                pub_lesson_ids = set(
+                    LessonItem.objects.filter(module__published_version=pub).values_list("id", flat=True)
+                )
+                if pub_lesson_ids and pub_lesson_ids.issubset(completed_lesson_ids):
+                    is_course_completed = True
 
         if not is_staff_or_lecturer and zip_policy == "after_course_completion" and not is_course_completed:
             return error_response(
