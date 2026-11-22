@@ -538,7 +538,7 @@ export const LearningPlayerPage: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {effectiveCourse?.courseZipPolicy && effectiveCourse.courseZipPolicy !== 'disabled' && (() => {
             const isCourseCompleted =
-              (progress?.completionPercent ?? 0) >= 100 ||
+              (progress?.progressPercent ?? 0) >= 100 ||
               (flatItems.length > 0 && flatItems.every((it) => it.isCompleted));
             const zipPerm = canDownloadCourseZip(
               effectiveCourse,
