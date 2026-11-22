@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useIsolatedSession } from '@/core/auth/useIsolatedSession';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { authStorage, isValidDeveloperOriginSession } from '@/core/auth/authStorage';
-import { getSyntheticTestPersona, getPersonaRoleLabelAr } from '@/core/auth/testPersonas';
+import { getSyntheticTestPersona } from '@/core/auth/testPersonas';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
 import { Badge } from '@/shared/ui/Badge';
@@ -60,8 +60,6 @@ export const IsolatedSessionBanner: React.FC = () => {
   if (user === null && isEmergencyState) {
     const origin = authStorage.getDeveloperOriginSession();
     const persona = origin ? getSyntheticTestPersona(origin.personaId) : null;
-    const personaLabel = persona ? (personaRoleLabelAr || persona.role) : 'حساب اختباري';
-    const personaDisplay = persona ? `${persona.name} (${personaLabel})` : 'حساب اختباري';
 
     return (
       <aside
@@ -149,7 +147,7 @@ export const IsolatedSessionBanner: React.FC = () => {
     isOriginMatchingAndUnexpired
   );
 
-  if (!canRenderNormalBanner) {
+  if (!canRenderNormalBanner || !isolatedPersona) {
     return null;
   }
 

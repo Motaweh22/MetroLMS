@@ -218,7 +218,7 @@ export const CourseDetailPage: React.FC = () => {
             courseTitle={course.title}
             commentsEnabled={course.commentsEnabled}
             isEnrolled={isEnrolled}
-            courseLecturerId={course.lecturerId}
+            courseLecturerId={course.lecturerId ?? undefined}
             courseCoLecturers={course.coLecturers}
           />
         </div>
@@ -253,7 +253,7 @@ export const CourseDetailPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 pt-1">
               <div className="w-11 h-11 rounded-full bg-primary/10 text-primary-dark font-extrabold flex items-center justify-center text-sm shrink-0 border border-primary/20">
-                {(course.lecturerName || course.lecturer || 'م').slice(0, 2)}
+                {(course.lecturerName || 'م').slice(0, 2)}
               </div>
               <div>
                 <h4 className="text-sm font-bold text-text-heading">{course.lecturerName}</h4>
@@ -429,7 +429,7 @@ export const CourseDetailPage: React.FC = () => {
           course: {
             id: course.id,
             title: course.title,
-            lecturerId: course.lecturerId,
+            lecturerId: course.lecturerId ?? undefined,
             lecturerName: course.lecturerName,
             coLecturers: course.coLecturers,
             whatsappContacts: course.whatsappContacts,

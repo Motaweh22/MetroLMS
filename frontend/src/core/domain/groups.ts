@@ -117,7 +117,7 @@ export function getEffectiveCourseSettings(
     effectiveDeadlineDateTime = cycle.deadlineDateTime;
     deadlineInheritedFrom = 'cycle';
   } else {
-    effectiveDeadlineDateTime = group.deadlineDateTime;
+    effectiveDeadlineDateTime = group.deadlineDateTime || '';
     deadlineInheritedFrom = 'group';
   }
 

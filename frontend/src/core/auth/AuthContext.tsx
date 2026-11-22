@@ -15,19 +15,15 @@ import {
   isPersistedDeveloperOriginSnapshot,
   getDeveloperOriginSnapshotVersion,
   subscribeToDeveloperOriginChanges,
-  type DeveloperOriginSession,
   type RuntimeDeveloperOriginSession,
   type PersistedDeveloperOriginSnapshot,
 } from './authStorage';
 import { authApi } from './authApi';
-import { SYNTHETIC_DEMO_ACCOUNTS } from './demoAccounts';
 import {
   getSyntheticTestPersona,
   CANONICAL_DEVELOPER_ID,
-  SYNTHETIC_TEST_PERSONA_REGISTRY,
   type SyntheticTestPersona,
 } from './testPersonas';
-import { resolveCanonicalUserId } from './canonicalIdentity';
 import { sanitizeErrorMessage, ApiError, StaleEpochError, isStaleEpochError } from '@/core/api/apiClient';
 import {
   getCurrentSessionEpoch,

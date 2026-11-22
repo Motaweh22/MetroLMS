@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Modal } from '@/shared/ui/Modal';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
-import { Icon } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
 import { useIsolatedSession } from '@/core/auth/useIsolatedSession';
 import type { SyntheticTestPersona } from '@/core/auth/testPersonas';

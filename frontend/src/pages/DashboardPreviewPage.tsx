@@ -24,7 +24,7 @@ const roleBadgeVariants: Record<string, 'primary' | 'warning' | 'info'> = {
 export const DashboardPreviewPage: React.FC = () => {
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
   const [dismissedNotice, setDismissedNotice] = useState(false);
-  const { user, logout, isLoading } = useAuth();
+  const { user, logout } = useAuth();
 
   const increments = [
     { num: '0', title: 'الأساس التقني والرموز', status: 'completed', badge: 'مكتمل' },

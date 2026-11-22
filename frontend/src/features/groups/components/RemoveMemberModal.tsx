@@ -141,7 +141,7 @@ export const RemoveMemberModal: React.FC<RemoveMemberModalProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-base font-bold text-text-heading">{member.name}</span>
               {member.jobTitle && (
-                <Badge variant="outline" size="sm">
+                <Badge variant="neutral" size="sm">
                   {member.jobTitle}
                 </Badge>
               )}
@@ -152,7 +152,7 @@ export const RemoveMemberModal: React.FC<RemoveMemberModalProps> = ({
               <span>• معرف المستخدم: {member.userId}</span>
             </div>
           </div>
-          <Badge variant="outline" size="sm">
+          <Badge variant="neutral" size="sm">
             {group.name}
           </Badge>
         </div>

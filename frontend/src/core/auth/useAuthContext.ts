@@ -18,6 +18,8 @@ export function useAuthContext(): AuthContextValue {
       error: null,
       login: async () => {},
       logout: async () => {},
+      logoutStatus: null,
+      retryLogout: async () => {},
       switchDemoUser: async () => {},
       clearError: () => {},
       isIsolatedSession: false,

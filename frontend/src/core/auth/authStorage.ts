@@ -338,6 +338,9 @@ export interface AuthStorageInstance {
   clearQuarantinedOriginSession(): void;
   getDeveloperOriginSnapshotVersion(): number;
   subscribeToDeveloperOriginChanges(listener: () => void): () => void;
+  getLogoutStatus(): LogoutStatus;
+  setLogoutStatus(status: 'LOGOUT_CONFIRMED' | 'LOGOUT_UNCONFIRMED'): void;
+  clearLogoutStatus(): void;
   getInMemorySessionForTesting(): AuthSession | null;
   getInMemoryDeveloperOriginSessionForTesting(): PersistedDeveloperOriginSnapshot | null;
 }
