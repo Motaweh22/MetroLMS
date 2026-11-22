@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { AddUserForm } from '@/features/user-management/components/AddUserForm';
 
 /**
@@ -12,6 +13,7 @@ export const AddUserPage: React.FC = () => {
   const navigate = useNavigate();
   const [isDirty, setIsDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!isDirty || isSubmitting) return;
@@ -26,8 +28,8 @@ export const AddUserPage: React.FC = () => {
   const handleNavigateBack = () => {
     if (isSubmitting) return;
     if (isDirty) {
-      const confirmed = window.confirm('لديك بيانات غير محفوظة. هل أنت متأكد من مغادرة الصفحة؟');
-      if (!confirmed) return;
+      setIsLeaveConfirmOpen(true);
+      return;
     }
     navigate('/admin/users');
   };
@@ -96,6 +98,21 @@ export const AddUserPage: React.FC = () => {
         onDirtyChange={setIsDirty}
         onSubmittingChange={setIsSubmitting}
         onUserCreated={() => navigate('/admin/users')}
+      />
+
+      {/* Styled Unsaved Changes Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isLeaveConfirmOpen}
+        title="تأكيد مغادرة الصفحة"
+        message="لديك بيانات غير محفوظة في نموذج إضافة المستخدم. هل أنت متأكد من رغبتك في المغادرة وتجاهل هذه التغييرات؟"
+        confirmLabel="نعم، مغادرة الصفحة"
+        cancelLabel="البقاء والمتابعة"
+        variant="warning"
+        onCancel={() => setIsLeaveConfirmOpen(false)}
+        onConfirm={() => {
+          setIsLeaveConfirmOpen(false);
+          navigate('/admin/users');
+        }}
       />
     </div>
   );

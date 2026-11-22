@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui/Button';
 import { Alert } from '@/shared/ui/Alert';
 import { Icon } from '@/shared/ui/Icon';
 import { Badge } from '@/shared/ui/Badge';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useToast } from '@/shared/ui/Toast';
 
@@ -178,12 +179,15 @@ export const OrganizationCatalogPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (item: CatalogRecord) => {
-    const confirmed = window.confirm(
-      `هل أنت متأكد من حذف "${item.nameAr}"؟ لا يمكن التراجع عن هذه العملية.`
-    );
-    if (!confirmed) return;
+  const [pendingDeleteItem, setPendingDeleteItem] = useState<CatalogRecord | null>(null);
 
+  const handleDelete = (item: CatalogRecord) => {
+    setPendingDeleteItem(item);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteItem) return;
+    const item = pendingDeleteItem;
     setDeletingId(item.id);
     try {
       await apiClient(`${currentTab.endpoint}/${item.id}`, {
@@ -191,6 +195,7 @@ export const OrganizationCatalogPage: React.FC = () => {
       });
       toast.success(`تم حذف "${item.nameAr}" بنجاح.`);
       setItems((prev) => prev.filter((x) => x.id !== item.id));
+      setPendingDeleteItem(null);
     } catch (err: unknown) {
       toast.error(
         err instanceof Error
@@ -489,6 +494,24 @@ export const OrganizationCatalogPage: React.FC = () => {
           </div>
         )}
       </Card>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDeleteItem)}
+        title={`تأكيد حذف ${currentTab.singularLabel}`}
+        message={
+          pendingDeleteItem
+            ? `هل أنت متأكد من حذف "${pendingDeleteItem.nameAr}"؟ لا يمكن التراجع عن هذه العملية.`
+            : ''
+        }
+        confirmLabel="تأكيد الحذف"
+        cancelLabel="إلغاء"
+        variant="danger"
+        isConfirming={Boolean(pendingDeleteItem && deletingId === pendingDeleteItem.id)}
+        onCancel={() => {
+          if (deletingId === null) setPendingDeleteItem(null);
+        }}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };
