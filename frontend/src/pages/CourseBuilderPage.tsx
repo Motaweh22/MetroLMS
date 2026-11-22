@@ -40,6 +40,7 @@ export const CourseBuilderPage: React.FC = () => {
   const [initialSnapshot, setInitialSnapshot] = useState<string>('');
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [activeTab, setActiveTab] = useState<'metadata' | 'requirements' | 'team' | 'access' | 'curriculum' | 'downloads' | 'refresher' | 'history'>('metadata');
+  const [loading, setLoading] = useState<boolean>(true);
   const tabsScrollRef = useRef<HTMLDivElement | null>(null);
   const [hasTabOverflow, setHasTabOverflow] = useState(false);
 
@@ -51,9 +52,27 @@ export const CourseBuilderPage: React.FC = () => {
 
   useEffect(() => {
     updateTabOverflow();
+    const rafId =
+      typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame(updateTabOverflow)
+        : null;
     window.addEventListener('resize', updateTabOverflow);
-    return () => window.removeEventListener('resize', updateTabOverflow);
-  }, [updateTabOverflow, course?.id]);
+    const el = tabsScrollRef.current;
+    const resizeObserver =
+      el && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => updateTabOverflow())
+        : null;
+    if (el && resizeObserver) {
+      resizeObserver.observe(el);
+    }
+    return () => {
+      if (rafId !== null && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(rafId);
+      }
+      window.removeEventListener('resize', updateTabOverflow);
+      resizeObserver?.disconnect();
+    };
+  }, [updateTabOverflow, course?.id, loading]);
 
   const builderTabs = useMemo(
     () =>
@@ -89,7 +108,6 @@ export const CourseBuilderPage: React.FC = () => {
     tabsScrollRef.current?.scrollBy({ left: deltaX, behavior: 'smooth' });
   };
 
-  const [loading, setLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
