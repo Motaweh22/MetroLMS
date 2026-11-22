@@ -124,7 +124,10 @@ class AdminGroupListView(APIView):
         return [IsAuthenticated(), has_capability("groups.create")()]
 
     def get(self, request: Request):
-        groups = TrainingGroup.objects.all().order_by("id")
+        if request.user.role_id == "trainee":
+            groups = TrainingGroup.objects.filter(memberships__user=request.user).distinct().order_by("id")
+        else:
+            groups = TrainingGroup.objects.all().order_by("id")
         return success_response({"groups": TrainingGroupSerializer(groups, many=True).data})
 
     def post(self, request: Request):
@@ -294,6 +297,11 @@ class GroupAssistantListCreateView(APIView):
         return [IsAuthenticated()]
 
     def get(self, request: Request, group_id: int):
+        group = TrainingGroup.objects.filter(pk=group_id).first()
+        if group is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         rows = GroupAssistantAssignment.objects.filter(training_group_id=group_id).order_by("id")
         return success_response({"assistants": GroupAssistantSerializer(rows, many=True).data})
 
@@ -304,9 +312,9 @@ class GroupAssistantListCreateView(APIView):
         if request.user.role_id not in {"developer", "super_admin", "admin"}:
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعيين مساعدي المجموعات.", status.HTTP_403_FORBIDDEN)
 
-        user_id = request.data.get("userId")
+        uid = _safe_int(request.data.get("userId"), 0)
         role_name = str(request.data.get("assignmentRole", "assistant_admin"))
-        target_user = get_visible_user_or_none(request.user, int(user_id)) if user_id is not None else None
+        target_user = get_visible_user_or_none(request.user, uid) if uid > 0 else None
         if target_user is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         try:
@@ -640,9 +648,9 @@ class AdminGroupCoursesView(APIView):
         except GroupDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
 
-        cycle_id = request.data.get("cycleId")
-        if cycle_id:
-            cycle = GroupRenewalCycle.objects.filter(pk=int(cycle_id), training_group=group).first()
+        cycle_id = _safe_int(request.data.get("cycleId"), 0)
+        if cycle_id > 0:
+            cycle = GroupRenewalCycle.objects.filter(pk=cycle_id, training_group=group).first()
         else:
             cycle = (
                 GroupRenewalCycle.objects.filter(training_group=group, cycle_status="Active").order_by("-cycle_number").first()
@@ -881,7 +889,7 @@ def _repair_material_file_record(f: dict) -> bool:
         f["fileType"] = _resolve_material_file_type(mime, orig_name)
         changed = True
     media_id = f.get("mediaId") or f.get("mediaAssetId")
-    size_val = int(f.get("fileSizeBytes") or f.get("sizeBytes") or 0)
+    size_val = _safe_int(f.get("fileSizeBytes") or f.get("sizeBytes"), 0)
     if (size_val <= 0 or not f.get("url")) and media_id and str(media_id).isdigit():
         asset = MediaAsset.objects.filter(pk=int(media_id)).first()
         if asset is not None:
@@ -1070,7 +1078,7 @@ class AdminGroupMaterialFilesView(APIView):
             if request.data.get("fileSizeBytes") is not None
             else request.data.get("sizeBytes")
         )
-        size_bytes = int(raw_size or 0)
+        size_bytes = _safe_int(raw_size, 0)
         orig_name = str(
             request.data.get("originalFileName")
             or request.data.get("fileName")
@@ -1380,6 +1388,8 @@ class AdminGroupCheckAutoRenewalView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_manage_or_monitor_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إدارة أو متابعة هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         return success_response({"renewed": False, "group": TrainingGroupSerializer(group).data})
 
 
