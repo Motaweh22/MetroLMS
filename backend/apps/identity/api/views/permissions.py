@@ -75,9 +75,18 @@ class RolePolicyDetailView(APIView):
             payload["defaultCapabilities"] = payload["permissions"]
         serializer = RolePolicySerializer(policy, data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
-        policy.default_capabilities_json = serializer.validated_data.get(
+        new_caps = serializer.validated_data.get(
             "default_capabilities_json", policy.default_capabilities_json
         )
+        ceiling = ROLE_CAPABILITY_CEILINGS.get(role_key, frozenset())
+        exceeded = [cap for cap in new_caps if cap not in ceiling]
+        if exceeded:
+            return error_response(
+                "ROLE_CEILING_EXCEEDED",
+                "غير مصرح: الصلاحيات المطلوبة تتجاوز السقف الأقصى المسموح به لهذا الدور.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+        policy.default_capabilities_json = new_caps
         policy.updated_at = timezone.now()
         policy.updated_by = str(request.user.id)
         policy.save(update_fields=["default_capabilities_json", "updated_at", "updated_by"])

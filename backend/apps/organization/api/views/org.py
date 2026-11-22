@@ -308,16 +308,18 @@ class UserOrganizationAssignmentView(APIView):
         target = get_visible_user_or_none(request.user, user_id)
         if target is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
-        dept_id = request.data.get("departmentId")
-        job_title_id = request.data.get("jobTitleId")
-        dept = OrganizationalDepartment.objects.filter(pk=dept_id).first()
+        raw_dept_id = request.data.get("departmentId")
+        raw_job_id = request.data.get("jobTitleId")
+        dept_id = int(raw_dept_id) if raw_dept_id is not None and str(raw_dept_id).isdigit() else None
+        job_title_id = int(raw_job_id) if raw_job_id is not None and str(raw_job_id).isdigit() else None
+        dept = OrganizationalDepartment.objects.filter(pk=dept_id).first() if dept_id is not None else None
         if dept is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
-        if job_title_id is None:
+        if raw_job_id is None:
             assign_user_department(target, dept)
             return success_response({"assignedDepartmentId": dept.id}, status_code=status.HTTP_201_CREATED)
 
-        job = JobTitle.objects.filter(pk=job_title_id).first()
+        job = JobTitle.objects.filter(pk=job_title_id).first() if job_title_id is not None else None
         if job is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         try:

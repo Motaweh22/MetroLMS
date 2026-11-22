@@ -551,10 +551,16 @@ class AdminUserRoleView(APIView):
         target = get_visible_user_or_none(request.user, user_id)
         if target is None:
             return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
+        if target.id == request.user.id:
+            return error_response("SELF_MUTATION_BLOCKED", "لا يمكنك تعديل دور حسابك الشخصي.", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "super_admin" and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response("PERMISSION_DENIED", "لا يمكن تعديل دور المدير الأعلى إلا بواسطة مدير أعلى.", status.HTTP_403_FORBIDDEN)
         raw_role = str(request.data.get("role") or request.data.get("newRole") or "").strip()
         mapped_role = "trainee" if raw_role == "user" else raw_role
         if mapped_role not in {"super_admin", "admin", "assistant_admin", "lecturer", "trainee"}:
             return error_response("VALIDATION_ERROR", "الدور المحدد غير صالح.", status.HTTP_400_BAD_REQUEST)
+        if mapped_role == "super_admin" and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response("PERMISSION_DENIED", "منح دور المدير الأعلى مقتصر على المدير الأعلى.", status.HTTP_403_FORBIDDEN)
         target.role_id = mapped_role
         target.save(update_fields=["role"])
         return success_response(
@@ -586,12 +592,20 @@ class AdminUserStatusView(APIView):
         target = get_visible_user_or_none(request.user, user_id)
         if target is None:
             return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
+        if target.id == request.user.id:
+            return error_response("SELF_MUTATION_BLOCKED", "لا يمكنك إيقاف أو تعديل حالة حسابك الشخصي.", status.HTTP_403_FORBIDDEN)
+        if target.role_id == "super_admin" and request.user.role_id not in {"developer", "super_admin"}:
+            return error_response("PERMISSION_DENIED", "لا يمكن تعديل حالة المدير الأعلى إلا بواسطة مدير أعلى.", status.HTTP_403_FORBIDDEN)
         raw_status = str(request.data.get("status") or "").strip().lower()
         mapped_status = {"active": "Active", "suspended": "Suspended", "inactive": "Suspended"}.get(raw_status)
         if not mapped_status:
             return error_response("VALIDATION_ERROR", "حالة الحساب غير صالحة.", status.HTTP_400_BAD_REQUEST)
         target.status = mapped_status
         target.save(update_fields=["status"])
+        if mapped_status == "Suspended":
+            from apps.identity.models import UserSession
+
+            UserSession.objects.filter(user=target).delete()
         return success_response({"id": str(target.id), "status": target.status})
 
     def put(self, request: Request, user_id: int):

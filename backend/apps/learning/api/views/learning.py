@@ -29,6 +29,21 @@ from shared.api import error_response, success_response
 from shared.permissions import evaluate_permission, get_visible_user_or_none
 
 
+def _parse_pos_int(val: object) -> int | None:
+    try:
+        num = int(str(val).strip())
+        return num if num > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_non_neg_int(val: object, default: int = 0) -> int:
+    try:
+        return max(0, int(float(str(val).strip())))
+    except (TypeError, ValueError):
+        return default
+
+
 class MyEnrollmentsView(APIView):
     """GET /api/enrollments/my — Trainee's enrollments with grants & latest attempt progress."""
 
@@ -108,7 +123,10 @@ class CourseEnrollmentsView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
 
         raw_user_id = request.data.get("userId")
-        target_user_id = int(raw_user_id) if raw_user_id is not None else request.user.id
+        parsed_user_id = _parse_pos_int(raw_user_id)
+        if raw_user_id is not None and parsed_user_id is None:
+            return error_response("VALIDATION_ERROR", "معرّف المستخدم غير صالح.", status.HTTP_400_BAD_REQUEST)
+        target_user_id = parsed_user_id if parsed_user_id is not None else request.user.id
         if target_user_id != request.user.id:
             decision = evaluate_permission(request.user, "users.manage_enrollments")
             is_course_staff = (
@@ -123,13 +141,14 @@ class CourseEnrollmentsView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
 
         source_type = str(request.data.get("sourceType", "direct"))
-        group_id = request.data.get("trainingGroupId")
-        group = TrainingGroup.objects.filter(pk=int(group_id)).first() if group_id is not None else None
-        if group_id is not None and group is None:
+        raw_group_id = request.data.get("trainingGroupId")
+        group_id = _parse_pos_int(raw_group_id)
+        group = TrainingGroup.objects.filter(pk=group_id).first() if group_id is not None else None
+        if raw_group_id is not None and group is None:
             return error_response("RESOURCE_NOT_FOUND", "المجموعة التدريبية غير موجودة.", status.HTTP_404_NOT_FOUND)
 
-        cycle_id = request.data.get("groupRenewalCycleId")
-        cycle = GroupRenewalCycle.objects.filter(pk=int(cycle_id)).first() if cycle_id is not None else None
+        cycle_id = _parse_pos_int(request.data.get("groupRenewalCycleId"))
+        cycle = GroupRenewalCycle.objects.filter(pk=cycle_id).first() if cycle_id is not None else None
 
         try:
             enr, grant, attempt = enroll_user_in_course(
@@ -253,10 +272,11 @@ class CourseEnrollmentGroupGrantRevokeView(APIView):
         if course is None or target_user is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
 
-        group_id = request.data.get("trainingGroupId") or request.query_params.get("trainingGroupId")
-        if group_id is None:
+        raw_group_id = request.data.get("trainingGroupId") or request.query_params.get("trainingGroupId")
+        if raw_group_id is None:
             return error_response("GROUP_REQUIRED", "معرّف المجموعة التدريبية مطلوب.", status.HTTP_400_BAD_REQUEST)
-        group = TrainingGroup.objects.filter(pk=int(group_id)).first()
+        group_id = _parse_pos_int(raw_group_id)
+        group = TrainingGroup.objects.filter(pk=group_id).first() if group_id is not None else None
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المجموعة التدريبية غير موجودة.", status.HTTP_404_NOT_FOUND)
 
@@ -300,8 +320,8 @@ class UserCourseAttemptsView(APIView):
         if target_user.id != request.user.id and request.user.role_id not in {"developer", "super_admin", "admin"}:
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية بدء محاولة جديدة لهذا المتدرب.", status.HTTP_403_FORBIDDEN)
 
-        cycle_id = request.data.get("groupRenewalCycleId")
-        cycle = GroupRenewalCycle.objects.filter(pk=int(cycle_id)).first() if cycle_id is not None else None
+        cycle_id = _parse_pos_int(request.data.get("groupRenewalCycleId"))
+        cycle = GroupRenewalCycle.objects.filter(pk=cycle_id).first() if cycle_id is not None else None
         try:
             attempt = start_new_attempt(actor=request.user, user=target_user, course=course, group_renewal_cycle=cycle)
         except LearningDomainError as exc:
@@ -319,7 +339,7 @@ class CourseProgressView(APIView):
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         raw_attempt = request.query_params.get("attemptId")
-        attempt_id = int(raw_attempt) if raw_attempt is not None else None
+        attempt_id = _parse_pos_int(raw_attempt)
         try:
             attempt = get_active_attempt_for_user(user=request.user, course=course, attempt_id=attempt_id)
         except LearningDomainError as exc:
@@ -360,9 +380,9 @@ class LessonActivityView(APIView):
                 user=request.user,
                 course=course,
                 lesson_item_id=lesson_id,
-                last_position_seconds=int(request.data.get("lastPositionSeconds", 0)),
-                furthest_watched_seconds=int(request.data.get("furthestWatchedSeconds", 0)),
-                eligible_delta_seconds=int(request.data.get("eligibleDeltaSeconds", 0)),
+                last_position_seconds=_safe_non_neg_int(request.data.get("lastPositionSeconds", 0)),
+                furthest_watched_seconds=_safe_non_neg_int(request.data.get("furthestWatchedSeconds", 0)),
+                eligible_delta_seconds=_safe_non_neg_int(request.data.get("eligibleDeltaSeconds", 0)),
                 increment_watch_count=bool(request.data.get("incrementWatchCount", False)),
             )
         except LearningDomainError as exc:
@@ -372,8 +392,8 @@ class LessonActivityView(APIView):
                         "lessonProgress": {
                             "lessonItemId": lesson_id,
                             "isCompleted": False,
-                            "lastPositionSeconds": int(request.data.get("lastPositionSeconds", 0)),
-                            "furthestWatchedSeconds": int(request.data.get("furthestWatchedSeconds", 0)),
+                            "lastPositionSeconds": _safe_non_neg_int(request.data.get("lastPositionSeconds", 0)),
+                            "furthestWatchedSeconds": _safe_non_neg_int(request.data.get("furthestWatchedSeconds", 0)),
                             "eligibleViewingSeconds": 0,
                             "watchCount": 0,
                         },
@@ -417,23 +437,4 @@ class LessonCompleteView(APIView):
         except LearningDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
         return success_response({"lessonProgress": LessonProgressSerializer(lp).data, "progress": progress})
-
-
-class CourseEnrollmentStatusView(APIView):
-    """GET /api/courses/<course_id>/enrollment — Single course enrollment status for current user."""
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request: Request, course_id: int):
-        enr = Enrollment.objects.filter(user=request.user, course_id=course_id).prefetch_related("source_grants").first()
-        if enr is None:
-            return success_response({"isEnrolled": False, "hasActiveAccess": False, "enrollment": None})
-        has_access = enr.source_grants.exists()
-        return success_response(
-            {
-                "isEnrolled": has_access,
-                "hasActiveAccess": has_access,
-                "enrollment": EnrollmentSerializer(enr).data,
-            }
-        )
 

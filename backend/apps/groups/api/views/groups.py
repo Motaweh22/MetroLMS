@@ -59,15 +59,42 @@ def _extract_renewal_fields(data: dict) -> tuple[bool, int | None]:
     raw_interval = data.get("intervalDays")
     if raw_interval is None:
         raw_interval = schedule.get("intervalDays") or schedule.get("renewalIntervalDays")
-    interval = int(raw_interval) if raw_interval not in (None, "") else None
+    interval = _safe_int(raw_interval, 0) if raw_interval not in (None, "") else None
+    if interval is not None and interval <= 0:
+        interval = None
     return auto_renewal, interval
+
+
+def _safe_int(val: object, default: int = 0) -> int:
+    try:
+        return int(float(str(val).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+def _can_manage_or_monitor_group(user: User, group: TrainingGroup) -> bool:
+    if user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
+        return True
+    if GroupAssistantAssignment.objects.filter(training_group=group, user=user).exists():
+        return True
+    return GroupCourseAssignment.objects.filter(
+        group_renewal_cycle__training_group=group,
+        course__primary_lecturer=user,
+    ).exists()
+
+
+def _can_view_group(user: User, group: TrainingGroup) -> bool:
+    if _can_manage_or_monitor_group(user, group):
+        return True
+    return GroupMembership.objects.filter(training_group=group, user=user).exists()
 
 
 def _sync_group_instructors(group: TrainingGroup, primary_id, assistant_ids) -> None:
     if primary_id is not None:
         GroupAssistantAssignment.objects.filter(training_group=group, assignment_role="primary").delete()
         if str(primary_id).strip():
-            user = User.objects.filter(pk=int(primary_id)).first()
+            uid = _safe_int(primary_id, 0)
+            user = User.objects.filter(pk=uid).first() if uid > 0 else None
             if user is not None:
                 GroupAssistantAssignment.objects.get_or_create(
                     training_group=group,
@@ -78,7 +105,8 @@ def _sync_group_instructors(group: TrainingGroup, primary_id, assistant_ids) -> 
         GroupAssistantAssignment.objects.filter(training_group=group).exclude(assignment_role="primary").delete()
         for raw_uid in assistant_ids:
             if str(raw_uid).strip():
-                user = User.objects.filter(pk=int(raw_uid)).first()
+                uid = _safe_int(raw_uid, 0)
+                user = User.objects.filter(pk=uid).first() if uid > 0 else None
                 if user is not None:
                     GroupAssistantAssignment.objects.get_or_create(
                         training_group=group,
@@ -138,6 +166,8 @@ class AdminGroupDetailView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         return success_response(TrainingGroupSerializer(group).data)
 
     def put(self, request: Request, group_id: int):
@@ -576,6 +606,8 @@ class GroupDetailView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         return success_response(TrainingGroupSerializer(group).data)
 
 
@@ -588,6 +620,8 @@ class AdminGroupCyclesView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         cycles = GroupRenewalCycle.objects.filter(training_group=group).order_by("-cycle_number")
         return success_response(GroupRenewalCycleSerializer(cycles, many=True).data)
 
@@ -680,6 +714,8 @@ class AdminGroupMembersView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         return success_response(self._serialize_members(group))
 
     def post(self, request: Request, group_id: int):
@@ -784,6 +820,8 @@ class AdminGroupJoinRequestsView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_manage_or_monitor_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إدارة أو متابعة هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         qs = GroupJoinRequest.objects.filter(training_group=group).select_related("user").order_by("-id")
         raw_status = request.query_params.get("status")
         if raw_status:
@@ -910,6 +948,8 @@ class AdminGroupMaterialsView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         return success_response(_load_materials_manifest(group_id))
 
 
@@ -938,7 +978,7 @@ class AdminGroupMaterialFoldersView(APIView):
             "id": f"FLD-{uuid.uuid4().hex[:8]}",
             "groupId": str(group_id),
             "name": name,
-            "order": int(request.data.get("order", len(manifest["folders"]) + 1)),
+            "order": _safe_int(request.data.get("order"), len(manifest["folders"]) + 1),
             "isVisible": bool(request.data.get("isVisible", True)),
             "createdAt": timezone.now().isoformat(),
             "files": [],
@@ -970,7 +1010,7 @@ class AdminGroupMaterialFolderDetailView(APIView):
                 if "isVisible" in request.data:
                     fld["isVisible"] = bool(request.data["isVisible"])
                 if "order" in request.data:
-                    fld["order"] = int(request.data["order"])
+                    fld["order"] = _safe_int(request.data["order"], fld.get("order", 1))
                 _save_materials_manifest(group_id, manifest)
                 return success_response(fld)
         return error_response("RESOURCE_NOT_FOUND", "المجلد غير موجود.", status.HTTP_404_NOT_FOUND)
@@ -1270,6 +1310,8 @@ class AdminGroupMonitoringView(APIView):
         group = TrainingGroup.objects.filter(pk=group_id).first()
         if group is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_manage_or_monitor_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إدارة أو متابعة هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         group_data = TrainingGroupSerializer(group).data
         metrics_data = group_data.get("metrics", {})
         cycles_qs = GroupRenewalCycle.objects.filter(training_group=group).order_by("-cycle_number")
@@ -1290,6 +1332,11 @@ class AdminGroupAssistantsPutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, group_id: int):
+        group = TrainingGroup.objects.filter(pk=group_id).first()
+        if group is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         rows = GroupAssistantAssignment.objects.filter(training_group_id=group_id).order_by("id")
         return success_response({"assistants": GroupAssistantSerializer(rows, many=True).data})
 
@@ -1313,6 +1360,11 @@ class AdminGroupCycleDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, group_id: int, cycle_id: int):
+        group = TrainingGroup.objects.filter(pk=group_id).first()
+        if group is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if not _can_view_group(request.user, group):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض هذه المجموعة التدريبية.", status.HTTP_403_FORBIDDEN)
         cycle = GroupRenewalCycle.objects.filter(pk=cycle_id, training_group_id=group_id).first()
         if cycle is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)

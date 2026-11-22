@@ -758,12 +758,24 @@ class CourseInstructorsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request: Request, course_id: int):
+        from apps.identity.models import User
+
         course = Course.objects.filter(pk=course_id).first()
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "الدورة غير موجودة.", status.HTTP_404_NOT_FOUND)
+        if request.user.role_id not in {"developer", "super_admin", "admin"} and course.primary_lecturer_id != request.user.id:
+            return error_response(
+                "PERMISSION_DENIED",
+                "ليس لديك صلاحية تعديل محاضري هذه الدورة.",
+                status.HTTP_403_FORBIDDEN,
+            )
         lecturer_id = request.data.get("primaryLecturerId") or request.data.get("lecturerId")
         if lecturer_id and str(lecturer_id).isdigit():
-            u = User.objects.filter(pk=int(lecturer_id)).first()
+            u = User.objects.filter(
+                pk=int(lecturer_id),
+                status="Active",
+                role_id__in=["developer", "super_admin", "admin", "assistant_admin", "lecturer"],
+            ).first()
             if u is not None:
                 course.primary_lecturer = u
                 course.save(update_fields=["primary_lecturer"])
@@ -779,6 +791,12 @@ class CourseReviewDataView(APIView):
         course = Course.objects.filter(pk=course_id).first()
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "الدورة غير موجودة.", status.HTTP_404_NOT_FOUND)
+        if not _is_course_staff(request.user, course):
+            return error_response(
+                "PERMISSION_DENIED",
+                "ليس لديك صلاحية استعراض بيانات مراجعة هذه الدورة.",
+                status.HTTP_403_FORBIDDEN,
+            )
         sub = CourseReviewSubmission.objects.filter(course=course).order_by("-id").first()
         staged = (
             list(StagedAdminEdit.objects.filter(submission=sub).values("id", "edit_payload_json", "created_at"))
