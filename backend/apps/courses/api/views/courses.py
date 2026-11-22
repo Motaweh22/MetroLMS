@@ -1349,7 +1349,7 @@ class CourseArchiveZipDownloadView(APIView):
             )
 
         if pub is not None:
-            mods = Module.objects.filter(published_version=pub).order_by("sort_order", "id")
+            mods = list(Module.objects.filter(published_version=pub).order_by("sort_order", "id"))
             refs = {
                 r.title: r
                 for r in MediaContentReference.objects.filter(
@@ -1357,7 +1357,7 @@ class CourseArchiveZipDownloadView(APIView):
                 ).select_related("media_asset")
             }
         elif draft is not None:
-            mods = Module.objects.filter(course_draft=draft).order_by("sort_order", "id")
+            mods = list(Module.objects.filter(course_draft=draft).order_by("sort_order", "id"))
             refs = {
                 r.title: r
                 for r in MediaContentReference.objects.filter(
