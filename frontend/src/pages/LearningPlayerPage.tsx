@@ -64,6 +64,8 @@ export const LearningPlayerPage: React.FC = () => {
   const [celebrationOpen, setCelebrationOpen] = useState<boolean>(false);
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState<string | null>(null);
   const [mediaLoadError, setMediaLoadError] = useState<string | null>(null);
+  const [isDownloadingZip, setIsDownloadingZip] = useState<boolean>(false);
+  const [zipDownloadError, setZipDownloadError] = useState<string | null>(null);
 
   const handleSelectAttempt = useCallback(
     (selectedAttemptId: string) => {
@@ -553,15 +555,58 @@ export const LearningPlayerPage: React.FC = () => {
                 data-testid="course-zip-archive-box"
               >
                 {zipPerm.allowed ? (
-                  <a
-                    href={`/api/courses/${encodeURIComponent(effectiveCourse.id)}/archive-zip`}
-                    download={`${effectiveCourse.title || 'Course'}_Bundle.zip`}
-                    className="w-full py-2.5 px-3 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                  <button
+                    type="button"
+                    disabled={isDownloadingZip}
+                    onClick={async () => {
+                      setZipDownloadError(null);
+                      setIsDownloadingZip(true);
+                      try {
+                        const res = await fetch(
+                          `/api/courses/${encodeURIComponent(effectiveCourse.id)}/archive-zip`,
+                          {
+                            method: 'GET',
+                            credentials: 'include',
+                          }
+                        );
+                        if (!res.ok) {
+                          let errMsg = 'تعذر تنزيل أرشيف الدورة.';
+                          try {
+                            const errJson = await res.json();
+                            errMsg =
+                              errJson?.error?.message ||
+                              errJson?.message ||
+                              errJson?.detail ||
+                              errMsg;
+                          } catch {
+                            // keep default message
+                          }
+                          setZipDownloadError(errMsg);
+                          return;
+                        }
+                        const blob = await res.blob();
+                        const blobUrl = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = blobUrl;
+                        a.download = `${effectiveCourse.title || 'Course'}_Bundle.zip`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+                      } catch {
+                        setZipDownloadError('تعذر الاتصال بالخادم لتنزيل الأرشيف.');
+                      } finally {
+                        setIsDownloadingZip(false);
+                      }
+                    }}
+                    className="w-full py-2.5 px-3 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 disabled:opacity-60 text-sky-300 border border-sky-400/30 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
                     data-testid="course-zip-download-btn"
                   >
                     <Icon name="download" size="sm" />
-                    <span>تنزيل أرشيف الدورة (ZIP)</span>
-                  </a>
+                    <span>
+                      {isDownloadingZip ? 'جارٍ تحضير وتنزيل الأرشيف...' : 'تنزيل أرشيف الدورة (ZIP)'}
+                    </span>
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -577,6 +622,11 @@ export const LearningPlayerPage: React.FC = () => {
                 {!zipPerm.allowed && zipPerm.reasonAr && (
                   <p className="text-[11px] text-slate-400 text-center leading-snug">
                     {zipPerm.reasonAr}
+                  </p>
+                )}
+                {zipDownloadError && (
+                  <p className="text-[11px] text-red-400 text-center leading-snug" role="alert">
+                    {zipDownloadError}
                   </p>
                 )}
               </div>

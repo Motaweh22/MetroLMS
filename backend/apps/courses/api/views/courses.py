@@ -1280,9 +1280,8 @@ class CourseArchiveZipDownloadView(APIView):
         import re as _re
         import tempfile
         import zipfile
-        from typing import IO, cast
         from urllib.parse import quote
-        from django.http import FileResponse
+        from django.http import StreamingHttpResponse
         from apps.learning.models import CertificateRecord, CourseAttempt, Enrollment, LessonProgress
         from apps.media.models import MediaContentReference
         from infrastructure.storage import LocalMediaStorage
@@ -1377,7 +1376,7 @@ class CourseArchiveZipDownloadView(APIView):
             refs = {}
 
         storage = LocalMediaStorage()
-        tmp = cast(IO[bytes], tempfile.SpooledTemporaryFile(max_size=32 * 1024 * 1024))
+        tmp = tempfile.TemporaryFile()
         added_count = 0
         used_arcnames: set[str] = set()
 
@@ -1420,10 +1419,23 @@ class CourseArchiveZipDownloadView(APIView):
                 status.HTTP_404_NOT_FOUND,
             )
 
+        total_size = tmp.tell()
         tmp.seek(0)
+
+        def _stream_chunks():
+            try:
+                while True:
+                    chunk = tmp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                tmp.close()
+
         safe_course = _re.sub(r'[\\/:*?"<>|]+', "_", course.title).strip() or f"Course_{course.id}"
         filename = f"{safe_course}_Bundle.zip"
-        response = FileResponse(tmp, content_type="application/zip")
+        response = StreamingHttpResponse(_stream_chunks(), content_type="application/zip")
+        response["Content-Length"] = str(total_size)
         response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
         return response
 
