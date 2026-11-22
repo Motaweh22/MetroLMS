@@ -222,6 +222,7 @@ export interface TrainingGroup {
   postDeadlinePolicy: PostDeadlinePolicy;
   resources: GroupResource[];
   // Increment 10 Extensions:
+  groupType?: GroupType;
   adminStatus?: GroupAdminStatus; // 'draft' | 'active' | 'archived' (default: 'active')
   enrollmentPolicy?: GroupEnrollmentPolicy; // 'open' | 'approval_required' | 'closed' (default: 'open')
   renewalSchedule?: GroupRenewalSchedule;

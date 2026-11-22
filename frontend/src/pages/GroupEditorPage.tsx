@@ -1713,7 +1713,9 @@ export const GroupEditorPage: React.FC = () => {
           setIsRemovingDeadline(true);
           try {
             const updated = await groupsApi.removeGroupDeadline(loadedGroup.id);
-            setLoadedGroup((prev) => (prev ? { ...prev, ...updated } : updated));
+            setLoadedGroup((prev) =>
+              prev ? { ...prev, ...updated } : { ...updated, metrics: null, currentCycle: null, summary: null }
+            );
             setHasNoDeadline(true);
             setDeadlineDateTime('');
             setAutoRenewalEnabled(false);
