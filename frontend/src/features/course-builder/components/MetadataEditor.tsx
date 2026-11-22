@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiClient } from '@/core/api/apiClient';
 import type { Course, CourseLevel } from '@/core/courses/types';
 import { Badge } from '@/shared/ui/Badge';
+import { Button } from '@/shared/ui/Button';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -43,16 +44,37 @@ const BRAND_COVER_COLORS = [
  */
 interface SectionHeaderProps {
   icon: SemanticIconName;
+  iconNode?: React.ReactNode;
+  iconWrapperClassName?: string;
   title: string;
   subtitle?: string;
   badge?: React.ReactNode;
 }
 
-const SectionHeader: React.FC<SectionHeaderProps> = ({ icon, title, subtitle, badge }) => (
+const WhatsAppBrandIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zM12.04 3.67c4.46 0 8.08 3.62 8.08 8.08 0 4.46-3.62 8.08-8.08 8.08-1.42 0-2.81-.38-4.02-1.11l-.29-.17-3.02.79.81-2.94-.19-.31A7.973 7.973 0 0 1 3.96 11.75c0-4.46 3.62-8.08 8.08-8.08zm4.62 9.77c-.25-.13-1.47-.73-1.7-.81-.23-.08-.4-.13-.57.13-.17.25-.66.81-.81.98-.15.17-.31.19-.56.06-.25-.13-1.05-.39-2-1.23-.74-.66-1.24-1.48-1.39-1.73-.15-.25-.02-.39.11-.52.11-.11.25-.31.38-.47.13-.17.17-.29.25-.48.08-.19.04-.36-.02-.5-.06-.13-.57-1.38-.78-1.89-.2-.5-.41-.43-.57-.44h-.49c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.02 2.61.13.17 1.77 2.7 4.29 3.79.6.26 1.07.42 1.44.54.61.2 1.16.17 1.6-.1.49-.3 1.47-.6 1.68-1.18.21-.58.21-1.08.15-1.18-.06-.1-.23-.16-.48-.29z" />
+  </svg>
+);
+
+const SectionHeader: React.FC<SectionHeaderProps> = ({
+  icon,
+  iconNode,
+  iconWrapperClassName = 'bg-primary/10 text-primary',
+  title,
+  subtitle,
+  badge,
+}) => (
   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-border/70 gap-3">
     <div className="flex items-center gap-3">
-      <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-        <Icon name={icon} size="sm" />
+      <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconWrapperClassName}`}>
+        {iconNode || <Icon name={icon} size="sm" />}
       </span>
       <div>
         <h3 className="text-sm font-bold text-text-heading">
@@ -539,15 +561,18 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
                       </option>
                     ))}
                 </select>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={handleAddCoLecturer}
                   disabled={!selectedCoLecturerToAdd}
-                  className="btn btn-outline-primary btn-sm text-xs font-bold shrink-0 disabled:opacity-50"
+                  className="text-xs font-bold shrink-0 border-primary/40 text-primary bg-surface hover:bg-primary/10 hover:border-primary"
                   data-testid="btn-add-co-lecturer"
                 >
-                  + إضافة محاضر مشارك
-                </button>
+                  <Icon name="plus" size="sm" className="ml-1" />
+                  إضافة محاضر مشارك
+                </Button>
               </div>
             </div>
           </div>
@@ -1326,7 +1351,9 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
         aria-labelledby="section-f-heading"
       >
         <SectionHeader
-          icon="externalLink"
+          icon="messageCircle"
+          iconNode={<WhatsAppBrandIcon className="w-5 h-5" />}
+          iconWrapperClassName="bg-success/10 text-success border border-success/20"
           title="أرقام واتساب للتواصل ودعم المقرر"
           subtitle="تخصيص أرقام التواصل عبر واتساب لصفحة المقرر مع التوريث التلقائي من حساب المحاضر المسجل"
           badge={
@@ -1344,23 +1371,29 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
 
         <div className="space-y-4">
           {!hasWhatsAppOverride ? (
-            <div className="p-4 rounded-xl bg-neutral-light border border-border space-y-3" data-testid="wa-inherited-info">
+            <div className="p-4 rounded-xl bg-bg-alt/60 border border-border space-y-3" data-testid="wa-inherited-info">
               <div className="flex items-center gap-2 text-xs font-bold text-text-heading">
-                <span>🔄 حالة التوريث الحالية:</span>
+                <span className="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Icon name="refresh" size="sm" />
+                </span>
+                <span>حالة التوريث الحالية:</span>
               </div>
               <p className="text-xs text-text-muted leading-relaxed">
-                يتم تلقائياً استخدام رقم الهاتف المسجل في الحساب الشخصي للمحاضر <strong>({course.lecturerName})</strong> للتواصل المباشر مع المتدربين.
+                يتم تلقائياً استخدام رقم الهاتف المسجل في الحساب الشخصي للمحاضر <strong className="text-text-heading">({course.lecturerName})</strong> للتواصل المباشر مع المتدربين.
               </p>
               {effectiveIsAdmin ? (
-                <div className="pt-2">
-                  <button
+                <div className="pt-2 border-t border-border/60">
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={handleEnableOverride}
-                    className="btn btn-outline-primary btn-sm inline-flex items-center gap-1.5 text-xs font-bold"
+                    className="text-xs font-bold border-primary/40 text-primary bg-surface hover:bg-primary/10 hover:border-primary shadow-2xs"
                     data-testid="btn-enable-wa-override"
                   >
-                    <span>+ تخصيص أرقام واتساب لهذا المقرر (تجاوز افتراضي)</span>
-                  </button>
+                    <Icon name="plus" size="sm" className="ml-1.5" />
+                    <span>تخصيص أرقام واتساب لهذا المقرر (تجاوز افتراضي)</span>
+                  </Button>
                 </div>
               ) : (
                 <p className="text-[11px] text-text-muted italic pt-2 border-t border-border/70" data-testid="wa-lecturer-readonly-notice">
@@ -1370,25 +1403,29 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
             </div>
           ) : effectiveIsAdmin ? (
             <div className="space-y-3" data-testid="wa-override-controls">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-text-heading">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-xs font-bold text-text-heading flex items-center gap-1.5">
+                  <Icon name="phone" size="sm" className="text-success" />
                   أرقام التواصل المخصصة لهذا المقرر:
                 </span>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={handleClearOverride}
-                  className="btn btn-outline-danger btn-sm text-xs font-bold"
+                  className="text-xs font-bold border-danger/40 text-danger bg-surface hover:bg-danger/10 hover:border-danger self-start sm:self-auto"
                   data-testid="btn-clear-wa-override"
                 >
+                  <Icon name="rotateCcw" size="sm" className="ml-1.5" />
                   <span>إلغاء التخصيص والعودة للرقم المسجل للمحاضر</span>
-                </button>
+                </Button>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {(course.whatsappContacts || []).map((contact, idx) => (
                   <div
                     key={idx}
-                    className="flex flex-col sm:flex-row gap-2 items-center p-3 rounded-xl border border-border bg-white"
+                    className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center p-3 rounded-xl border border-border bg-bg-alt/40"
                     data-testid={`wa-override-item-${idx}`}
                   >
                     <input
@@ -1396,15 +1433,16 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
                       value={contact.name}
                       onChange={(e) => handleUpdateContact(idx, 'name', e.target.value)}
                       placeholder="اسم جهة الاتصال"
-                      className="input input-sm flex-1 text-xs"
+                      className="w-full sm:flex-1 px-3 py-2 text-xs bg-surface border border-border rounded-xl text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
                       data-testid={`wa-contact-name-input-${idx}`}
                     />
                     <input
                       type="text"
+                      dir="ltr"
                       value={contact.number}
                       onChange={(e) => handleUpdateContact(idx, 'number', e.target.value)}
                       placeholder="رقم الهاتف (مثال: 01012345678)"
-                      className="input input-sm flex-1 text-xs"
+                      className="w-full sm:flex-1 px-3 py-2 text-xs font-mono text-right bg-surface border border-border rounded-xl text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
                       data-testid={`wa-contact-number-input-${idx}`}
                     />
                     <input
@@ -1412,35 +1450,44 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
                       value={contact.role || ''}
                       onChange={(e) => handleUpdateContact(idx, 'role', e.target.value)}
                       placeholder="الصفة (مثال: محاضر المقرر)"
-                      className="input input-sm flex-1 text-xs"
+                      className="w-full sm:flex-1 px-3 py-2 text-xs bg-surface border border-border rounded-xl text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
                       data-testid={`wa-contact-role-input-${idx}`}
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={() => handleRemoveContact(idx)}
-                      className="btn btn-ghost btn-sm text-danger hover:bg-danger/10 text-xs px-2"
+                      className="text-danger border-danger/30 bg-surface hover:bg-danger/10 hover:border-danger/60 px-2.5 shrink-0 self-end sm:self-auto"
                       data-testid={`btn-remove-wa-contact-${idx}`}
-                      title="حذف"
+                      title="حذف الرقم"
+                      aria-label="حذف الرقم"
                     >
-                      <span>✕</span>
-                    </button>
+                      <Icon name="trash" size="sm" />
+                    </Button>
                   </div>
                 ))}
               </div>
 
-              <button
-                type="button"
-                onClick={handleAddContact}
-                className="btn btn-outline-primary btn-sm inline-flex items-center gap-1.5 text-xs font-bold mt-2"
-                data-testid="btn-add-wa-contact"
-              >
-                <span>+ إضافة رقم تواصل آخر</span>
-              </button>
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddContact}
+                  className="text-xs font-bold border-primary/40 text-primary bg-surface hover:bg-primary/10 hover:border-primary"
+                  data-testid="btn-add-wa-contact"
+                >
+                  <Icon name="plus" size="sm" className="ml-1.5" />
+                  <span>إضافة رقم تواصل آخر</span>
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3" data-testid="wa-override-readonly-list">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-text-heading">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-xs font-bold text-text-heading flex items-center gap-1.5">
+                  <Icon name="phone" size="sm" className="text-success" />
                   أرقام التواصل المعتمدة من الإدارة لهذا المقرر:
                 </span>
                 <Badge variant="warning" size="sm">
@@ -1452,13 +1499,15 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
                 {(course.whatsappContacts || []).map((contact, idx) => (
                   <div
                     key={idx}
-                    className="flex flex-col sm:flex-row gap-2 items-center p-3 rounded-xl border border-border bg-neutral-light"
+                    className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 rounded-xl border border-border bg-bg-alt/60"
                     data-testid={`wa-override-item-${idx}`}
                   >
-                    <span className="text-xs font-bold text-text-heading flex-1" data-testid={`wa-contact-name-${idx}`}>
+                    <span className="text-xs font-bold text-text-heading flex-1 flex items-center gap-1.5" data-testid={`wa-contact-name-${idx}`}>
+                      <Icon name="user" size="sm" className="text-primary" />
                       {contact.name}
                     </span>
-                    <span className="text-xs font-mono text-text-muted flex-1" data-testid={`wa-contact-number-${idx}`}>
+                    <span className="text-xs font-mono text-text-muted flex-1 flex items-center gap-1.5" dir="ltr" data-testid={`wa-contact-number-${idx}`}>
+                      <Icon name="phone" size="sm" className="text-success" />
                       {contact.number}
                     </span>
                     <Badge variant="neutral" size="sm">
