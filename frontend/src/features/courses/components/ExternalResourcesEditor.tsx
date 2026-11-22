@@ -55,7 +55,7 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
   };
 
   const handleStartEdit = (res: ExternalResource) => {
-    setEditingId(res.id);
+    setEditingId(res.id ?? null);
     setTitle(res.title);
     setUrl(res.url);
     setDescription(res.description || '');
@@ -110,12 +110,12 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
     resetForm();
   };
 
-  const handleDeleteResource = (id: string) => {
+  const handleDeleteResource = (id: string | undefined, fallbackIdx?: number) => {
     const updated = resources
-      .filter((r) => r.id !== id)
+      .filter((r, i) => (id ? r.id !== id : i !== fallbackIdx))
       .map((r, idx) => ({ ...r, order: idx + 1 }));
     onChange(updated);
-    if (editingId === id) resetForm();
+    if (id && editingId === id) resetForm();
   };
 
   const handleMove = (index: number, direction: 'up' | 'down') => {
@@ -153,9 +153,9 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
         <div className="space-y-2">
           {resources.map((res, idx) => (
             <div
-              key={res.id}
+              key={res.id ?? idx}
               className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface hover:border-primary/40 transition-colors gap-3"
-              data-testid={`resource-row-${res.id}`}
+              data-testid={`resource-row-${res.id ?? idx}`}
             >
               <div className="flex items-center gap-3 overflow-hidden">
                 <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -227,7 +227,7 @@ export const ExternalResourcesEditor: React.FC<ExternalResourcesEditorProps> = (
                 {/* Delete Button */}
                 <button
                   type="button"
-                  onClick={() => handleDeleteResource(res.id)}
+                  onClick={() => handleDeleteResource(res.id, idx)}
                   className="p-1.5 rounded-lg border border-border hover:bg-danger/10 hover:border-danger/40 text-danger transition-colors text-xs cursor-pointer"
                   title="حذف المورد"
                   aria-label="حذف المورد"
