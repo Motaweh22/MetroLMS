@@ -48,7 +48,7 @@ const FIELD_LABELS: Record<string, string> = {
   externalResources: 'المصادر الخارجية',
   courseZipPolicy: 'سياسة تنزيل المحتوى',
   commentsEnabled: 'تفعيل التعليقات',
-  refresherConfig: 'إعدادات النسخة التنشيطية',
+  refresherConfig: 'إعدادات النسخة التذكيرية',
   chapters: 'المنهج الدراسي',
 };
 

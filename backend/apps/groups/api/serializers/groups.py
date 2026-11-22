@@ -52,7 +52,11 @@ class GroupRenewalCycleSerializer(serializers.ModelSerializer):
                 "courseId": str(a.course_id),
                 "title": a.course.title,
                 "courseType": a.course.course_type,
-                "courseRole": "reminder" if a.course.course_type == "reminder" else "core",
+                "courseRole": (
+                    "reminder"
+                    if (getattr(a, "course_role", "core") == "reminder" or a.course.course_type == "reminder")
+                    else "core"
+                ),
                 "order": idx + 1,
                 "customStartDateTime": None,
                 "customDeadlineDateTime": None,
@@ -272,7 +276,11 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
                 "courseId": str(a.course_id),
                 "title": a.course.title,
                 "courseType": a.course.course_type,
-                "courseRole": "reminder" if a.course.course_type == "reminder" else "core",
+                "courseRole": (
+                    "reminder"
+                    if (getattr(a, "course_role", "core") == "reminder" or a.course.course_type == "reminder")
+                    else "core"
+                ),
             }
             for a in assignments
         ]

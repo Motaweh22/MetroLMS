@@ -198,6 +198,9 @@ export interface Course {
   id: string;
   title: string;
   description: string;
+  courseType?: 'main' | 'reminder';
+  mainCourseId?: number | string | null;
+  hasRefresherVersion?: boolean;
   thumbnail?: string;
   coverType?: 'image' | 'color' | 'default';
   coverColor?: string;

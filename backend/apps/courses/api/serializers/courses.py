@@ -137,6 +137,12 @@ class CourseListSerializer(serializers.ListSerializer):
             .annotate(cnt=Count("id", distinct=True))
         }
 
+        # 7. Reminder child course existence (1 bulk query)
+        reminder_parent_ids: set[int] = set(
+            Course.objects.filter(course_type="reminder", main_course_id__in=course_ids)
+            .values_list("main_course_id", flat=True)
+        )
+
         # Attach prefetched caches onto each Course instance
         for c in courses:
             draft = draft_by_course.get(c.id)
@@ -166,6 +172,7 @@ class CourseListSerializer(serializers.ListSerializer):
             c._ser_line_ids = line_map.get(c.id, [])
             c._ser_lead_titles = lead_map.get(c.id, [])
             c._ser_enrollment_count = enr_counts.get(c.id, 0)
+            c._ser_has_reminder_child = c.id in reminder_parent_ids
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -199,6 +206,7 @@ class CourseSerializer(serializers.ModelSerializer):
     chapters = serializers.SerializerMethodField()
     courseZipPolicy = serializers.SerializerMethodField()
     refresherConfig = serializers.SerializerMethodField()
+    hasRefresherVersion = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
 
@@ -236,6 +244,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "chapters",
             "courseZipPolicy",
             "refresherConfig",
+            "hasRefresherVersion",
             "createdAt",
             "updatedAt",
         ]
@@ -548,6 +557,20 @@ class CourseSerializer(serializers.ModelSerializer):
                 _hydrate_items(items_list)
 
         return cfg
+
+    def get_hasRefresherVersion(self, obj: Course) -> bool:
+        if obj.course_type == "reminder":
+            return True
+        draft = self._get_draft(obj)
+        raw_cfg = draft.refresher_config_json if draft is not None else None
+        if raw_cfg is None:
+            pub = self._get_latest_pub(obj)
+            raw_cfg = pub.refresher_config_json if pub is not None else None
+        if isinstance(raw_cfg, dict) and bool(raw_cfg.get("enabled")):
+            return True
+        if hasattr(obj, "_ser_has_reminder_child"):
+            return bool(obj._ser_has_reminder_child)
+        return Course.objects.filter(course_type="reminder", main_course_id=obj.id).exists()
 
 
 class PublishedCourseVersionSerializer(serializers.ModelSerializer):

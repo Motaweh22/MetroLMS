@@ -476,7 +476,11 @@ class MyGroupsView(APIView):
                         {
                             "courseId": str(a.course_id),
                             "courseTitle": a.course.title,
-                            "courseRole": "reminder" if a.course.course_type == "reminder" else "core",
+                            "courseRole": (
+                                "reminder"
+                                if (getattr(a, "course_role", "core") == "reminder" or a.course.course_type == "reminder")
+                                else "core"
+                            ),
                             "order": idx,
                         }
                     )
@@ -729,28 +733,66 @@ class AdminGroupCoursesView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "لا توجد دورة تجديد نشطة لهذه المجموعة.", status.HTTP_404_NOT_FOUND)
 
         raw_ids: list[int] = []
-        for key in ("coreCourseIds", "reminderCourseIds", "courseIds"):
+        role_by_cid: dict[int, str] = {}
+        for key, default_role in (("coreCourseIds", "core"), ("reminderCourseIds", "reminder"), ("courseIds", "core")):
             vals = request.data.get(key)
             if isinstance(vals, list):
                 for v in vals:
                     if str(v).strip().isdigit():
-                        raw_ids.append(int(v))
+                        cid_int = int(v)
+                        raw_ids.append(cid_int)
+                        if key == "reminderCourseIds":
+                            role_by_cid[cid_int] = "reminder"
+                        else:
+                            role_by_cid.setdefault(cid_int, default_role)
         if isinstance(request.data.get("courses"), list):
             for item in request.data["courses"]:
                 cid = item.get("courseId") if isinstance(item, dict) else item
                 if str(cid).strip().isdigit():
-                    raw_ids.append(int(cid))
+                    cid_int = int(cid)
+                    raw_ids.append(cid_int)
+                    if isinstance(item, dict) and str(item.get("courseRole", "")).strip().lower() == "reminder":
+                        role_by_cid[cid_int] = "reminder"
+                    else:
+                        role_by_cid.setdefault(cid_int, "core")
 
         unique_ids = list(dict.fromkeys(raw_ids))
+        from apps.courses.models import CourseDraft, PublishedCourseVersion
         from apps.learning.services.learning_service import LearningDomainError, enroll_user_in_course
 
+        def _course_supports_reminder(c: Course) -> bool:
+            if c.course_type == "reminder":
+                return True
+            draft = CourseDraft.objects.filter(course=c).first()
+            raw_cfg = draft.refresher_config_json if draft is not None else None
+            if raw_cfg is None:
+                pub = PublishedCourseVersion.objects.filter(course=c).order_by("-version_number").first()
+                raw_cfg = pub.refresher_config_json if pub is not None else None
+            if isinstance(raw_cfg, dict) and bool(raw_cfg.get("enabled")):
+                return True
+            return Course.objects.filter(course_type="reminder", main_course_id=c.id).exists()
+
         members = list(GroupMembership.objects.filter(training_group=group).select_related("user"))
+        has_any_reminder = False
         with transaction.atomic():
             GroupCourseAssignment.objects.filter(group_renewal_cycle=cycle).delete()
             for cid in unique_ids:
                 course = Course.objects.filter(pk=cid).first()
                 if course is not None:
-                    GroupCourseAssignment.objects.get_or_create(group_renewal_cycle=cycle, course=course)
+                    req_role = role_by_cid.get(cid, "core")
+                    if course.course_type == "reminder":
+                        eff_role = "reminder"
+                    elif req_role == "reminder" and _course_supports_reminder(course):
+                        eff_role = "reminder"
+                    else:
+                        eff_role = "core"
+                    if eff_role == "reminder":
+                        has_any_reminder = True
+                    GroupCourseAssignment.objects.update_or_create(
+                        group_renewal_cycle=cycle,
+                        course=course,
+                        defaults={"course_role": eff_role},
+                    )
                     for m in members:
                         try:
                             enroll_user_in_course(
@@ -763,6 +805,9 @@ class AdminGroupCoursesView(APIView):
                             )
                         except LearningDomainError:
                             pass
+            if has_any_reminder and group.group_type != "reminder":
+                group.group_type = "reminder"
+                group.save(update_fields=["group_type"])
 
         return success_response(GroupRenewalCycleSerializer(cycle).data)
 

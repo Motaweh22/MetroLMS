@@ -27,6 +27,19 @@ export interface StartRenewalCycleModalProps {
   onCycleCreated: (newCycle: GroupRenewalCycle) => void;
 }
 
+function courseSupportsReminder(course?: Course | null): boolean {
+  if (!course) return false;
+  return Boolean(
+    course.hasRefresherVersion ||
+      course.refresherConfig?.enabled ||
+      course.courseType === 'reminder'
+  );
+}
+
+function isReminderOnlyCourse(course?: Course | null): boolean {
+  return Boolean(course?.courseType === 'reminder');
+}
+
 export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
   isOpen,
   onClose,
@@ -106,11 +119,20 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
       return;
     }
 
+    const picked = availableCourses.find(
+      (c) => String(c.id).toLowerCase() === String(selectedCourseToAdd).toLowerCase()
+    );
+    const effectiveRole: CourseRole = isReminderOnlyCourse(picked)
+      ? 'reminder'
+      : !courseSupportsReminder(picked)
+      ? 'core'
+      : selectedRoleToAdd;
+
     setCourses((prev) => [
       ...prev,
       {
         courseId: selectedCourseToAdd,
-        courseRole: selectedRoleToAdd,
+        courseRole: effectiveRole,
         order: prev.length + 1,
         customStartDateTime: null,
         customDeadlineDateTime: null,
@@ -118,11 +140,18 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
       },
     ]);
     setSelectedCourseToAdd('');
+    setSelectedRoleToAdd('core');
     setErrorMessage(null);
   };
 
   // Toggle role between core and reminder
   const handleToggleRole = (courseId: string) => {
+    const target = availableCourses.find(
+      (c) => String(c.id).toLowerCase() === String(courseId).toLowerCase()
+    );
+    if (target && (!courseSupportsReminder(target) || isReminderOnlyCourse(target))) {
+      return;
+    }
     setCourses((prev) =>
       prev.map((c) => {
         if (c.courseId === courseId) {
@@ -217,6 +246,23 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
   const unassignedCourses = availableCourses.filter(
     (c) => !courses.some((ac) => ac.courseId.toLowerCase() === c.id.toLowerCase())
   );
+
+  const selectedCourseObj =
+    unassignedCourses.find(
+      (c) => String(c.id).toLowerCase() === String(selectedCourseToAdd).toLowerCase()
+    ) || null;
+
+  const handleSelectedCourseChange = (val: string) => {
+    setSelectedCourseToAdd(val);
+    const picked = unassignedCourses.find(
+      (c) => String(c.id).toLowerCase() === String(val).toLowerCase()
+    );
+    if (isReminderOnlyCourse(picked)) {
+      setSelectedRoleToAdd('reminder');
+    } else if (!courseSupportsReminder(picked)) {
+      setSelectedRoleToAdd('core');
+    }
+  };
 
   return (
     <Modal
@@ -317,8 +363,8 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
                 value={postDeadlinePolicy}
                 onChange={(val) => setPostDeadlinePolicy(val as PostDeadlinePolicy)}
                 options={[
-                  { value: 'keep_no_cert', label: 'إتاحة المحتوى للقراءة دون إصدار شهادة (keep_no_cert)' },
-                  { value: 'hide', label: 'حجب المحتوى التدريبي تماماً (hide)' },
+                  { value: 'keep_no_cert', label: 'إتاحة المحتوى للقراءة دون إصدار شهادة' },
+                  { value: 'hide', label: 'حجب المحتوى التدريبي تماماً' },
                 ]}
               />
             </div>
@@ -346,7 +392,7 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
             <h5 className="text-sm font-bold text-text">تعيين المقررات في الدورة الجديدة</h5>
             <span className="text-xs text-text-muted">
               {courses.filter((c) => c.courseRole === 'core').length} أساسية |{' '}
-              {courses.filter((c) => c.courseRole === 'reminder').length} تنشيطية
+              {courses.filter((c) => c.courseRole === 'reminder').length} تذكيرية
             </span>
           </div>
 
@@ -359,14 +405,20 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
               className="flex-1"
               buttonClassName="bg-surface"
               value={selectedCourseToAdd}
-              onChange={(val) => setSelectedCourseToAdd(val)}
+              onChange={handleSelectedCourseChange}
               placeholder="اختر مقرراً تدريبياً لإضافته للدورة..."
               emptyMessage="لا توجد مقررات متاحة"
               options={[
                 { value: '', label: 'اختر مقرراً تدريبياً لإضافته للدورة...' },
                 ...unassignedCourses.map((c) => ({
                   value: c.id,
-                  label: `${c.title} (${c.id})`,
+                  label: `${c.title} (${c.id}) — ${
+                    isReminderOnlyCourse(c)
+                      ? 'دورة تذكيرية فقط'
+                      : courseSupportsReminder(c)
+                      ? 'متاح: أساسية أو تذكيرية'
+                      : 'دورة أساسية فقط'
+                  }`,
                 })),
               ]}
             />
@@ -379,10 +431,23 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
               buttonClassName="bg-surface"
               value={selectedRoleToAdd}
               onChange={(val) => setSelectedRoleToAdd(val as CourseRole)}
-              options={[
-                { value: 'core', label: 'دورة أساسية (Core)' },
-                { value: 'reminder', label: 'دورة تنشيطية (Reminder)' },
-              ]}
+              disabled={
+                !selectedCourseObj ||
+                isReminderOnlyCourse(selectedCourseObj) ||
+                !courseSupportsReminder(selectedCourseObj)
+              }
+              options={
+                !selectedCourseObj
+                  ? [{ value: 'core', label: 'دورة أساسية' }]
+                  : isReminderOnlyCourse(selectedCourseObj)
+                  ? [{ value: 'reminder', label: 'دورة تذكيرية فقط' }]
+                  : !courseSupportsReminder(selectedCourseObj)
+                  ? [{ value: 'core', label: 'دورة أساسية فقط' }]
+                  : [
+                      { value: 'core', label: 'دورة أساسية' },
+                      { value: 'reminder', label: 'دورة تذكيرية' },
+                    ]
+              }
             />
 
             <Button
@@ -431,12 +496,23 @@ export const StartRenewalCycleModal: React.FC<StartRenewalCycleModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleToggleRole(c.courseId)}
-                        className="cursor-pointer"
-                        title="انقر للتبديل بين دورة أساسية وتنشيطية"
+                        className="cursor-pointer disabled:cursor-default"
+                        disabled={
+                          Boolean(
+                            targetCourse &&
+                              (!courseSupportsReminder(targetCourse) ||
+                                isReminderOnlyCourse(targetCourse))
+                          )
+                        }
+                        title={
+                          targetCourse && !courseSupportsReminder(targetCourse)
+                            ? 'دورة أساسية فقط (لا توجد نسخة تذكيرية)'
+                            : 'انقر للتبديل بين دورة أساسية وتذكيرية'
+                        }
                         data-testid={`toggle-role-btn-${c.courseId}`}
                       >
                         <Badge variant={c.courseRole === 'core' ? 'primary' : 'warning'} size="sm">
-                          {c.courseRole === 'core' ? 'دورة أساسية' : 'دورة تنشيطية'}
+                          {c.courseRole === 'core' ? 'دورة أساسية' : 'دورة تذكيرية'}
                         </Badge>
                       </button>
 

@@ -29,6 +29,19 @@ export interface GroupCoursesTabProps {
   onPostDeadlinePolicyChange?: (policy: PostDeadlinePolicy) => void;
 }
 
+function courseSupportsReminder(course?: Course | null): boolean {
+  if (!course) return false;
+  return Boolean(
+    course.hasRefresherVersion ||
+      course.refresherConfig?.enabled ||
+      course.courseType === 'reminder'
+  );
+}
+
+function isReminderOnlyCourse(course?: Course | null): boolean {
+  return Boolean(course?.courseType === 'reminder');
+}
+
 export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
   group,
   onGroupUpdated,
@@ -148,9 +161,18 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
       return;
     }
 
+    const picked = availableCourses.find(
+      (c) => String(c.id).toLowerCase() === String(courseToAdd).toLowerCase()
+    );
+    const effectiveRole: CourseRole = isReminderOnlyCourse(picked)
+      ? 'reminder'
+      : !courseSupportsReminder(picked)
+      ? 'core'
+      : roleToAdd;
+
     const newAssignment: GroupCycleCourseAssignment = {
       courseId: courseToAdd,
-      courseRole: roleToAdd,
+      courseRole: effectiveRole,
       order: cycleCourses.length + 1,
       customStartDateTime: null,
       customDeadlineDateTime: null,
@@ -159,13 +181,20 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
 
     setCycleCourses((prev) => [...prev, newAssignment]);
     setCourseToAdd('');
+    setRoleToAdd('core');
     setIsDirty(true);
     setSaveError(null);
   };
 
-  // Toggle role between core and reminder
+  // Toggle role between core and reminder (only if course has a refresher version)
   const handleToggleRole = (courseId: string) => {
     if (!isCurrentCycleActive) return;
+    const target = availableCourses.find(
+      (c) => String(c.id).toLowerCase() === String(courseId).toLowerCase()
+    );
+    if (target && (!courseSupportsReminder(target) || isReminderOnlyCourse(target))) {
+      return;
+    }
 
     setCycleCourses((prev) =>
       prev.map((c) => {
@@ -310,6 +339,26 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
     (c) => !cycleCourses.some((cc) => String(cc.courseId).toLowerCase() === String(c.id).toLowerCase())
   );
 
+  const selectedCourseObj = useMemo(
+    () =>
+      unassignedCourses.find(
+        (c) => String(c.id).toLowerCase() === String(courseToAdd).toLowerCase()
+      ) || null,
+    [unassignedCourses, courseToAdd]
+  );
+
+  const handleCourseToAddChange = (val: string) => {
+    setCourseToAdd(val);
+    const picked = unassignedCourses.find(
+      (c) => String(c.id).toLowerCase() === String(val).toLowerCase()
+    );
+    if (isReminderOnlyCourse(picked)) {
+      setRoleToAdd('reminder');
+    } else if (!courseSupportsReminder(picked)) {
+      setRoleToAdd('core');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-surface rounded-xl border border-border" data-testid="courses-tab-loading">
@@ -351,7 +400,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
               </Badge>
             </div>
             <p className="text-xs text-text-muted">
-              تعيين المقررات الأساسية والتنشيطية للمجموعة، وتخصيص مواعيد المقررات، وضبط سياسة التعامل مع المحتوى بعد انتهاء الموعد النهائي.
+              تعيين المقررات الأساسية والتذكيرية للمجموعة، وتخصيص مواعيد المقررات، وضبط سياسة التعامل مع المحتوى بعد انتهاء الموعد النهائي.
             </p>
           </div>
         </div>
@@ -426,8 +475,8 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
                 <span className="font-semibold text-text">سياسة ما بعد الموعد: </span>
                 <span>
                   {selectedPolicy === 'hide'
-                    ? 'حجب المحتوى (hide)'
-                    : 'إتاحة دون شهادة (keep_no_cert)'}
+                    ? 'حجب المحتوى'
+                    : 'إتاحة دون شهادة'}
                 </span>
               </div>
               {group.renewalSchedule?.autoRenewalEnabled && (
@@ -473,7 +522,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
               <span>إضافة مقرر تدريبي إلى الدورة الحالية</span>
             </h4>
             <span className="text-[11px] text-text-muted">
-              المقرر يمكن أن يكون إما دورة أساسية أو دورة تنشيطية
+              يظهر خيار الدورة التذكيرية فقط للمقررات التي لها نسخة تذكيرية معتمدة
             </span>
           </div>
 
@@ -484,15 +533,22 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
               size="sm"
               className="flex-1"
               value={courseToAdd}
-              onChange={(val) => setCourseToAdd(val)}
+              onChange={handleCourseToAddChange}
               placeholder="اختر مقرراً تدريبياً من دليل الدورات المعتمد..."
               emptyMessage="لا توجد مقررات إضافية متاحة"
               options={[
                 { value: '', label: 'اختر مقرراً تدريبياً من دليل الدورات المعتمد...' },
-                ...unassignedCourses.map((c) => ({
-                  value: c.id,
-                  label: `${c.title} (${c.id}) — المستوى: ${c.level}`,
-                })),
+                ...unassignedCourses.map((c) => {
+                  const availabilityLabel = isReminderOnlyCourse(c)
+                    ? 'دورة تذكيرية فقط'
+                    : courseSupportsReminder(c)
+                    ? 'متاح: أساسية أو تذكيرية'
+                    : 'دورة أساسية فقط';
+                  return {
+                    value: c.id,
+                    label: `${c.title} (${c.id}) — ${availabilityLabel}`,
+                  };
+                }),
               ]}
             />
 
@@ -503,10 +559,23 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
               className="sm:w-56"
               value={roleToAdd}
               onChange={(val) => setRoleToAdd(val as CourseRole)}
-              options={[
-                { value: 'core', label: 'دورة أساسية (Core Course)' },
-                { value: 'reminder', label: 'دورة تنشيطية (Reminder Course)' },
-              ]}
+              disabled={
+                !selectedCourseObj ||
+                isReminderOnlyCourse(selectedCourseObj) ||
+                !courseSupportsReminder(selectedCourseObj)
+              }
+              options={
+                !selectedCourseObj
+                  ? [{ value: 'core', label: 'دورة أساسية' }]
+                  : isReminderOnlyCourse(selectedCourseObj)
+                  ? [{ value: 'reminder', label: 'دورة تذكيرية فقط' }]
+                  : !courseSupportsReminder(selectedCourseObj)
+                  ? [{ value: 'core', label: 'دورة أساسية فقط' }]
+                  : [
+                      { value: 'core', label: 'دورة أساسية' },
+                      { value: 'reminder', label: 'دورة تذكيرية' },
+                    ]
+              }
             />
 
             <Button
@@ -542,7 +611,7 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-warning" />
-              <span>تنشيطية: {cycleCourses.filter((c) => c.courseRole === 'reminder').length}</span>
+              <span>تذكيرية: {cycleCourses.filter((c) => c.courseRole === 'reminder').length}</span>
             </span>
           </div>
         </div>
@@ -637,18 +706,26 @@ export const GroupCoursesTab: React.FC<GroupCoursesTabProps> = ({
                             size="sm"
                             data-testid={`role-badge-${assignment.courseId}`}
                           >
-                            {assignment.courseRole === 'core' ? 'دورة أساسية' : 'دورة تنشيطية'}
+                            {assignment.courseRole === 'core' ? 'دورة أساسية' : 'دورة تذكيرية'}
                           </Badge>
 
-                          {isCurrentCycleActive && (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleRole(assignment.courseId)}
-                              className="text-[10px] text-primary hover:underline font-semibold cursor-pointer"
-                              data-testid={`toggle-role-btn-${assignment.courseId}`}
-                            >
-                              تبديل إلى {assignment.courseRole === 'core' ? 'تنشيطية' : 'أساسية'}
-                            </button>
+                          {isCurrentCycleActive &&
+                            (!targetCourse ||
+                              (courseSupportsReminder(targetCourse) &&
+                                !isReminderOnlyCourse(targetCourse))) && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleRole(assignment.courseId)}
+                                className="text-[10px] text-primary hover:underline font-semibold cursor-pointer"
+                                data-testid={`toggle-role-btn-${assignment.courseId}`}
+                              >
+                                تبديل إلى {assignment.courseRole === 'core' ? 'تذكيرية' : 'أساسية'}
+                              </button>
+                            )}
+                          {targetCourse && !courseSupportsReminder(targetCourse) && (
+                            <span className="text-[10px] text-text-muted">
+                              (لا توجد نسخة تذكيرية)
+                            </span>
                           )}
                         </div>
                       </td>

@@ -192,7 +192,7 @@ export const GroupQRModal: React.FC<GroupQRModalProps> = ({
     if (localPolicy === 'open') {
       return {
         variant: 'success' as const,
-        label: 'انضمام فوري (Open)',
+        label: 'انضمام فوري',
         secondaryText: `سياسة الانضمام المختارة: ${policyTitle}`,
       };
     }

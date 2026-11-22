@@ -248,7 +248,7 @@ export function validateCycleCourseAssignments(
   if (duplicates.length > 0) {
     return {
       isValid: false,
-      error: `لا يمكن تعيين المقرر التدريبي (${duplicates.join(', ')}) أكثر من مرة أو دمجه كدورة أساسية وتنشيطية في نفس دورة التجديد`,
+      error: `لا يمكن تعيين المقرر التدريبي (${duplicates.join(', ')}) أكثر من مرة أو دمجه كدورة أساسية وتذكيرية في نفس دورة التجديد`,
       duplicates,
       coreCoursesCount: coreCount,
       reminderCoursesCount: reminderCount,

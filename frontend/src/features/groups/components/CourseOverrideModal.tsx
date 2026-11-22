@@ -98,8 +98,8 @@ export const CourseOverrideModal: React.FC<CourseOverrideModalProps> = ({
   const inheritedPolicy = group.postDeadlinePolicy || cycle?.postDeadlinePolicy || 'keep_no_cert';
 
   const policyLabels: Record<string, string> = {
-    keep_no_cert: 'إتاحة المحتوى دون شهادة (keep_no_cert)',
-    hide: 'حجب المحتوى التدريبي (hide)',
+    keep_no_cert: 'إتاحة المحتوى دون شهادة',
+    hide: 'حجب المحتوى التدريبي',
   };
 
   return (

@@ -137,6 +137,7 @@ class GroupCourseAssignment(models.Model):
         db_column="course_id",
         related_name="group_course_assignments",
     )
+    course_role = models.CharField(max_length=20, default="core", db_default="core")
 
     class Meta:
         db_table = "groups_groupcourseassignment"
