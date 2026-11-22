@@ -46,9 +46,9 @@ class Bp11CommunicationsAndSchedulingTests(TestCase):
             updated_at=now,
             updated_by="system",
         )
-        self.marital = MaritalStatusCatalog.objects.create(code="single", name_ar="أعزب")
-        self.military = MilitaryServiceStatusCatalog.objects.create(code="completed", name_ar="أنهى الخدمة")
-        self.metro_line = MetroLine.objects.create(name_ar="الخط الأول")
+        self.marital = MaritalStatusCatalog.objects.get_or_create(code="single", defaults={"name_ar": "أعزب"})[0]
+        self.military = MilitaryServiceStatusCatalog.objects.get_or_create(code="completed", defaults={"name_ar": "أنهى الخدمة"})[0]
+        self.metro_line = MetroLine.objects.get_or_create(name_ar="الخط الأول")[0]
 
         def make_user(phone: str, nid: str, role_policy: RolePolicy, name: str) -> User:
             return User.objects.create_user(
@@ -119,6 +119,11 @@ class Bp11CommunicationsAndSchedulingTests(TestCase):
         )
         self.assertEqual(ok_contact.status_code, 201)
         contact_id = ok_contact.json()["data"]["contact"]["id"]
+        # Draft course blocks trainee IDOR access to WhatsApp contacts
+        self.assertEqual(t_client.get(f"/api/courses/{self.course.id}/whatsapp-contacts").status_code, 403)
+        self.course.lifecycle_status = "Published"
+        self.course.access_mode = "all_trainees"
+        self.course.save(update_fields=["lifecycle_status", "access_mode"])
         self.assertEqual(len(t_client.get(f"/api/courses/{self.course.id}/whatsapp-contacts").json()["data"]["contacts"]), 1)
 
         # Hide course_support visibility for trainee

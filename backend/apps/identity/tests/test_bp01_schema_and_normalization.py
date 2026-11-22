@@ -51,9 +51,9 @@ class Bp01SqlServerSchemaTests(TestCase):
             updated_at=now,
             updated_by="system",
         )
-        self.marital = MaritalStatusCatalog.objects.create(code="single", name_ar="أعزب")
-        self.military = MilitaryServiceStatusCatalog.objects.create(code="completed", name_ar="أنهى الخدمة")
-        self.metro_line = MetroLine.objects.create(name_ar="الخط الأول")
+        self.marital = MaritalStatusCatalog.objects.get_or_create(code="single", defaults={"name_ar": "أعزب"})[0]
+        self.military = MilitaryServiceStatusCatalog.objects.get_or_create(code="completed", defaults={"name_ar": "أنهى الخدمة"})[0]
+        self.metro_line = MetroLine.objects.get_or_create(name_ar="الخط الأول")[0]
 
     def test_54_dbo_feature_tables_and_all_fks_no_action(self) -> None:
         feature_prefixes = (
@@ -76,7 +76,7 @@ class Bp01SqlServerSchemaTests(TestCase):
             )
             tables = [row[0] for row in cur.fetchall()]
             feature_tables = [t for t in tables if t.startswith(tuple(f"dbo.{p}" for p in feature_prefixes))]
-            self.assertEqual(len(feature_tables), 54)
+            self.assertEqual(len(feature_tables), 56)
             self.assertFalse(any("inpersonattendance" in t.lower() for t in tables))
 
             cur.execute(

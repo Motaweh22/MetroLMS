@@ -34,10 +34,10 @@ class Bp06CoursesAndCurriculumTests(TestCase):
                 updated_at=now,
                 updated_by="system",
             )
-        self.marital = MaritalStatusCatalog.objects.create(code="single", name_ar="أعزب")
-        self.military = MilitaryServiceStatusCatalog.objects.create(code="completed", name_ar="أنهى الخدمة")
-        self.line1 = MetroLine.objects.create(name_ar="الخط الأول")
-        self.line2 = MetroLine.objects.create(name_ar="الخط الثاني")
+        self.marital = MaritalStatusCatalog.objects.get_or_create(code="single", defaults={"name_ar": "أعزب"})[0]
+        self.military = MilitaryServiceStatusCatalog.objects.get_or_create(code="completed", defaults={"name_ar": "أنهى الخدمة"})[0]
+        self.line1 = MetroLine.objects.get_or_create(name_ar="الخط الأول")[0]
+        self.line2 = MetroLine.objects.get_or_create(name_ar="الخط الثاني")[0]
 
         def make_user(phone: str, nid: str, rk: str, name: str, line: MetroLine) -> User:
             return User.objects.create_user(
@@ -178,8 +178,19 @@ class Bp06CoursesAndCurriculumTests(TestCase):
         self.assertEqual(chain_res.status_code, 409)
         self.assertEqual(chain_res.json()["code"], "REMINDER_CHAIN_PROHIBITED")
 
-        # Comment + D-02 anonymization
+        # Draft course blocks trainee comment IDOR (403); once published, comment + D-02 anonymization succeed
         t1_client = self._login(self.trainee1.phone_e164)
+        self.assertEqual(
+            t1_client.post(
+                f"/api/courses/{main_id}/comments",
+                data={"body": "  تعليق مفيد  "},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+        from apps.courses.models import Course
+
+        Course.objects.filter(pk=main_id).update(lifecycle_status="Published", access_mode="all_trainees")
         self.assertEqual(
             t1_client.post(
                 f"/api/courses/{main_id}/comments",

@@ -43,9 +43,9 @@ class Bp04OrganizationAndHrTests(TestCase):
             updated_at=now,
             updated_by="system",
         )
-        self.marital = MaritalStatusCatalog.objects.create(code="single", name_ar="أعزب")
-        self.military = MilitaryServiceStatusCatalog.objects.create(code="completed", name_ar="أنهى الخدمة")
-        self.metro_line = MetroLine.objects.create(name_ar="الخط الأول")
+        self.marital = MaritalStatusCatalog.objects.get_or_create(code="single", defaults={"name_ar": "أعزب"})[0]
+        self.military = MilitaryServiceStatusCatalog.objects.get_or_create(code="completed", defaults={"name_ar": "أنهى الخدمة"})[0]
+        self.metro_line = MetroLine.objects.get_or_create(name_ar="الخط الأول")[0]
 
         self.admin = User.objects.create_user(
             phone_e164="+201000000101",
