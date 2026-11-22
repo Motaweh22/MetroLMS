@@ -18,6 +18,7 @@ export interface CourseCommentsSectionProps {
   courseLecturerId?: string;
   courseCoLecturers?: string[];
   isInstructor?: boolean;
+  theme?: 'light' | 'dark';
   className?: string;
 }
 
@@ -29,8 +30,10 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
   courseLecturerId,
   courseCoLecturers,
   isInstructor,
+  theme = 'light',
   className = '',
 }) => {
+  const isDark = theme === 'dark';
   const { user } = useAuth();
   const toast = useToast();
 
@@ -238,20 +241,36 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
 
   return (
     <div
-      className={`bg-surface rounded-xl border border-border p-5 space-y-5 shadow-xs text-right ${className}`}
+      className={`rounded-xl border p-5 space-y-5 shadow-xs text-right ${
+        isDark
+          ? 'bg-[#0F172A]/90 border-white/10 text-slate-100'
+          : 'bg-surface border-border'
+      } ${className}`}
       data-testid="course-comments-section"
     >
       {/* Section Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-border/70">
-        <div className="flex items-center gap-2 text-text-heading font-bold text-sm sm:text-base">
-          <Icon name="messageSquare" size="md" className="text-primary-dark" />
+      <div
+        className={`flex items-center justify-between pb-3 border-b ${
+          isDark ? 'border-white/10' : 'border-border/70'
+        }`}
+      >
+        <div
+          className={`flex items-center gap-2 font-bold text-sm sm:text-base ${
+            isDark ? 'text-slate-100' : 'text-text-heading'
+          }`}
+        >
+          <Icon name="messageSquare" size="md" className={isDark ? 'text-sky-400' : 'text-primary-dark'} />
           <span>النقاشات والتعليقات</span>
           <Badge variant="neutral" className="font-mono text-xs px-2">
             {comments.length}
           </Badge>
         </div>
         {courseTitle && (
-          <span className="text-xs text-text-muted font-normal hidden sm:inline">
+          <span
+            className={`text-xs font-normal hidden sm:inline ${
+              isDark ? 'text-slate-400' : 'text-text-muted'
+            }`}
+          >
             {courseTitle}
           </span>
         )}
@@ -260,14 +279,18 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
       {/* Discussion Status Banner when Closed */}
       {!areCommentsEnabled && (
         <div
-          className="bg-neutral-light border border-border/80 rounded-xl p-4 text-center text-text-muted text-xs sm:text-sm font-semibold space-y-1"
+          className={`rounded-xl border p-4 text-center text-xs sm:text-sm font-semibold space-y-1 ${
+            isDark
+              ? 'bg-white/5 border-white/10 text-slate-300'
+              : 'bg-neutral-light border-border/80 text-text-muted'
+          }`}
           data-testid="comments-disabled-banner"
         >
-          <div className="flex items-center justify-center gap-2 text-warning-dark">
+          <div className={`flex items-center justify-center gap-2 ${isDark ? 'text-amber-300' : 'text-warning-dark'}`}>
             <Icon name="lock" size="sm" />
             <span className="font-bold">التعليقات مغلقة على هذا الكورس.</span>
           </div>
-          <p className="text-[11px] text-text-muted font-normal">
+          <p className={`text-[11px] font-normal ${isDark ? 'text-slate-400' : 'text-text-muted'}`}>
             يمكنك استعراض المشاركات السابقة كمرجع تعليمي، بينما تم إيقاف إضافة تعليقات جديدة مؤقتاً.
           </p>
         </div>
@@ -276,14 +299,18 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
       {/* Enrollment Required Banner for Unenrolled Trainees */}
       {areCommentsEnabled && isTrainee && !isEnrolled && (
         <div
-          className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center text-text-heading text-xs sm:text-sm space-y-2"
+          className={`rounded-xl border p-4 text-center text-xs sm:text-sm space-y-2 ${
+            isDark
+              ? 'bg-sky-500/10 border-sky-400/25 text-slate-100'
+              : 'bg-primary/5 border-primary/20 text-text-heading'
+          }`}
           data-testid="enrollment-required-banner"
         >
-          <div className="flex items-center justify-center gap-2 text-primary-dark font-bold">
+          <div className={`flex items-center justify-center gap-2 font-bold ${isDark ? 'text-sky-300' : 'text-primary-dark'}`}>
             <Icon name="info" size="sm" />
             <span>سجّل في الكورس للمشاركة في النقاشات</span>
           </div>
-          <p className="text-[11px] text-text-muted">
+          <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-text-muted'}`}>
             النقاشات مخصصة للمتدربين المسجلين بالمقرر لتبادل الأسئلة مع المحاضر والزملاء.
           </p>
         </div>
@@ -293,11 +320,18 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
       {canPostComment && (
         <form
           onSubmit={handleSubmitComment}
-          className="space-y-3 bg-neutral-light/50 border border-border/60 rounded-xl p-3.5"
+          className={`space-y-3 border rounded-xl p-3.5 ${
+            isDark
+              ? 'bg-white/[0.03] border-white/10'
+              : 'bg-neutral-light/50 border-border/60'
+          }`}
           data-testid="comment-composer-form"
         >
           <div className="space-y-1.5">
-            <label htmlFor="course-comment-input" className="block text-xs font-semibold text-text-heading">
+            <label
+              htmlFor="course-comment-input"
+              className={`block text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-text-heading'}`}
+            >
               أضف استفسارك أو تعليقك حول محتوى المقرر:
             </label>
             <textarea
@@ -311,7 +345,11 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
               }}
               disabled={isSubmitting}
               placeholder="اكتب تعليقك أو سؤالك هنا..."
-              className="w-full p-3 text-xs sm:text-sm rounded-lg border border-border bg-surface text-text focus:outline-none focus:border-primary resize-vertical"
+              className={`w-full p-3 text-xs sm:text-sm rounded-lg border focus:outline-none resize-vertical ${
+                isDark
+                  ? 'bg-[#070B14]/80 border-white/15 text-slate-100 placeholder:text-slate-500 focus:border-sky-400'
+                  : 'border-border bg-surface text-text focus:border-primary'
+              }`}
             />
           </div>
 
@@ -325,7 +363,7 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
           )}
 
           <div className="flex items-center justify-between pt-1">
-            <span className="text-[11px] text-text-muted">
+            <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-text-muted'}`}>
               يرجى الالتزام بآداب الحوار الأكاديمي والمهني.
             </span>
             <Button
@@ -388,14 +426,24 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
       {/* Empty State */}
       {!isLoading && !error && comments.length === 0 && (
         <div
-          className="bg-neutral-light/30 border border-dashed border-border rounded-xl p-8 text-center space-y-2"
+          className={`border border-dashed rounded-xl p-8 text-center space-y-2 ${
+            isDark
+              ? 'bg-white/[0.02] border-white/15'
+              : 'bg-neutral-light/30 border-border'
+          }`}
           data-testid="course-comments-empty"
         >
-          <div className="w-10 h-10 mx-auto rounded-full bg-primary/10 text-primary-dark flex items-center justify-center">
+          <div
+            className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center ${
+              isDark ? 'bg-sky-500/15 text-sky-400' : 'bg-primary/10 text-primary-dark'
+            }`}
+          >
             <Icon name="messageSquare" size="md" />
           </div>
-          <h4 className="text-xs sm:text-sm font-bold text-text-heading">لا توجد تعليقات حتى الآن</h4>
-          <p className="text-[11px] text-text-muted max-w-sm mx-auto">
+          <h4 className={`text-xs sm:text-sm font-bold ${isDark ? 'text-slate-100' : 'text-text-heading'}`}>
+            لا توجد تعليقات حتى الآن
+          </h4>
+          <p className={`text-[11px] max-w-sm mx-auto ${isDark ? 'text-slate-400' : 'text-text-muted'}`}>
             {areCommentsEnabled
               ? 'كن أول من يبدأ النقاش ويشارك استفساره أو رأيه حول محتوى هذا البرنامج التدريبي.'
               : 'لم تتم إضافة أي مشاركات أثناء فترة فتح النقاشات على هذا المقرر.'}
@@ -415,10 +463,14 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
             return (
               <div
                 key={comment.id}
-                className={`p-4 rounded-xl bg-surface border transition-colors ${
-                  isAuthorLecturer
-                    ? 'border-primary/40 bg-primary/[0.02]'
-                    : 'border-border hover:border-border/80'
+                className={`p-4 rounded-xl border transition-colors ${
+                  isDark
+                    ? isAuthorLecturer
+                      ? 'border-sky-400/35 bg-sky-500/[0.06]'
+                      : 'bg-white/[0.03] border-white/10 hover:border-white/20'
+                    : isAuthorLecturer
+                    ? 'bg-surface border-primary/40 bg-primary/[0.02]'
+                    : 'bg-surface border-border hover:border-border/80'
                 }`}
                 data-testid={`comment-card-${comment.id}`}
               >
@@ -432,6 +484,8 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                           ? 'bg-primary text-white'
                           : isAuthorAdmin
                           ? 'bg-danger text-white'
+                          : isDark
+                          ? 'bg-white/10 text-slate-100 border border-white/15'
                           : 'bg-neutral-light text-text-heading border border-border'
                       }`}
                       data-testid="comment-avatar"
@@ -443,7 +497,7 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
                         <span
-                          className="font-bold text-xs sm:text-sm text-text-heading"
+                          className={`font-bold text-xs sm:text-sm ${isDark ? 'text-slate-100' : 'text-text-heading'}`}
                           data-testid="comment-author-name"
                         >
                           {comment.userName}
@@ -466,7 +520,10 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                         )}
                       </div>
 
-                      <span className="text-[11px] text-text-muted block" data-testid="comment-date">
+                      <span
+                        className={`text-[11px] block ${isDark ? 'text-slate-400' : 'text-text-muted'}`}
+                        data-testid="comment-date"
+                      >
                         {formatCommentDate(comment)}
                       </span>
                     </div>
@@ -515,7 +572,11 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                 </div>
 
                 {/* Comment Body Text (Safely rendered as React text node) */}
-                <div className="pt-1 text-xs sm:text-sm text-text leading-relaxed whitespace-pre-wrap font-normal">
+                <div
+                  className={`pt-1 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-normal ${
+                    isDark ? 'text-slate-200' : 'text-text'
+                  }`}
+                >
                   {comment.text}
                 </div>
               </div>

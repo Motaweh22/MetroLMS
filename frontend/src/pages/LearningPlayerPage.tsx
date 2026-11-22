@@ -530,6 +530,7 @@ export const LearningPlayerPage: React.FC = () => {
               isEnrolled={isEnrolled}
               courseLecturerId={course.lecturerId ?? undefined}
               courseCoLecturers={course.coLecturers}
+              theme="dark"
             />
           </div>
         </section>
