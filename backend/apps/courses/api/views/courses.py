@@ -505,7 +505,12 @@ class AdminCourseReviewDecideView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         sub_id = request.data.get("submissionId")
         qs = CourseReviewSubmission.objects.filter(course=course)
-        sub = qs.filter(pk=sub_id).first() if sub_id else qs.filter(review_status="Pending").order_by("-id").first()
+        if sub_id is not None and str(sub_id).strip():
+            if not str(sub_id).strip().isdigit():
+                return error_response("VALIDATION_ERROR", "معرف طلب المراجعة غير صالح.", status.HTTP_400_BAD_REQUEST)
+            sub = qs.filter(pk=int(str(sub_id).strip())).first()
+        else:
+            sub = qs.filter(review_status="Pending").order_by("-id").first()
         if sub is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
 
@@ -537,7 +542,9 @@ class AdminCourseStagedEditView(APIView):
     def post(self, request: Request, course_id: int):
         sub_id = request.data.get("submissionId")
         payload = request.data.get("editPayload")
-        sub = CourseReviewSubmission.objects.filter(pk=sub_id, course_id=course_id).first()
+        if sub_id is None or not str(sub_id).strip().isdigit():
+            return error_response("VALIDATION_ERROR", "معرف طلب المراجعة غير صالح.", status.HTTP_400_BAD_REQUEST)
+        sub = CourseReviewSubmission.objects.filter(pk=int(str(sub_id).strip()), course_id=course_id).first()
         if sub is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         if not isinstance(payload, dict):
@@ -552,6 +559,11 @@ class CourseCommentListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request: Request, course_id: int):
+        course = Course.objects.filter(pk=course_id).first()
+        if course is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if request.user.role_id == "trainee" and not is_course_visible_to_trainee(request.user, course):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية استعراض تعليقات هذه الدورة.", status.HTTP_403_FORBIDDEN)
         comments = CourseComment.objects.select_related("author_user").filter(course_id=course_id).order_by("id")
         return success_response({"comments": CourseCommentSerializer(comments, many=True).data})
 
@@ -559,6 +571,8 @@ class CourseCommentListView(APIView):
         course = Course.objects.filter(pk=course_id).first()
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        if request.user.role_id == "trainee" and not is_course_visible_to_trainee(request.user, course):
+            return error_response("PERMISSION_DENIED", "ليس لديك صلاحية التعليق على هذه الدورة.", status.HTTP_403_FORBIDDEN)
         body = str(request.data.get("body") or request.data.get("text") or "")
         try:
             comment = add_course_comment(author=request.user, course=course, body=body)
@@ -836,16 +850,22 @@ class AdminCourseReviewActionView(APIView):
         )
         if sub is None:
             return error_response("RESOURCE_NOT_FOUND", "لا يوجد طلب مراجعة لهذه الدورة.", status.HTTP_404_NOT_FOUND)
-        raw_dec = self.fixed_decision or str(request.data.get("decision", "approve"))
+        raw_dec = self.fixed_decision or str(request.data.get("decision", ""))
         mapped = {
             "approve": "approve",
             "approved": "approve",
             "return_with_edits": "return",
             "return-with-edits": "return",
+            "returnedwithedits": "return",
+            "returned_with_edits": "return",
+            "returnedforrevision": "return",
+            "returned_for_revision": "return",
             "return": "return",
             "reject": "return",
             "rejected": "return",
-        }.get(raw_dec.lower(), "approve")
+        }.get(raw_dec.strip().lower())
+        if mapped is None:
+            return error_response("INVALID_DECISION", "قرار المراجعة غير صالح.", status.HTTP_400_BAD_REQUEST)
         try:
             updated_sub, pub = decide_course_review(
                 reviewer=request.user,

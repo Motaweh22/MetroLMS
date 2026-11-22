@@ -1,10 +1,11 @@
 """Courses, curriculum draft/publish, review & comment domain services."""
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import secrets
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -132,7 +133,10 @@ def save_course_draft(
         raise CourseDomainError("PERMISSION_DENIED", "غير مصرح لك بتعديل منهج هذه الدورة.", status_code=403)
 
     norm_title = normalize_nfc_stripped(title_snapshot)
-    validate_non_empty_text(norm_title)
+    try:
+        validate_non_empty_text(norm_title)
+    except DjangoValidationError as exc:
+        raise CourseDomainError("VALIDATION_ERROR", "عنوان الدورة مطلوب.", status_code=400) from exc
     now = timezone.now()
 
     defaults: dict[str, Any] = {
@@ -176,24 +180,50 @@ def save_course_draft(
             LessonItem.objects.filter(id__in=old_lessons).delete()
         Module.objects.filter(id__in=old_modules).delete()
 
+    def _safe_non_neg_int(val: Any, default: int = 0) -> int:
+        try:
+            parsed = int(float(str(val).strip()))
+            return parsed if parsed >= 0 else default
+        except (TypeError, ValueError):
+            return default
+
     for m_idx, m_data in enumerate(modules_payload):
+        if not isinstance(m_data, dict):
+            continue
         m_title = normalize_nfc_stripped(str(m_data.get("title", "")))
-        validate_non_empty_text(m_title)
+        try:
+            validate_non_empty_text(m_title)
+        except DjangoValidationError as exc:
+            raise CourseDomainError("VALIDATION_ERROR", "عنوان الوحدة/الفصل لا يمكن أن يكون فارغاً.", status_code=400) from exc
         mod = Module.objects.create(
             course_draft=draft,
             title=m_title,
-            sort_order=int(m_data.get("sortOrder", m_idx)),
+            sort_order=_safe_non_neg_int(m_data.get("sortOrder"), m_idx),
         )
         lessons_list = m_data.get("lessons") if m_data.get("lessons") is not None else m_data.get("items", [])
+        if not isinstance(lessons_list, list):
+            lessons_list = []
         for l_idx, l_data in enumerate(lessons_list):
+            if not isinstance(l_data, dict):
+                continue
             l_title = normalize_nfc_stripped(str(l_data.get("title", "")))
-            validate_non_empty_text(l_title)
+            try:
+                validate_non_empty_text(l_title)
+            except DjangoValidationError as exc:
+                raise CourseDomainError("VALIDATION_ERROR", "عنوان الدرس لا يمكن أن يكون فارغاً.", status_code=400) from exc
             raw_ext = l_data.get("externalVideoUrl") or l_data.get("externalUrl") or l_data.get("videoUrl")
             if isinstance(raw_ext, str) and raw_ext.startswith("blob:"):
                 raw_ext = None
             ext_url = normalize_optional_url(raw_ext)
             if ext_url:
-                validate_https_url(ext_url)
+                try:
+                    validate_https_url(ext_url)
+                except DjangoValidationError as exc:
+                    raise CourseDomainError(
+                        "INVALID_URL",
+                        "الرابط الخارجي يجب أن يكون رابط HTTPS صالحاً.",
+                        status_code=400,
+                    ) from exc
             raw_dl = str(l_data.get("downloadPolicy") or ("immediate" if l_data.get("canDownload") else "never")).strip()
             dl_policy = (
                 raw_dl
@@ -203,10 +233,10 @@ def save_course_draft(
             lesson = LessonItem.objects.create(
                 module=mod,
                 title=l_title,
-                lesson_type=str(l_data.get("lessonType") or l_data.get("type") or "video"),
-                sort_order=int(l_data.get("sortOrder", l_idx)),
+                lesson_type=str(l_data.get("lessonType") or l_data.get("type") or "video")[:32],
+                sort_order=_safe_non_neg_int(l_data.get("sortOrder"), l_idx),
                 external_video_url=ext_url,
-                duration_seconds=int(l_data.get("durationSeconds", 0) or 0),
+                duration_seconds=_safe_non_neg_int(l_data.get("durationSeconds"), 0),
                 download_policy=dl_policy,
             )
             raw_media_id = l_data.get("mediaId") or l_data.get("mediaAssetId")
@@ -221,10 +251,20 @@ def save_course_draft(
                     )
             quiz_data = l_data.get("quiz")
             if isinstance(quiz_data, dict):
+                try:
+                    ps = Decimal(str(quiz_data.get("passingScore", "70.00") or "70.00"))
+                except (InvalidOperation, ValueError, TypeError):
+                    ps = Decimal("70.00")
+                if ps < Decimal("0") or ps > Decimal("100"):
+                    raise CourseDomainError(
+                        "VALIDATION_ERROR",
+                        "درجة النجاح في الاختبار يجب أن تكون بين 0 و 100.",
+                        status_code=400,
+                    )
                 QuizDefinition.objects.create(
                     lesson_item=lesson,
-                    questions_json=quiz_data.get("questions", []),
-                    passing_score=Decimal(str(quiz_data.get("passingScore", "70.00"))),
+                    questions_json=quiz_data.get("questions", []) if isinstance(quiz_data.get("questions"), list) else [],
+                    passing_score=ps,
                 )
 
     # Register MediaContentReference for any media uploaded in refresher-only items/chapters
