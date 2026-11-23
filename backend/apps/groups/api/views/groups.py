@@ -963,12 +963,18 @@ class AdminGroupJoinRequestsView(APIView):
 
 
 def _materials_manifest_path(group_id: int):
-    import os
+    from pathlib import Path
     from django.conf import settings
 
-    base = os.path.join(str(settings.MEDIA_ROOT), "group_materials")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, f"group_{group_id}.json")
+    safe_gid = int(group_id)
+    if safe_gid <= 0:
+        raise ValueError("Invalid group_id for materials manifest")
+    base = (Path(settings.MEDIA_ROOT).resolve() / "group_materials").resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    target = (base / f"group_{safe_gid}.json").resolve()
+    if not target.is_relative_to(base):
+        raise ValueError("Path traversal blocked in materials manifest")
+    return str(target)
 
 
 def _resolve_material_file_type(mime_type: str, file_name: str) -> str:
@@ -1202,8 +1208,7 @@ class AdminGroupMaterialFilesView(APIView):
         mime_type = str(request.data.get("mimeType") or "application/octet-stream")
 
         if media_id and str(media_id).isdigit():
-            if not url or str(url).startswith("blob:"):
-                url = f"/api/media/assets/{media_id}/stream"
+            url = f"/api/media/assets/{int(str(media_id))}/stream"
             if size_bytes <= 0:
                 from apps.media.models import MediaAsset
 
@@ -1212,6 +1217,18 @@ class AdminGroupMaterialFilesView(APIView):
                     size_bytes = asset.size_bytes
                     if not mime_type or mime_type == "application/octet-stream":
                         mime_type = asset.mime_type
+        elif url:
+            raw_url = str(url).strip()
+            if not raw_url.startswith("/api/media/"):
+                from shared.validators import validate_https_url
+
+                try:
+                    validate_https_url(raw_url)
+                    url = raw_url
+                except Exception:
+                    url = ""
+            else:
+                url = raw_url
 
         file_rec = {
             "id": f"MAT-{uuid.uuid4().hex[:8]}",
@@ -1271,9 +1288,15 @@ class AdminGroupMaterialFileDetailView(APIView):
         for col in collections:
             for f in col:
                 if f["id"] == file_id:
-                    for k in ("title", "isVisible", "originalFileName", "mimeType", "fileSizeBytes", "url", "mediaId"):
+                    for k in ("title", "isVisible", "originalFileName", "mimeType", "fileSizeBytes", "mediaId"):
                         if k in request.data:
                             f[k] = request.data[k]
+                    if f.get("mediaId") and str(f["mediaId"]).isdigit():
+                        f["url"] = f"/api/media/assets/{int(str(f['mediaId']))}/stream"
+                    elif "url" in request.data:
+                        raw_url = str(request.data.get("url") or "").strip()
+                        if raw_url.startswith("/api/media/"):
+                            f["url"] = raw_url
                     _save_materials_manifest(group_id, manifest)
                     return success_response(f)
         return error_response("RESOURCE_NOT_FOUND", "الملف غير موجود.", status.HTTP_404_NOT_FOUND)
@@ -1414,8 +1437,11 @@ def _move_group_material_asset(media_id: object, group_id: int, target_folder_id
         new_key = f"groups/group_{group_id}/{filename}"
     if new_key == asset.storage_key:
         return
-    old_path = storage.root / asset.storage_key
-    new_path = storage.resolve_safe_path(new_key)
+    try:
+        old_path = storage.resolve_safe_path(asset.storage_key)
+        new_path = storage.resolve_safe_path(new_key)
+    except Exception:
+        return
     if old_path.exists():
         new_path.parent.mkdir(parents=True, exist_ok=True)
         try:

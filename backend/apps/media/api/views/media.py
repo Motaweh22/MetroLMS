@@ -313,27 +313,56 @@ class MediaAssetStreamView(APIView):
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         if request.user.role_id == "trainee" and asset.uploaded_by_user_id != request.user.id:
-            active_refs = list(
-                MediaContentReference.objects.filter(
-                    media_asset=asset,
-                    detached_at__isnull=True,
-                    is_visible=True,
-                )
-            )
-            if not active_refs:
-                return error_response(
-                    "PERMISSION_DENIED",
-                    "غير مصرح لك بالوصول إلى هذا الملف.",
-                    status.HTTP_403_FORBIDDEN,
-                )
             authorized_any = False
-            for candidate_ref in active_refs:
-                try:
-                    authorize_stream_reference(request.user, candidate_ref)
-                    authorized_any = True
-                    break
-                except MediaDomainError:
-                    continue
+            # 1. Check group-scoped materials manifest membership & visibility if stored under groups/group_<id>/
+            grp_match = re.match(r"\Agroups/group_(\d+)/", asset.storage_key or "")
+            if grp_match:
+                from apps.groups.api.views.groups import _load_materials_manifest
+                from apps.groups.models import GroupMembership
+
+                gid = int(grp_match.group(1))
+                if GroupMembership.objects.filter(training_group_id=gid, user=request.user).exists():
+                    manifest = _load_materials_manifest(gid)
+                    aid_str = str(asset.id)
+                    for f in manifest.get("rootFiles", []):
+                        if (
+                            isinstance(f, dict)
+                            and str(f.get("mediaId") or f.get("mediaAssetId") or "") == aid_str
+                            and f.get("isVisible", True) is not False
+                        ):
+                            authorized_any = True
+                            break
+                    if not authorized_any:
+                        for fld in manifest.get("folders", []):
+                            if not isinstance(fld, dict) or fld.get("isVisible", True) is False:
+                                continue
+                            for f in fld.get("files", []):
+                                if (
+                                    isinstance(f, dict)
+                                    and str(f.get("mediaId") or f.get("mediaAssetId") or "") == aid_str
+                                    and f.get("isVisible", True) is not False
+                                ):
+                                    authorized_any = True
+                                    break
+                            if authorized_any:
+                                break
+
+            # 2. Check active MediaContentReference bindings (courses / group renewal cycles)
+            if not authorized_any:
+                active_refs = list(
+                    MediaContentReference.objects.filter(
+                        media_asset=asset,
+                        detached_at__isnull=True,
+                        is_visible=True,
+                    )
+                )
+                for candidate_ref in active_refs:
+                    try:
+                        authorize_stream_reference(request.user, candidate_ref)
+                        authorized_any = True
+                        break
+                    except MediaDomainError:
+                        continue
             if not authorized_any:
                 return error_response(
                     "PERMISSION_DENIED",
