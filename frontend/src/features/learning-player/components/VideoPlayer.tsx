@@ -59,7 +59,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [speedMenuOpen, setSpeedMenuOpen] = useState<boolean>(false);
   const [protectedBlobUrl, setProtectedBlobUrl] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState<number>(0);
+  const [resumedFromSeconds, setResumedFromSeconds] = useState<number | null>(null);
   const activeVideoBlobRef = useRef<string | null>(null);
+  const hasStartedPlaybackRef = useRef<boolean>(false);
+  const resumeBannerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load backend video stream via authenticated fetch with obfuscated Content-Type
   // so browser download manager extensions (IDM) cannot sniff or hook the video stream
@@ -142,13 +145,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }, 2500);
   }, []);
 
-  // Cleanup pending seeking clamped timer on unmount
+  // Cleanup pending seeking clamped and resume banner timers on unmount
   useEffect(() => {
     return () => {
       if (seekingClampedTimeoutRef.current) {
         clearTimeout(seekingClampedTimeoutRef.current);
       }
+      if (resumeBannerTimeoutRef.current) {
+        clearTimeout(resumeBannerTimeoutRef.current);
+      }
     };
+  }, []);
+
+  const showResumeNotification = useCallback((seconds: number) => {
+    if (seconds <= 0) return;
+    if (resumeBannerTimeoutRef.current) {
+      clearTimeout(resumeBannerTimeoutRef.current);
+    }
+    setResumedFromSeconds(Math.floor(seconds));
+    resumeBannerTimeoutRef.current = setTimeout(() => {
+      setResumedFromSeconds(null);
+      resumeBannerTimeoutRef.current = null;
+    }, 5000);
   }, []);
 
   // Sync completion and furthestWatched refs with props
@@ -159,7 +177,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   useEffect(() => {
     const safeMax = Math.max(initialPosition, furthestWatched);
     furthestWatchedRef.current = Math.max(furthestWatchedRef.current, safeMax);
-  }, [initialPosition, furthestWatched]);
+    setFurthestWatchedSecs((prev) => Math.max(prev, safeMax));
+    // If initialPosition arrives asynchronously from backend before user starts playing, apply it
+    if (initialPosition > 0 && !hasStartedPlaybackRef.current) {
+      setCurrentTime(initialPosition);
+      if (videoRef.current && videoRef.current.readyState >= 1) {
+        const dur = videoRef.current.duration;
+        const targetPos = Number.isFinite(dur) && dur > 3 && initialPosition >= dur - 2 ? 0 : initialPosition;
+        if (targetPos > 0) {
+          videoRef.current.currentTime = targetPos;
+          setCurrentTime(targetPos);
+          showResumeNotification(targetPos);
+        }
+      }
+    }
+  }, [initialPosition, furthestWatched, showResumeNotification]);
 
   // Reset or initialize ONLY when the lesson item (itemId / src) changes
   const initializedItemRef = useRef<string | undefined>(undefined);
@@ -169,6 +201,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       return;
     }
     initializedItemRef.current = itemKey;
+    hasStartedPlaybackRef.current = false;
+    setResumedFromSeconds(null);
 
     const initialFurthest = Math.max(initialPosition, furthestWatched);
     setCurrentTime(initialPosition);
@@ -237,9 +271,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (Number.isFinite(dur) && dur > 0) {
       setDuration(dur);
     }
-    // Resume at initialPosition if permitted
-    if (initialPosition > 0 && initialPosition <= dur) {
-      videoRef.current.currentTime = initialPosition;
+    // Resume at initialPosition if permitted (if already at the very end of a completed video, start from 0)
+    if (initialPosition > 0 && Number.isFinite(dur) && dur > 0) {
+      const targetPos = dur > 3 && initialPosition >= dur - 2 ? 0 : Math.min(initialPosition, dur);
+      if (targetPos > 0) {
+        furthestWatchedRef.current = Math.max(furthestWatchedRef.current, targetPos, furthestWatched);
+        setFurthestWatchedSecs((prev) => Math.max(prev, furthestWatchedRef.current));
+        videoRef.current.currentTime = targetPos;
+        setCurrentTime(targetPos);
+        showResumeNotification(targetPos);
+      }
     }
   };
 
@@ -511,6 +552,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             onWaiting={() => setIsBuffering(true)}
             onCanPlay={() => setIsBuffering(false)}
             onPlaying={() => {
+              hasStartedPlaybackRef.current = true;
               setIsPlaying(true);
               setIsBuffering(false);
             }}
@@ -526,6 +568,58 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           {isBuffering && (
             <div className="video-buffering-overlay" aria-label="جاري التحميل...">
               <div className="video-spinner" />
+            </div>
+          )}
+
+          {/* Auto-Resume Timestamp Notification Pill */}
+          {resumedFromSeconds !== null && resumedFromSeconds > 0 && !seekingClamped && (
+            <div
+              role="status"
+              data-testid="video-auto-resume-badge"
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                zIndex: 49,
+                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                color: '#F8FAFC',
+                padding: '0.45rem 0.85rem',
+                borderRadius: '10px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.45)',
+              }}
+            >
+              <Icon name="clock" size="sm" className="text-sky-400" />
+              <span>تم استكمال الفيديو تلقائياً من الدقيقة {formatDuration(resumedFromSeconds)}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (videoRef.current) {
+                    videoRef.current.currentTime = 0;
+                    setCurrentTime(0);
+                  }
+                  setResumedFromSeconds(null);
+                }}
+                style={{
+                  background: 'rgba(56, 189, 248, 0.18)',
+                  color: '#38BDF8',
+                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                  borderRadius: '6px',
+                  padding: '0.15rem 0.5rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+                data-testid="video-restart-from-zero-btn"
+              >
+                البدء من الأول
+              </button>
             </div>
           )}
 

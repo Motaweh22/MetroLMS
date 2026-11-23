@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Icon } from '@/shared/ui/Icon';
 import { loadYouTubeIframeApi } from '../utils/youtubeApiLoader';
+import { learningApi } from '../services/learningApi';
 import type { LessonProgress } from '../types';
 import type { VideoEmbedPolicy } from '@/core/courses/types';
 import {
@@ -10,6 +11,7 @@ import {
 } from '@/core/courses/videoEmbedPolicy';
 
 export interface YouTubePlayerProps {
+  courseId?: string;
   videoId: string;
   itemId?: string;
   title: string;
@@ -79,6 +81,7 @@ export interface YTPlayerInstance {
 }
 
 export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
+  courseId,
   videoId,
   itemId,
   title,
@@ -91,6 +94,10 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   const mountContainerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YTPlayerInstance | null>(null);
   const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const courseIdRef = useRef(courseId);
+  useEffect(() => {
+    courseIdRef.current = courseId;
+  }, [courseId]);
 
   // Mandatory platform policy: YouTube ALWAYS receives 0px top crop and popup blocking enabled.
   // Stale saved metadata or prop overrides cannot weaken the production platform policy.
@@ -287,11 +294,23 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                       const totalSec = playerRef.current.getDuration();
 
                       if (typeof totalSec === 'number' && totalSec > 0) {
+                        const posFloor = Math.floor(currentSec);
+                        const durFloor = Math.floor(totalSec);
                         onLocalProgressUpdateRef.current?.(itemIdRef.current, {
-                          lastPositionSeconds: currentSec,
-                          furthestWatchedSeconds: currentSec,
-                          durationSeconds: totalSec,
+                          lastPositionSeconds: posFloor,
+                          furthestWatchedSeconds: posFloor,
+                          durationSeconds: durFloor,
                         });
+                        if (courseIdRef.current) {
+                          learningApi
+                            .recordActivity(courseIdRef.current, {
+                              itemId: itemIdRef.current,
+                              lastPositionSeconds: posFloor,
+                              furthestWatchedSeconds: posFloor,
+                              durationSeconds: durFloor,
+                            })
+                            .catch(() => {});
+                        }
 
                         // 90% threshold for lesson completion
                         if (currentSec / totalSec >= 0.9 && !hasCompletedRef.current) {
@@ -302,13 +321,31 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
                     } catch {
                       // Suppress polling read errors on unmount
                     }
-                  }, 2000);
+                  }, 3000);
                 }
               } else {
                 // Non-playing states (Paused, Buffering, Cued, Ended)
                 if (progressIntervalRef.current) {
                   clearInterval(progressIntervalRef.current);
                   progressIntervalRef.current = null;
+                }
+                if (!previewModeRef.current && state === yt.PlayerState.PAUSED && playerRef.current && itemIdRef.current && courseIdRef.current) {
+                  try {
+                    const posFloor = Math.floor(playerRef.current.getCurrentTime() || 0);
+                    const durFloor = Math.floor(playerRef.current.getDuration() || 0);
+                    if (posFloor > 0) {
+                      learningApi
+                        .recordActivity(courseIdRef.current, {
+                          itemId: itemIdRef.current,
+                          lastPositionSeconds: posFloor,
+                          furthestWatchedSeconds: posFloor,
+                          durationSeconds: durFloor,
+                        })
+                        .catch(() => {});
+                    }
+                  } catch {
+                    // Ignore pause read error
+                  }
                 }
               }
 

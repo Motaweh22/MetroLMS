@@ -371,6 +371,7 @@ export const LearningPlayerPage: React.FC = () => {
               currentItem.videoSourceType === 'youtube' && currentItem.youtubeVideoId ? (
                 <YouTubePlayer
                   key={`yt-${currentItem.id}-${currentItem.youtubeVideoId}`}
+                  courseId={course.id}
                   videoId={currentItem.youtubeVideoId}
                   itemId={currentItem.id}
                   title={currentItem.title}

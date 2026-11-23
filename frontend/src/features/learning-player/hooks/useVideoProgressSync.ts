@@ -45,16 +45,34 @@ export function useVideoProgressSync({
     time: number;
   }>({ position: 0, furthest: 0, time: 0 });
 
+  const hasUserInteractedRef = useRef<boolean>(false);
+  const wasPlayingRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    hasUserInteractedRef.current = false;
+    wasPlayingRef.current = false;
+    lastSyncedRef.current = { position: 0, furthest: 0, time: 0 };
+  }, [courseId, itemId]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      hasUserInteractedRef.current = true;
+      wasPlayingRef.current = true;
+    }
+  }, [isPlaying]);
+
   const syncActivity = useCallback(async (forced: boolean = false) => {
     const { courseId: cId, itemId: itId, currentTime: curr, furthestWatched: fur, duration: dur } =
       latestStateRef.current;
 
-    // Suppress synchronization in read-only mode (MFR-23, MFR-42 / T-2.4.3)
-    if (!cId || !itId || isReadOnly) return;
+    // Suppress synchronization in read-only mode or before user starts playback
+    if (!cId || !itId || isReadOnly || !hasUserInteractedRef.current) return;
 
     const now = Date.now();
-    const posDiff = Math.abs(curr - lastSyncedRef.current.position);
-    const furDiff = Math.abs(fur - lastSyncedRef.current.furthest);
+    const posRound = Math.floor(curr);
+    const furRound = Math.floor(fur);
+    const posDiff = Math.abs(posRound - lastSyncedRef.current.position);
+    const furDiff = Math.abs(furRound - lastSyncedRef.current.furthest);
     const timeDiff = now - lastSyncedRef.current.time;
 
     // Throttle: don't sync if negligible change and not forced, or if under 2s since last sync
@@ -66,21 +84,21 @@ export function useVideoProgressSync({
       return;
     }
 
-    lastSyncedRef.current = { position: curr, furthest: fur, time: now };
+    lastSyncedRef.current = { position: posRound, furthest: furRound, time: now };
 
     try {
       if (onLocalUpdate) {
         onLocalUpdate(itId, {
-          lastPositionSeconds: curr,
-          furthestWatchedSeconds: fur,
+          lastPositionSeconds: posRound,
+          furthestWatchedSeconds: furRound,
           durationSeconds: dur,
         });
       }
 
       await learningApi.recordActivity(cId, {
         itemId: itId,
-        lastPositionSeconds: curr,
-        furthestWatchedSeconds: fur,
+        lastPositionSeconds: posRound,
+        furthestWatchedSeconds: furRound,
         durationSeconds: dur,
       });
     } catch {
@@ -99,14 +117,15 @@ export function useVideoProgressSync({
     return () => clearInterval(interval);
   }, [isPlaying, isReadOnly, syncActivity]);
 
-  // Flush sync on pause (suppressed in read-only mode)
+  // Flush sync only when transitioning from playing -> paused (never on initial mount)
   useEffect(() => {
-    if (!isPlaying && !isReadOnly) {
+    if (!isPlaying && wasPlayingRef.current && !isReadOnly) {
+      wasPlayingRef.current = false;
       syncActivity(true);
     }
   }, [isPlaying, isReadOnly, syncActivity]);
 
-  // Flush sync on document visibility change (e.g. backgrounding tab)
+  // Flush sync on document visibility change or tab close/refresh
   useEffect(() => {
     if (isReadOnly) return;
     const handleVisibilityChange = () => {
@@ -114,15 +133,24 @@ export function useVideoProgressSync({
         syncActivity(true);
       }
     };
+    const handlePageHide = () => {
+      syncActivity(true);
+    };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handlePageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handlePageHide);
+    };
   }, [isReadOnly, syncActivity]);
 
   // Flush sync on item change or unmount (suppressed in read-only mode)
   useEffect(() => {
     return () => {
-      if (!isReadOnly) {
+      if (!isReadOnly && hasUserInteractedRef.current) {
         syncActivity(true);
       }
     };

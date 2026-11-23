@@ -214,8 +214,8 @@ class DashboardView(APIView):
                         "courseTitle": enr.course.title,
                         "lecturerName": enr.course.primary_lecturer.full_name,
                         "progressPercent": pct,
-                        "resumeItemId": "",
-                        "resumeLessonTitle": "",
+                        "resumeItemId": str(prog.get("lastWatchedItemId") or "") if prog else "",
+                        "resumeLessonTitle": str(prog.get("lastWatchedLessonTitle") or "") if prog else "",
                     }
             active_groups_count = GroupMembership.objects.filter(user=user, training_group__is_archived=False).count()
             return success_response(

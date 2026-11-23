@@ -23,35 +23,79 @@ class LearningDomainError(Exception):
 
 def compute_course_progress(attempt: CourseAttempt) -> dict:
     """Compute D-12 integer rounded progress with strict 100% gate (never persisted, OD-PF-02)."""
-    lesson_ids = list(
-        LessonItem.objects.filter(module__published_version_id=attempt.published_version_id).values_list("id", flat=True)
+    pub_lessons = list(
+        LessonItem.objects.select_related("module")
+        .filter(module__published_version_id=attempt.published_version_id)
+        .order_by("module__sort_order", "sort_order", "id")
     )
+    lesson_ids = [l.id for l in pub_lessons]
     total = len(lesson_ids)
-    completed_ids = []
-    items_progress = {}
+    completed_ids: list[str] = []
+    items_progress: dict[str, dict] = {}
+    last_watched_item_id: str | None = None
+    last_watched_lesson_title: str = ""
+
     if total == 0:
         completed = 0
         percent = 0
     else:
+        # Map published LessonItem ID -> corresponding CourseDraft LessonItem ID (if draft exists)
+        # because CourseSerializer serves CourseDraft lesson IDs when a draft is present on the course.
+        pub_to_draft_id: dict[int, int] = {}
+        course_id = getattr(attempt.published_version, "course_id", None)
+        if course_id is None:
+            course_id = (
+                PublishedCourseVersion.objects.filter(pk=attempt.published_version_id)
+                .values_list("course_id", flat=True)
+                .first()
+            )
+        if course_id is not None:
+            draft_lessons = list(
+                LessonItem.objects.select_related("module")
+                .filter(module__course_draft__course_id=course_id)
+                .order_by("module__sort_order", "sort_order", "id")
+            )
+            if draft_lessons:
+                by_pos = {(dl.module.sort_order, dl.sort_order): dl.id for dl in draft_lessons}
+                by_title = {dl.title: dl.id for dl in draft_lessons}
+                for pl in pub_lessons:
+                    matched_draft_id = by_pos.get((pl.module.sort_order, pl.sort_order)) or by_title.get(pl.title)
+                    if matched_draft_id is not None:
+                        pub_to_draft_id[pl.id] = matched_draft_id
+
+        pub_title_by_id = {pl.id: pl.title for pl in pub_lessons}
         rows = list(
             LessonProgress.objects.filter(
                 course_attempt=attempt,
                 lesson_item_id__in=lesson_ids,
-            )
+            ).order_by("updated_at", "id")
         )
+        completed_pub_count = 0
         for r in rows:
-            key = str(r.lesson_item_id)
+            pub_key = str(r.lesson_item_id)
+            draft_id = pub_to_draft_id.get(r.lesson_item_id)
+            draft_key = str(draft_id) if draft_id is not None else None
             if r.is_completed:
-                completed_ids.append(key)
-            items_progress[key] = {
-                "itemId": key,
+                completed_pub_count += 1
+                completed_ids.append(pub_key)
+                if draft_key and draft_key not in completed_ids:
+                    completed_ids.append(draft_key)
+            entry = {
+                "itemId": pub_key,
                 "completed": r.is_completed,
                 "lastPositionSeconds": r.last_position_seconds,
                 "furthestWatchedSeconds": r.furthest_watched_seconds,
                 "eligibleViewingSeconds": r.eligible_viewing_seconds,
                 "updatedAt": r.updated_at.isoformat() if r.updated_at else "",
             }
-        completed = len(completed_ids)
+            items_progress[pub_key] = entry
+            if draft_key and draft_key != pub_key:
+                items_progress[draft_key] = {**entry, "itemId": draft_key}
+
+            last_watched_item_id = draft_key or pub_key
+            last_watched_lesson_title = pub_title_by_id.get(r.lesson_item_id, "")
+
+        completed = completed_pub_count
         if completed >= total:
             completed = total
             percent = 100
@@ -70,6 +114,8 @@ def compute_course_progress(attempt: CourseAttempt) -> dict:
         "percentage": percent,
         "completedItemIds": completed_ids,
         "itemsProgress": items_progress,
+        "lastWatchedItemId": last_watched_item_id,
+        "lastWatchedLessonTitle": last_watched_lesson_title,
     }
 
 
@@ -381,7 +427,8 @@ def record_lesson_activity(
             updated_at=now,
         )
     else:
-        lp.last_position_seconds = last_position_seconds
+        if last_position_seconds > 0 or lp.last_position_seconds == 0:
+            lp.last_position_seconds = last_position_seconds
         lp.furthest_watched_seconds = max(lp.furthest_watched_seconds, furthest_watched_seconds, last_position_seconds)
         lp.eligible_viewing_seconds += eligible_delta_seconds
         if increment_watch_count:
