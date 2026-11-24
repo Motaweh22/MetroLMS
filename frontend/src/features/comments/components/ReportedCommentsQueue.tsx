@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
@@ -21,6 +22,24 @@ export const ReportedCommentsQueue: React.FC<ReportedCommentsQueueProps> = ({
   onIgnoreReport,
   isActionInProgress = false,
 }) => {
+  const inRouter = useInRouterContext();
+
+  const renderLink = (
+    to: string,
+    children: React.ReactNode,
+    className: string,
+    testId?: string
+  ) =>
+    inRouter ? (
+      <Link to={to} className={className} data-testid={testId}>
+        {children}
+      </Link>
+    ) : (
+      <a href={to} className={className} data-testid={testId}>
+        {children}
+      </a>
+    );
+
   if (isLoading) {
     return (
       <div className="space-y-4" data-testid="reported-queue-loading">
@@ -89,10 +108,24 @@ export const ReportedCommentsQueue: React.FC<ReportedCommentsQueueProps> = ({
                 <span className="w-7 h-7 rounded-lg bg-primary/10 text-primary-dark flex items-center justify-center shrink-0">
                   <Icon name="courses" size="sm" />
                 </span>
-                <span className="font-bold text-sm sm:text-base text-primary-dark" data-testid="comment-course-title">
-                  {comment.courseTitle}
-                </span>
-                <span className="font-mono text-xs text-text-muted">({comment.courseId})</span>
+                {comment.courseId ? (
+                  renderLink(
+                    `/courses/${encodeURIComponent(comment.courseId)}`,
+                    <>
+                      <span>{comment.courseTitle}</span>{' '}
+                      <span className="font-mono text-xs text-text-muted">({comment.courseId})</span>
+                    </>,
+                    'font-bold text-sm sm:text-base text-primary-dark hover:underline transition-colors',
+                    'comment-course-title'
+                  )
+                ) : (
+                  <>
+                    <span className="font-bold text-sm sm:text-base text-primary-dark" data-testid="comment-course-title">
+                      {comment.courseTitle}
+                    </span>
+                    <span className="font-mono text-xs text-text-muted">({comment.courseId})</span>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -106,9 +139,18 @@ export const ReportedCommentsQueue: React.FC<ReportedCommentsQueueProps> = ({
             <div className="bg-bg-alt/50 border border-border/80 rounded-xl p-3.5 sm:p-4 space-y-2">
               <div className="flex items-center justify-between text-xs text-text-muted">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-text" data-testid="comment-author-name">
-                    {comment.userName}
-                  </span>
+                  {comment.userId && !comment.isAuthorDeleted ? (
+                    renderLink(
+                      `/admin/users/${encodeURIComponent(comment.userId)}`,
+                      comment.userName,
+                      'font-bold text-primary-dark hover:underline transition-colors',
+                      'comment-author-name'
+                    )
+                  ) : (
+                    <span className="font-bold text-text" data-testid="comment-author-name">
+                      {comment.userName}
+                    </span>
+                  )}
                   <Badge variant={roleMeta.roleBadgeVariant} size="sm">
                     {roleMeta.moderationLabel}
                   </Badge>
@@ -148,9 +190,18 @@ export const ReportedCommentsQueue: React.FC<ReportedCommentsQueueProps> = ({
                 <Icon name="user" size="sm" className="text-text-muted shrink-0" />
                 <span>
                   أُبلغ عنه بواسطة:{' '}
-                  <strong className="text-text font-semibold">
-                    {comment.reportedByName || comment.reportedBy || 'مستخدم المنظومة'}
-                  </strong>
+                  {comment.reportedBy ? (
+                    renderLink(
+                      `/admin/users/${encodeURIComponent(comment.reportedBy)}`,
+                      comment.reportedByName || comment.reportedBy,
+                      'text-primary-dark font-semibold hover:underline transition-colors',
+                      'comment-reporter-link'
+                    )
+                  ) : (
+                    <strong className="text-text font-semibold">
+                      {comment.reportedByName || 'مستخدم المنظومة'}
+                    </strong>
+                  )}
                 </span>
                 <span>•</span>
                 <span>{formattedDate}</span>

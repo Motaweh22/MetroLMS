@@ -24,6 +24,8 @@ import { UserTable } from '@/features/user-management/components/UserTable';
 import { CourseCard } from '@/features/courses/components/CourseCard';
 import { CourseHero } from '@/features/courses/components/CourseHero';
 import { ProfilePage } from '@/pages/ProfilePage';
+import { ReportedCommentsQueue } from '@/features/comments/components/ReportedCommentsQueue';
+import { AllCommentsTable } from '@/features/comments/components/AllCommentsTable';
 import type { User } from '@/core/auth/types';
 import type { ChapterItem } from '@/core/courses/types';
 
@@ -634,5 +636,87 @@ describe('Course Description vs Lesson/Video Description Across Detail, Player &
     const hero = container.querySelector('.cd-hero') as HTMLElement;
     expect(hero).not.toBeNull();
     expect(hero.style.backgroundColor).toBe('rgb(6, 95, 70)');
+  });
+
+  it('makes course, author, and reporter names clickable links in ReportedCommentsQueue and AllCommentsTable', () => {
+    render(
+      <MemoryRouter>
+        <ReportedCommentsQueue
+          isLoading={false}
+          onDelete={() => {}}
+          onIgnoreReport={() => {}}
+          comments={[
+            {
+              id: 'CMT-1',
+              courseId: '10005',
+              courseTitle: 'تجربة',
+              userId: '42',
+              userName: 'متدرب فني (تجريبي)',
+              userRole: 'user',
+              text: 'نستتن',
+              createdAt: '2026-11-22T15:54:31Z',
+              reported: true,
+              reportReason: 'inappropriate_content',
+              reportedBy: '7',
+              reportedByName: 'مطاوع محمد مطاوع',
+              reportedAt: '2026-11-24T10:00:00Z',
+            },
+            {
+              id: 'CMT-2',
+              courseId: '10006',
+              courseTitle: 'دورة محذوف',
+              userId: '',
+              userName: 'مستخدم محذوف',
+              isAuthorDeleted: true,
+              userRole: 'user',
+              text: 'تعليق قديم',
+              createdAt: '2026-11-22T15:54:31Z',
+              reported: true,
+              reportReason: 'spam',
+              reportedBy: null,
+              reportedByName: 'مستخدم المنظومة',
+              reportedAt: '2026-11-24T10:00:00Z',
+            },
+          ]}
+        />
+        <AllCommentsTable
+          isLoading={false}
+          courses={[]}
+          onDelete={() => {}}
+          onToggleCourseComments={() => {}}
+          searchQuery=""
+          onSearchChange={() => {}}
+          selectedCourseFilter="all"
+          onCourseFilterChange={() => {}}
+          comments={[
+            {
+              id: 'CMT-3',
+              courseId: '10005',
+              courseTitle: 'تجربة جدول',
+              userId: '42',
+              userName: 'أحمد سامي',
+              userRole: 'user',
+              text: 'ملاحظة',
+              createdAt: '2026-11-22T15:54:31Z',
+              reported: false,
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    const courseLinks = screen.getAllByTestId('comment-course-title');
+    expect(courseLinks[0].closest('a')).toHaveAttribute('href', '/courses/10005');
+
+    const authorLinks = screen.getAllByTestId('comment-author-name');
+    expect(authorLinks[0].closest('a')).toHaveAttribute('href', '/admin/users/42');
+    expect(authorLinks[1].closest('a')).toBeNull();
+
+    const reporterLink = screen.getByTestId('comment-reporter-link');
+    expect(reporterLink.closest('a')).toHaveAttribute('href', '/admin/users/7');
+    expect(reporterLink).toHaveTextContent('مطاوع محمد مطاوع');
+
+    expect(screen.getByText('تجربة جدول').closest('a')).toHaveAttribute('href', '/courses/10005');
+    expect(screen.getByText('أحمد سامي').closest('a')).toHaveAttribute('href', '/admin/users/42');
   });
 });

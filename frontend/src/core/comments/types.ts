@@ -32,6 +32,7 @@ export interface CourseComment {
   commentsEnabled?: boolean;
   userId: string;
   userName: string;
+  isAuthorDeleted?: boolean;
   userRole: UserRole;
   userInitial?: string;
   userAvatar?: string;

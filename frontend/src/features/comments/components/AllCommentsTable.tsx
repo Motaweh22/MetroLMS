@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
@@ -33,6 +34,18 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
   onCourseFilterChange,
   isActionInProgress = false,
 }) => {
+  const inRouter = useInRouterContext();
+  const renderLink = (to: string, label: React.ReactNode, className: string, testId?: string) =>
+    inRouter ? (
+      <Link to={to} className={className} data-testid={testId}>
+        {label}
+      </Link>
+    ) : (
+      <a href={to} className={className} data-testid={testId}>
+        {label}
+      </a>
+    );
+
   // Map of courses for quick discussion policy lookup
   const courseDiscussionMap = React.useMemo(() => {
     const map = new Map<string, boolean>();
@@ -153,7 +166,15 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
                     >
                       {/* Course Title and Discussion Policy Toggle */}
                       <td className="py-3.5 px-4 text-xs">
-                        <div className="font-semibold text-text">{comment.courseTitle}</div>
+                        {comment.courseId ? (
+                          renderLink(
+                            `/courses/${encodeURIComponent(comment.courseId)}`,
+                            comment.courseTitle,
+                            'font-semibold text-primary-dark hover:underline transition-colors inline-block'
+                          )
+                        ) : (
+                          <div className="font-semibold text-text">{comment.courseTitle}</div>
+                        )}
                         <div className="flex items-center gap-2 mt-1">
                           <button
                             type="button"
@@ -179,7 +200,17 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
 
                       {/* Comment Author */}
                       <td className="py-3.5 px-4 text-xs">
-                        <div className="font-bold text-text">{comment.userName}</div>
+                        {comment.userId && !comment.isAuthorDeleted ? (
+                          <div>
+                            {renderLink(
+                              `/admin/users/${encodeURIComponent(comment.userId)}`,
+                              comment.userName,
+                              'font-bold text-primary-dark hover:underline transition-colors'
+                            )}
+                          </div>
+                        ) : (
+                          <div className="font-bold text-text">{comment.userName}</div>
+                        )}
                         <Badge variant={roleMeta.roleBadgeVariant} size="sm" className="mt-0.5">
                           {roleMeta.moderationLabel}
                         </Badge>
