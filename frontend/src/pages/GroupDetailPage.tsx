@@ -763,14 +763,19 @@ export const GroupDetailPage: React.FC = () => {
           </div>
 
           {(() => {
+            const canViewPeerContactAndProgress = Boolean(
+              isOperationalStaff ||
+                user?.role === 'lecturer' ||
+                previewRole === 'assistant_lecturer'
+            );
             const allMembers = metrics?.traineeMetricsList ?? [];
             const q = membersSearchQuery.trim().toLowerCase();
             const filteredMembers = q
               ? allMembers.filter(
                   (m) =>
                     (m.userName || '').toLowerCase().includes(q) ||
-                    (m.email || '').toLowerCase().includes(q) ||
-                    (m.phone || '').toLowerCase().includes(q) ||
+                    (canViewPeerContactAndProgress && (m.email || '').toLowerCase().includes(q)) ||
+                    (canViewPeerContactAndProgress && (m.phone || '').toLowerCase().includes(q)) ||
                     (m.department || '').toLowerCase().includes(q)
                 )
               : allMembers;
@@ -806,7 +811,7 @@ export const GroupDetailPage: React.FC = () => {
                           {member.userName}
                         </div>
                         <div className="text-[11px] text-text-muted flex flex-wrap items-center gap-2 mt-0.5">
-                          {(member.phone || member.email) && (
+                          {canViewPeerContactAndProgress && (member.phone || member.email) && (
                             <span dir="ltr">{member.phone || member.email}</span>
                           )}
                           {member.department && <span>· {member.department}</span>}
@@ -816,9 +821,12 @@ export const GroupDetailPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <Badge variant={member.programPercent >= 100 ? 'success' : 'neutral'} size="sm">
-                        الإنجاز: {member.programPercent}%
-                      </Badge>
+                      {(canViewPeerContactAndProgress ||
+                        member.userId.toLowerCase() === (user?.id || '').toLowerCase()) && (
+                        <Badge variant={member.programPercent >= 100 ? 'success' : 'neutral'} size="sm">
+                          الإنجاز: {member.programPercent}%
+                        </Badge>
+                      )}
                       {isOperationalStaff && (
                         <Link to={`/users/${encodeURIComponent(member.userId)}`}>
                           <Button variant="outline" size="sm" className="text-xs">

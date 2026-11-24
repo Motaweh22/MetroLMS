@@ -10,7 +10,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useToast } from '@/shared/ui/Toast';
 
-type CatalogTabKey = 'departments' | 'job-titles' | 'metro-lines';
+type CatalogTabKey = 'departments' | 'job-titles' | 'leadership-titles' | 'metro-lines';
 
 interface CatalogRecord {
   id: number;
@@ -24,7 +24,7 @@ interface TabConfig {
   key: CatalogTabKey;
   label: string;
   singularLabel: string;
-  responseKey: 'departments' | 'jobTitles' | 'metroLines';
+  responseKey: 'departments' | 'jobTitles' | 'leadershipTitles' | 'metroLines';
   endpoint: string;
   placeholderAr: string;
   placeholderEn: string;
@@ -48,6 +48,15 @@ const TABS: TabConfig[] = [
     endpoint: '/api/admin/organization/job-titles',
     placeholderAr: 'مثال: مهندس إشارات أول',
     placeholderEn: 'e.g. Senior Signals Engineer',
+  },
+  {
+    key: 'leadership-titles',
+    label: 'الصفات القيادية / الإشرافية',
+    singularLabel: 'صفة قيادية',
+    responseKey: 'leadershipTitles',
+    endpoint: '/api/admin/organization/leadership-titles',
+    placeholderAr: 'مثال: مدير عام',
+    placeholderEn: 'e.g. General Manager',
   },
   {
     key: 'metro-lines',
@@ -241,7 +250,7 @@ export const OrganizationCatalogPage: React.FC = () => {
             </Badge>
           </div>
           <p className="text-xs sm:text-sm text-text-muted">
-            إضافة وتعديل وحذف القطاعات والإدارات والمسميات الوظيفية وخطوط المترو المستخدمة في ملفات الموظفين
+            إضافة وتعديل وحذف القطاعات والإدارات والمسميات الوظيفية والصفات القيادية وخطوط المترو المستخدمة في ملفات الموظفين
           </p>
         </div>
 

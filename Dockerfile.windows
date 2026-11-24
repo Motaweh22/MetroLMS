@@ -61,13 +61,22 @@ RUN ["python", "-c", "import pyodbc; drivers = pyodbc.drivers(); print('ODBC dri
 COPY backend\ .\
 COPY --from=frontend-builder C:\build\frontend\dist C:\app\frontend\dist
 
-RUN New-Item -ItemType Directory -Force -Path C:\MetroLMSMedia | Out-Null
+RUN New-Item -ItemType Directory -Force -Path C:\MetroLMSMedia, C:\app\backend\staticfiles, C:\ffmpeg\bin | Out-Null; `
+    Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile C:\ffmpeg.zip; `
+    Expand-Archive C:\ffmpeg.zip -DestinationPath C:\ffmpeg-tmp; `
+    $ffBin = Get-ChildItem C:\ffmpeg-tmp -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1 -ExpandProperty DirectoryName; `
+    Copy-Item (Join-Path $ffBin "ffmpeg.exe") C:\ffmpeg\bin\ffmpeg.exe -Force; `
+    Copy-Item (Join-Path $ffBin "ffprobe.exe") C:\ffmpeg\bin\ffprobe.exe -Force; `
+    Remove-Item C:\ffmpeg.zip, C:\ffmpeg-tmp -Recurse -Force
 
 ENV PYTHONUNBUFFERED=1 `
     METROLMS_SERVE_FRONTEND=True `
     METROLMS_FRONTEND_DIST_DIR=C:\app\frontend\dist `
-    METROLMS_MEDIA_ROOT=C:\MetroLMSMedia
+    METROLMS_MEDIA_ROOT=C:\MetroLMSMedia `
+    METROLMS_FFMPEG_PATH=C:\ffmpeg\bin\ffmpeg.exe `
+    METROLMS_FFPROBE_PATH=C:\ffmpeg\bin\ffprobe.exe `
+    PATH="C:\ffmpeg\bin;${PATH}"
 
 EXPOSE 8000
 
-CMD ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "$ErrorActionPreference = 'Stop'; if (-not $env:DB_HOST -or $env:DB_HOST -match '^(?i)auto$') { $gw = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object { $_.OperationalStatus -eq 'Up' } | ForEach-Object { $_.GetIPProperties().GatewayAddresses } | Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' } | Select-Object -First 1 -ExpandProperty Address | ForEach-Object { $_.IPAddressToString }; if ($gw) { $env:DB_HOST = $gw; Write-Host \"[INFO] Auto-detected DB_HOST gateway: $gw\" } }; if ($env:METROLMS_RUN_MIGRATIONS_ON_START -ne 'False') { python manage.py migrate --noinput }; waitress-serve --host=0.0.0.0 --port=8000 --threads=8 config.wsgi:application"]
+CMD ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-Command", "$ErrorActionPreference = 'Stop'; if (-not $env:DB_HOST -or $env:DB_HOST -match '^(?i)auto$') { $gw = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object { $_.OperationalStatus -eq 'Up' } | ForEach-Object { $_.GetIPProperties().GatewayAddresses } | Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' } | Select-Object -First 1 -ExpandProperty Address | ForEach-Object { $_.IPAddressToString }; if ($gw) { $env:DB_HOST = $gw; Write-Host \"[INFO] Auto-detected DB_HOST gateway: $gw\" } }; if ($env:METROLMS_RUN_MIGRATIONS_ON_START -ne 'False') { python manage.py migrate --noinput }; waitress-serve --host=0.0.0.0 --port=8000 --threads=8 --max-request-body-size=2254857830 --channel-timeout=600 config.wsgi:application"]

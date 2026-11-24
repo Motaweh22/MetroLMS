@@ -22,12 +22,14 @@ export const MemberProfilePage: React.FC = () => {
   const [data, setData] = useState<PublicUserOverviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isForbidden, setIsForbidden] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
     setIsLoading(true);
     setError(null);
+    setIsForbidden(false);
     profileApi
       .getPublicUserOverview(userId)
       .then((res) => {
@@ -35,7 +37,15 @@ export const MemberProfilePage: React.FC = () => {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'تعذر تحميل ملف العضو');
+          const msg = err instanceof Error ? err.message : 'تعذر تحميل ملف العضو';
+          const statusCode =
+            typeof err === 'object' && err !== null && 'status' in err
+              ? Number((err as { status?: number }).status)
+              : 0;
+          if (statusCode === 403 || msg.includes('403') || msg.includes('صلاحية')) {
+            setIsForbidden(true);
+          }
+          setError(msg);
         }
       })
       .finally(() => {
@@ -51,6 +61,19 @@ export const MemberProfilePage: React.FC = () => {
       <div className="max-w-4xl mx-auto py-16 text-center space-y-3" data-testid="member-profile-loading">
         <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
         <p className="text-sm font-semibold text-text-muted">جاري تحميل ملف العضو...</p>
+      </div>
+    );
+  }
+
+  if (isForbidden) {
+    return (
+      <div className="max-w-3xl mx-auto py-10 px-4 space-y-4" data-testid="member-profile-forbidden">
+        <Alert variant="danger" title="غير مصرح لك بعرض هذا الملف">
+          {error || 'ليس لديك صلاحية استعراض ملف هذا المستخدم.'}
+        </Alert>
+        <Button type="button" variant="outline" size="sm" onClick={() => navigate('/dashboard')}>
+          العودة للرئيسية
+        </Button>
       </div>
     );
   }

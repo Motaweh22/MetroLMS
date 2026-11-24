@@ -247,6 +247,12 @@ export const MyCoursesPage: React.FC = () => {
               ? `/courses/${course.id}/learn/${course.lastWatchedItemId}`
               : `/courses/${course.id}/learn`;
 
+            const hasCustomColor = course.coverType === 'color' && Boolean(course.coverColor);
+            const hasCustomImage =
+              course.coverType === 'image'
+                ? Boolean(course.thumbnail)
+                : course.coverType !== 'default' && !hasCustomColor && Boolean(course.thumbnail);
+
             return (
               <Card
                 key={course.id}
@@ -257,9 +263,13 @@ export const MyCoursesPage: React.FC = () => {
                   {/* Thumbnail Banner */}
                   <div
                     className="h-40 w-full flex items-center justify-center relative text-white text-4xl font-extrabold select-none shadow-inner overflow-hidden"
-                    style={course.thumbnail ? undefined : { background: grad }}
+                    style={
+                      hasCustomImage
+                        ? undefined
+                        : { background: hasCustomColor ? course.coverColor : grad }
+                    }
                   >
-                    {course.thumbnail ? (
+                    {hasCustomImage && course.thumbnail ? (
                       <img
                         src={course.thumbnail}
                         alt={course.title}

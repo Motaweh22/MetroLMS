@@ -909,7 +909,7 @@ export const CurriculumTreeEditor: React.FC<CurriculumTreeEditorProps> = ({
           data-testid="add-chapter-form"
         >
           <label htmlFor="new-chapter-input" className="block text-xs font-bold text-text-heading">
-            عنوان الفصل الجديد
+            عنوان الفصل الجديد <span className="text-danger" aria-hidden="true">*</span>
           </label>
           <div className="flex items-center gap-2">
             <input

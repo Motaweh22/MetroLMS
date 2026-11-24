@@ -32,6 +32,16 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, index = 0 }) => 
   const gradient = THUMB_GRADIENTS[index % THUMB_GRADIENTS.length];
   const initial = course.title ? course.title.trim()[0] : 'ك';
   const levelInfo = LEVEL_CONFIG[course.level] || { className: 'beginner', bgClass: 'bg-[#2E7D32]/95' };
+  const hasCustomColor = course.coverType === 'color' && Boolean(course.coverColor);
+  const hasCustomImage =
+    course.coverType === 'image'
+      ? Boolean(course.thumbnail)
+      : course.coverType !== 'default' && !hasCustomColor && Boolean(course.thumbnail);
+  const thumbBackground = hasCustomImage
+    ? `url('${course.thumbnail}') center/cover no-repeat`
+    : hasCustomColor
+    ? course.coverColor
+    : gradient;
 
   const handleCardClick = () => {
     navigate(`/courses/${course.id}`);
@@ -57,10 +67,10 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, index = 0 }) => 
       <div
         className="course-card-thumb w-full h-40 flex items-center justify-center text-5xl font-bold text-white/90 relative overflow-hidden select-none shrink-0"
         style={{
-          background: course.thumbnail ? `url('${course.thumbnail}') center/cover no-repeat` : gradient,
+          background: thumbBackground,
         }}
       >
-        {!course.thumbnail && (
+        {!hasCustomImage && (
           <span className="select-none font-bold text-white/90 drop-shadow-sm">
             {initial}
           </span>

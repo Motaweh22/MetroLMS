@@ -506,6 +506,15 @@ export const GroupMonitoringPage: React.FC = () => {
 
   // Unauthorized state
   if (isForbidden || (!authLoading && user && user.role !== 'admin' && !isAuthorized && metrics)) {
+    const fallbackGroupsRoute =
+      user &&
+      previewRole !== 'assistant_lecturer' &&
+      (user.role === 'admin' ||
+        user.role === 'super_admin' ||
+        user.role === 'developer' ||
+        user.role === 'assistant_admin')
+        ? '/admin/groups'
+        : '/my-groups';
     return (
       <div className="container mx-auto p-6 max-w-5xl" dir="rtl">
         <div data-testid="admin-monitoring-unauthorized">
@@ -514,7 +523,7 @@ export const GroupMonitoringPage: React.FC = () => {
             والمشرفين المعتمدين للمجموعة فقط.
           </Alert>
           <div className="mt-4">
-            <Button variant="outline" onClick={() => navigate('/admin/groups')}>
+            <Button variant="outline" onClick={() => navigate(fallbackGroupsRoute)}>
               العودة لقائمة المجموعات
             </Button>
           </div>
@@ -525,13 +534,22 @@ export const GroupMonitoringPage: React.FC = () => {
 
   // Error state
   if (error || !metrics) {
+    const fallbackGroupsRoute =
+      user &&
+      previewRole !== 'assistant_lecturer' &&
+      (user.role === 'admin' ||
+        user.role === 'super_admin' ||
+        user.role === 'developer' ||
+        user.role === 'assistant_admin')
+        ? '/admin/groups'
+        : '/my-groups';
     return (
       <div className="container mx-auto p-6 max-w-5xl" dir="rtl">
         <Alert variant="danger" icon="alert">
           {error || 'لم يتم العثور على المجموعة المطلوبة أو تعذر استخراج مؤشراتها'}
         </Alert>
         <div className="mt-4 flex gap-2">
-          <Button variant="outline" onClick={() => navigate('/admin/groups')} data-testid="back-to-group-btn">
+          <Button variant="outline" onClick={() => navigate(fallbackGroupsRoute)} data-testid="back-to-group-btn">
             العودة للمجموعات
           </Button>
           <Button variant="primary" onClick={() => loadData(selectedCycleId)}>
@@ -565,6 +583,24 @@ export const GroupMonitoringPage: React.FC = () => {
   const effectiveStartDate = currentCycle?.startDateTime || group.startDateTime;
   const effectiveDeadlineDate = currentCycle?.deadlineDateTime || group.deadlineDateTime;
 
+  const isAdminDirStaff = Boolean(
+    user &&
+      previewRole !== 'assistant_lecturer' &&
+      (user.role === 'admin' ||
+        user.role === 'super_admin' ||
+        user.role === 'developer' ||
+        user.role === 'assistant_admin')
+  );
+  const canEditGroupSettings = Boolean(
+    user &&
+      previewRole !== 'assistant_lecturer' &&
+      (user.role === 'admin' || user.role === 'super_admin' || user.role === 'developer')
+  );
+  const groupsListRoute = isAdminDirStaff ? '/admin/groups' : '/my-groups';
+  const groupBreadcrumbRoute = canEditGroupSettings
+    ? `/admin/groups/${encodeURIComponent(group.id)}/edit`
+    : `/my-groups/${encodeURIComponent(group.id)}`;
+
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-4 max-w-7xl" dir="rtl">
       {/* Compact Group Header */}
@@ -572,14 +608,14 @@ export const GroupMonitoringPage: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-xs text-text-muted">
             <button
-              onClick={() => navigate('/admin/groups')}
+              onClick={() => navigate(groupsListRoute)}
               className="hover:text-primary transition-colors cursor-pointer"
             >
               المجموعات التدريبية
             </button>
             <span>/</span>
             <button
-              onClick={() => navigate(`/admin/groups/${encodeURIComponent(group.id)}/edit`)}
+              onClick={() => navigate(groupBreadcrumbRoute)}
               className="hover:text-primary transition-colors cursor-pointer"
             >
               {group.name}
@@ -603,7 +639,7 @@ export const GroupMonitoringPage: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate('/admin/groups')}
+            onClick={() => navigate(groupsListRoute)}
             data-testid="back-to-group-btn"
           >
             <Icon name="arrowRight" size="sm" className="ml-1" />
@@ -620,7 +656,7 @@ export const GroupMonitoringPage: React.FC = () => {
               <span>إدارة المحاضرين المساعدين</span>
             </Button>
           )}
-          {(user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer') && (
+          {canEditGroupSettings && (
             <Button
               variant="outline"
               size="sm"

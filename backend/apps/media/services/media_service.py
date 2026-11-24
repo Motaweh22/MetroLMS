@@ -1,8 +1,15 @@
 """MediaAsset & MediaContentReference domain services (INV-DOM21-05..21, TR-C2-06/07)."""
 from __future__ import annotations
 
+import json
+import logging
+import os
+from pathlib import Path
+import threading
+
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
+from django.db import connections, transaction
 from django.utils import timezone
 
 from apps.courses.models import CourseDraft, PublishedCourseVersion
@@ -11,9 +18,13 @@ from apps.governance.services.governance_service import record_audit_log
 from apps.groups.models import GroupAssistantAssignment, GroupRenewalCycle
 from apps.identity.models import User
 from apps.media.models import MediaAsset, MediaContentReference
+from infrastructure.media_processing import find_ffmpeg_binaries, transcode_to_mp4
 from infrastructure.storage import LocalMediaStorage, MediaStorageError
 from shared.permissions import evaluate_permission
 from shared.validators import normalize_mime_type, normalize_nfc_stripped, validate_mime_type, validate_non_empty_text
+
+logger = logging.getLogger(__name__)
+_STREAM_SIGNER = TimestampSigner(salt="metrolms-media-stream")
 
 
 class MediaDomainError(Exception):
@@ -127,7 +138,144 @@ def upload_media_asset(
         target_entity_id=str(asset.id),
         details_snapshot={"mimeType": mime_type, "sizeBytes": size_bytes},
     )
+
+    if mime_type.startswith("video/") and find_ffmpeg_binaries()[0]:
+        try:
+            sync_limit_mb = int(os.environ.get("METROLMS_SYNC_TRANSCODE_MAX_MB", "100"))
+        except ValueError:
+            sync_limit_mb = 100
+        if size_bytes <= max(1, sync_limit_mb) * 1024 * 1024:
+            _transcode_video_asset_in_place(asset.id, store.root, scope_prefix=scope_prefix, raise_on_error=True)
+            asset.refresh_from_db()
+        else:
+            _write_transcode_status(store.root, asset.id, {"status": "processing"})
+            worker = threading.Thread(
+                target=_transcode_video_asset_worker,
+                args=(asset.id, store.root, scope_prefix),
+                daemon=True,
+            )
+            worker.start()
+
     return asset
+
+
+def _transcode_status_path(root: Path, asset_id: int) -> Path:
+    return root / "staging" / f"transcode_{asset_id}.json"
+
+
+def _write_transcode_status(root: Path, asset_id: int, payload: dict[str, object]) -> None:
+    try:
+        p = _transcode_status_path(root, asset_id)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def get_asset_transcode_status(asset: MediaAsset, storage: LocalMediaStorage | None = None) -> str:
+    """Return 'processing', 'failed', or 'ready' for a MediaAsset."""
+    store = storage or LocalMediaStorage()
+    status_file = _transcode_status_path(store.root, asset.id)
+    if status_file.is_file():
+        try:
+            data = json.loads(status_file.read_text(encoding="utf-8"))
+            st = str(data.get("status") or "")
+            if st in {"processing", "failed", "ready"}:
+                return st
+        except Exception:
+            pass
+    return "ready"
+
+
+def _transcode_video_asset_worker(asset_id: int, root_path: Path, scope_prefix: str | None) -> None:
+    try:
+        _transcode_video_asset_in_place(asset_id, root_path, scope_prefix=scope_prefix, raise_on_error=False)
+    finally:
+        connections.close_all()
+
+
+def _transcode_video_asset_in_place(
+    asset_id: int,
+    root_path: Path,
+    *,
+    scope_prefix: str | None,
+    raise_on_error: bool,
+) -> None:
+    asset = MediaAsset.objects.filter(pk=asset_id).first()
+    if asset is None:
+        return
+    store = LocalMediaStorage(root_path)
+    source_path = store.resolve_safe_path(asset.storage_key)
+    target_key = store.build_storage_key(".mp4", scope_prefix=scope_prefix)
+    target_path = store.resolve_safe_path(target_key)
+
+    _write_transcode_status(root_path, asset_id, {"status": "processing"})
+    try:
+        outcome = transcode_to_mp4(source_path, target_path)
+    except Exception as exc:
+        logger.warning("FFmpeg transcode failed for MediaAsset %s: %s", asset_id, exc)
+        if asset.mime_type == "video/mp4":
+            _write_transcode_status(root_path, asset_id, {"status": "ready", "strategy": "passthrough"})
+            return
+        _write_transcode_status(root_path, asset_id, {"status": "failed", "error": str(exc)})
+        if raise_on_error:
+            try:
+                source_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            MediaAsset.objects.filter(pk=asset_id).delete()
+            raise MediaDomainError(
+                "VIDEO_TRANSCODE_FAILED",
+                "تعذر تحويل ملف الفيديو إلى صيغة MP4. يرجى التأكد من سلامة الملف.",
+                400,
+            ) from exc
+        return
+
+    new_name = f"{Path(asset.file_name).stem or 'video'}.mp4"[:255]
+    with transaction.atomic():
+        locked = MediaAsset.objects.select_for_update().filter(pk=asset_id).first()
+        if locked is not None:
+            locked.storage_key = target_key
+            locked.file_name = new_name
+            locked.mime_type = "video/mp4"
+            locked.size_bytes = outcome.size_bytes
+            locked.sha256_checksum = outcome.sha256_checksum
+            locked.save(update_fields=["storage_key", "file_name", "mime_type", "size_bytes", "sha256_checksum"])
+
+    try:
+        if source_path != target_path and source_path.exists():
+            source_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    _write_transcode_status(root_path, asset_id, {"status": "ready", "strategy": outcome.strategy})
+
+
+def mint_stream_ticket(*, user_id: int, kind: str, target_id: int) -> str:
+    """Create a short-lived HMAC-signed stream ticket bound to user_id and target resource."""
+    return _STREAM_SIGNER.sign_object({"uid": int(user_id), "kind": str(kind), "tid": int(target_id)})
+
+
+def verify_stream_ticket(
+    token: str,
+    *,
+    user_id: int,
+    kind: str,
+    target_id: int,
+    max_age: int = 7200,
+) -> bool:
+    """Verify signed stream ticket against user_id, target kind/id, and TTL."""
+    if not token:
+        return False
+    try:
+        data = _STREAM_SIGNER.unsign_object(token, max_age=max_age)
+    except (BadSignature, SignatureExpired):
+        return False
+    return (
+        isinstance(data, dict)
+        and data.get("uid") == int(user_id)
+        and data.get("kind") == str(kind)
+        and data.get("tid") == int(target_id)
+    )
 
 
 def _assert_context_mutable_and_authorized(
@@ -372,6 +520,45 @@ def authorize_stream_reference(actor: User, ref: MediaContentReference) -> None:
     """Enforce logical detachment, INV-DOM21-15 immediate visibility, and group/course access before streaming."""
     if ref.detached_at is not None:
         raise MediaDomainError("REFERENCE_DETACHED", "هذا المحتوى لم يعد متاحًا للعرض.", 403)
+    if actor.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
+        return
+
+    course = None
+    if ref.course_draft_id is not None and ref.course_draft is not None:
+        course = ref.course_draft.course
+    elif ref.published_version_id is not None and ref.published_version is not None:
+        course = ref.published_version.course
+
+    if actor.role_id == "lecturer":
+        if ref.group_renewal_cycle_id is not None:
+            from apps.groups.models import GroupCourseAssignment
+
+            cycle = ref.group_renewal_cycle
+            if cycle is not None:
+                is_group_lecturer = (
+                    GroupAssistantAssignment.objects.filter(
+                        training_group_id=cycle.training_group_id,
+                        user=actor,
+                    ).exists()
+                    or GroupCourseAssignment.objects.filter(
+                        group_renewal_cycle__training_group_id=cycle.training_group_id,
+                        course__primary_lecturer=actor,
+                    ).exists()
+                )
+                if not is_group_lecturer:
+                    raise MediaDomainError("PERMISSION_DENIED", "غير مصرح لك بعرض ملفات هذه المجموعة التدريبية.", 403)
+        elif course is not None:
+            is_course_instructor = (
+                course.primary_lecturer_id == actor.id
+                or course.assistant_lecturers.filter(user=actor).exists()
+            )
+            if not is_course_instructor and (
+                course.lifecycle_status != "Published"
+                or (course.access_mode == "hidden" and ref.title != "__course_cover__")
+            ):
+                raise MediaDomainError("PERMISSION_DENIED", "غير مصرح لك بالوصول إلى محتوى هذا المقرر.", 403)
+        return
+
     if actor.role_id == "trainee":
         if not ref.is_visible:
             raise MediaDomainError("REFERENCE_HIDDEN", "هذا المحتوى غير متاح للعرض حاليًا.", 403)
@@ -384,15 +571,15 @@ def authorize_stream_reference(actor: User, ref: MediaContentReference) -> None:
                 user=actor,
             ).exists():
                 raise MediaDomainError("PERMISSION_DENIED", "غير مصرح لك بعرض ملفات هذه المجموعة التدريبية.", 403)
-        elif ref.title != "__course_cover__":
-            course = None
-            if ref.course_draft_id is not None and ref.course_draft is not None:
-                course = ref.course_draft.course
-            elif ref.published_version_id is not None and ref.published_version is not None:
-                course = ref.published_version.course
-            if course is not None and (course.access_mode == "hidden" or course.lifecycle_status != "Published"):
+        elif ref.title != "__course_cover__" and course is not None:
+            if course.access_mode == "hidden" or course.lifecycle_status != "Published":
                 from apps.learning.models import Enrollment
 
-                if not Enrollment.objects.filter(user=actor, course=course).exists():
+                if not Enrollment.objects.filter(user=actor, course=course, source_grants__isnull=False).exists():
+                    raise MediaDomainError("PERMISSION_DENIED", "غير مصرح لك بالوصول إلى محتوى هذا المقرر.", 403)
+            elif course.access_mode == "targeted":
+                from apps.courses.services.course_service import is_course_visible_to_trainee
+
+                if not is_course_visible_to_trainee(actor, course):
                     raise MediaDomainError("PERMISSION_DENIED", "غير مصرح لك بالوصول إلى محتوى هذا المقرر.", 403)
 

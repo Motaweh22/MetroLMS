@@ -437,7 +437,7 @@ export const DecisionModal: React.FC<DecisionModalProps> = ({
                     htmlFor="decision-feedback-input"
                     className="block text-xs font-semibold text-text"
                   >
-                    رسالة التوجيه والتغذية الراجعة للمحاضر (إجباري)
+                    رسالة التوجيه والتغذية الراجعة للمحاضر (إجباري) <span className="text-danger" aria-hidden="true">*</span>
                   </label>
                   {hasPrivateNotes && (
                     <button
@@ -489,7 +489,7 @@ export const DecisionModal: React.FC<DecisionModalProps> = ({
                     htmlFor="decision-feedback-input"
                     className="block text-xs font-semibold text-text"
                   >
-                    أسباب الرفض والملاحظات المطلوبة من المحاضر (إجباري)
+                    أسباب الرفض والملاحظات المطلوبة من المحاضر (إجباري) <span className="text-danger" aria-hidden="true">*</span>
                   </label>
                   {hasPrivateNotes && (
                     <button

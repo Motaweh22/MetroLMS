@@ -424,7 +424,9 @@ export const ReviewInspector: React.FC<ReviewInspectorProps> = ({
 
                     <div className="text-[11px] text-text-muted pt-0.5">
                       بواسطة: <span className="text-text font-medium">{entry.actorName}</span>{' '}
-                      ({entry.actorRole === 'admin' ? 'مدير نظام ومراجع جودة' : 'محاضر'})
+                      ({entry.actorRole === 'admin' || entry.actorRole === 'super_admin' || entry.actorRole === 'developer'
+                        ? 'مدير نظام ومراجع جودة'
+                        : 'محاضر'})
                     </div>
 
                     {entry.feedback && (

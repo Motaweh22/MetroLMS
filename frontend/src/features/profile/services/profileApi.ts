@@ -71,7 +71,9 @@ export interface PublicUserOverviewResponse {
 export interface UserProfileResponse {
   user: User & {
     status?: string;
+    nameEn?: string;
     phoneE164?: string;
+    employeeNumber?: string;
     gender?: 'male' | 'female';
     genderLabel?: string;
     nationalId?: string;

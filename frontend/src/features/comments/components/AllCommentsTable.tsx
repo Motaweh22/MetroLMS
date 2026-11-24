@@ -5,7 +5,7 @@ import { Icon } from '@/shared/ui/Icon';
 import { StyledSelect } from '@/shared/ui/StyledSelect';
 import type { CourseComment } from '@/core/comments/types';
 import { COMMENT_REPORT_REASONS_AR } from '@/core/comments/types';
-import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
+import { resolveCommentRoleMeta } from '../utils/commentRolePresentation';
 import type { Course } from '@/core/courses/types';
 
 export interface AllCommentsTableProps {
@@ -129,10 +129,7 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
                 </tr>
               ) : (
                 comments.map((comment) => {
-                  const roleLabel =
-                    ROLE_CANONICAL_LABELS_AR[comment.userRole as keyof typeof ROLE_CANONICAL_LABELS_AR] ||
-                    comment.userRole ||
-                    'متدرب';
+                  const roleMeta = resolveCommentRoleMeta(comment);
 
                   const isCommentsEnabled =
                     courseDiscussionMap.get(String(comment.courseId ?? '').toLowerCase()) ??
@@ -183,8 +180,8 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
                       {/* Comment Author */}
                       <td className="py-3.5 px-4 text-xs">
                         <div className="font-bold text-text">{comment.userName}</div>
-                        <Badge variant="neutral" size="sm" className="mt-0.5">
-                          {roleLabel}
+                        <Badge variant={roleMeta.roleBadgeVariant} size="sm" className="mt-0.5">
+                          {roleMeta.moderationLabel}
                         </Badge>
                       </td>
 
@@ -207,15 +204,26 @@ export const AllCommentsTable: React.FC<AllCommentsTableProps> = ({
                       {/* Report Status */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {comment.reported ? (
-                          <Badge
-                            variant="danger"
-                            size="sm"
-                            icon="alertCircle"
-                            title={reportReasonLabel || undefined}
-                            data-testid={`reported-status-${comment.id}`}
-                          >
-                            مُبلَّغ عنه {reportReasonLabel ? `(${reportReasonLabel})` : ''}
-                          </Badge>
+                          <div className="inline-flex flex-col items-center gap-1">
+                            <Badge
+                              variant="danger"
+                              size="sm"
+                              icon="alertCircle"
+                              title={
+                                comment.reportNotes
+                                  ? `${reportReasonLabel || ''} — ${comment.reportNotes}`
+                                  : reportReasonLabel || undefined
+                              }
+                              data-testid={`reported-status-${comment.id}`}
+                            >
+                              مُبلَّغ عنه {reportReasonLabel ? `(${reportReasonLabel})` : ''}
+                            </Badge>
+                            {comment.reportNotes && (
+                              <span className="text-[11px] text-danger-dark max-w-[200px] truncate block" title={comment.reportNotes}>
+                                {comment.reportNotes}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <Badge variant="success" size="sm" icon="check" data-testid={`active-status-${comment.id}`}>
                             نشط

@@ -13,17 +13,9 @@ import {
   type OrgDepartmentOption,
   type OrgJobTitleOption,
 } from '@/features/permissions/services/departmentTracksApi';
+import { DEFAULT_LEADERSHIP_TITLES } from '@/core/user-management/types';
 
 type VisibilityViewMode = 'by_course' | 'by_department' | 'by_job_title' | 'by_leadership';
-
-const DEFAULT_LEADERSHIP_TITLES = [
-  'رئيس قطاع / رئيس إدارة مركزية',
-  'مدير عام',
-  'مدير إدارة',
-  'رئيس قسم / رئيس وحدة',
-  'مشرف / رئيس وردية',
-  'قائد فريق / منسق',
-];
 
 export const DepartmentTracksPage: React.FC = () => {
   const { user } = useAuth();
@@ -36,7 +28,7 @@ export const DepartmentTracksPage: React.FC = () => {
   const [courses, setCourses] = useState<CourseVisibilityItem[]>([]);
   const [departments, setDepartments] = useState<OrgDepartmentOption[]>([]);
   const [jobTitles, setJobTitles] = useState<OrgJobTitleOption[]>([]);
-  const [leadershipTitles, setLeadershipTitles] = useState<string[]>(DEFAULT_LEADERSHIP_TITLES);
+  const [leadershipTitles, setLeadershipTitles] = useState<string[]>([...DEFAULT_LEADERSHIP_TITLES]);
 
   const [viewMode, setViewMode] = useState<VisibilityViewMode>('by_course');
   const [searchQuery, setSearchQuery] = useState('');

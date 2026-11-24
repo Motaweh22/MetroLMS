@@ -127,6 +127,8 @@ def save_course_draft(
     thumbnail_asset_id: int | None = None,
     refresher_config: dict[str, Any] | None = None,
     course_zip_policy: str | None = None,
+    cover_type: str | None = None,
+    cover_color: str | None = None,
 ) -> CourseDraft:
     """Replace mutable CourseDraft curriculum structure cleanly (Rule B)."""
     if not can_edit_course_draft(actor, course):
@@ -153,6 +155,20 @@ def save_course_draft(
         "after_course_completion",
     }:
         defaults["course_zip_policy"] = course_zip_policy
+    if isinstance(cover_type, str) and cover_type in {"image", "color", "default"}:
+        defaults["cover_type"] = cover_type
+    if cover_color is not None:
+        import re as _re_color
+
+        cleaned_color = str(cover_color).strip()
+        if not cleaned_color:
+            defaults["cover_color"] = None
+        elif _re_color.match(r"^#[0-9A-Fa-f]{3,8}$", cleaned_color):
+            defaults["cover_color"] = cleaned_color.upper()
+    elif defaults.get("cover_type") == "color":
+        existing_draft = CourseDraft.objects.filter(course=course).only("cover_color").first()
+        if not (existing_draft and existing_draft.cover_color):
+            defaults["cover_color"] = "#003366"
 
     draft, _ = CourseDraft.objects.update_or_create(
         course=course,
@@ -187,6 +203,24 @@ def save_course_draft(
         except (TypeError, ValueError):
             return default
 
+    def _parse_duration_val(item_dict: dict[str, Any]) -> int:
+        raw_sec = item_dict.get("durationSeconds")
+        parsed_sec = _safe_non_neg_int(raw_sec, 0)
+        if parsed_sec > 0:
+            return parsed_sec
+        raw_str = str(item_dict.get("duration") or "").strip()
+        if not raw_str:
+            return 0
+        if raw_str.isdigit():
+            return max(0, int(raw_str))
+        parts = raw_str.split(":")
+        if all(p.isdigit() for p in parts):
+            if len(parts) == 2:
+                return max(0, int(parts[0]) * 60 + int(parts[1]))
+            if len(parts) == 3:
+                return max(0, int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2]))
+        return 0
+
     for m_idx, m_data in enumerate(modules_payload):
         if not isinstance(m_data, dict):
             continue
@@ -211,7 +245,13 @@ def save_course_draft(
                 validate_non_empty_text(l_title)
             except DjangoValidationError as exc:
                 raise CourseDomainError("VALIDATION_ERROR", "عنوان الدرس لا يمكن أن يكون فارغاً.", status_code=400) from exc
-            raw_ext = l_data.get("externalVideoUrl") or l_data.get("externalUrl") or l_data.get("videoUrl")
+            raw_ext = (
+                l_data.get("externalVideoUrl")
+                or l_data.get("externalUrl")
+                or l_data.get("videoUrl")
+            )
+            if not raw_ext and isinstance(l_data.get("url"), str) and l_data["url"].startswith("https://"):
+                raw_ext = l_data["url"]
             if isinstance(raw_ext, str) and raw_ext.startswith("blob:"):
                 raw_ext = None
             ext_url = normalize_optional_url(raw_ext)
@@ -230,25 +270,45 @@ def save_course_draft(
                 if raw_dl in {"immediate", "after_item_completion", "after_course_completion", "never"}
                 else "never"
             )
+            raw_lesson_desc = l_data.get("description")
+            lesson_desc = (
+                normalize_nfc_preserve_whitespace(str(raw_lesson_desc)).strip()
+                if raw_lesson_desc is not None
+                else ""
+            )
             lesson = LessonItem.objects.create(
                 module=mod,
                 title=l_title,
+                description=lesson_desc,
                 lesson_type=str(l_data.get("lessonType") or l_data.get("type") or "video")[:32],
                 sort_order=_safe_non_neg_int(l_data.get("sortOrder"), l_idx),
                 external_video_url=ext_url,
-                duration_seconds=_safe_non_neg_int(l_data.get("durationSeconds"), 0),
+                duration_seconds=_parse_duration_val(l_data),
                 download_policy=dl_policy,
             )
             raw_media_id = l_data.get("mediaId") or l_data.get("mediaAssetId")
+            asset = None
             if raw_media_id is not None and str(raw_media_id).isdigit():
                 asset = MediaAsset.objects.filter(pk=int(raw_media_id)).first()
-                if asset is not None:
-                    MediaContentReference.objects.create(
-                        media_asset=asset,
-                        course_draft=draft,
-                        title=l_title,
-                        is_visible=True,
-                    )
+            if asset is None and isinstance(l_data.get("url"), str):
+                import re as _re
+
+                m_asset = _re.search(r"/api/media/assets/(\d+)/stream", l_data["url"])
+                if m_asset:
+                    asset = MediaAsset.objects.filter(pk=int(m_asset.group(1))).first()
+                elif l_data.get("mediaReferenceId") and str(l_data["mediaReferenceId"]).isdigit():
+                    prev_ref = MediaContentReference.objects.filter(
+                        pk=int(l_data["mediaReferenceId"])
+                    ).select_related("media_asset").first()
+                    if prev_ref is not None:
+                        asset = prev_ref.media_asset
+            if asset is not None:
+                MediaContentReference.objects.create(
+                    media_asset=asset,
+                    course_draft=draft,
+                    title=l_title,
+                    is_visible=True,
+                )
             quiz_data = l_data.get("quiz")
             if isinstance(quiz_data, dict):
                 try:
@@ -321,11 +381,19 @@ def submit_course_for_review(*, actor: User, course: Course) -> CourseReviewSubm
         course.updated_at = now
         course.save(update_fields=["lifecycle_status", "updated_at"])
 
+    is_resubmit = CourseReviewSubmission.objects.filter(course=course).exclude(pk=submission.pk).exists()
     record_audit_log(
         action="course.review_submitted",
         actor=actor,
         target_entity_type="CourseReviewSubmission",
         target_entity_id=str(submission.id),
+        details_snapshot={
+            "courseId": course.id,
+            "submissionId": submission.id,
+            "actorName": actor.full_name,
+            "auditAction": "resubmitted" if is_resubmit else "submitted",
+            "summary": "تمت إعادة إرسال المقرر للمراجعة والاعتماد." if is_resubmit else "تم إرسال المقرر للمراجعة والاعتماد.",
+        },
     )
     return submission
 
@@ -356,6 +424,12 @@ def decide_course_review(
     if decision == "return":
         submission.review_status = "ReturnedForRevision"
         submission.save(update_fields=["review_status", "reviewed_by_user", "decided_at"])
+        course = submission.course
+        # OD-PF-03-B: Keep Published courses Published; return InReview courses to Draft for editing
+        if course.lifecycle_status in {"InReview", "PendingReview"}:
+            course.lifecycle_status = "Draft"
+            course.updated_at = now
+            course.save(update_fields=["lifecycle_status", "updated_at"])
         return submission, None
 
     if decision != "approve":
@@ -372,6 +446,8 @@ def decide_course_review(
         version_number=max_ver + 1,
         course_zip_policy=draft.course_zip_policy if draft is not None else "disabled",
         refresher_config_json=draft.refresher_config_json if draft is not None else None,
+        cover_type=draft.cover_type if draft is not None else None,
+        cover_color=draft.cover_color if draft is not None else None,
         published_at=now,
         published_by_user=reviewer,
     )
@@ -388,6 +464,7 @@ def decide_course_review(
                 pub_lesson = LessonItem.objects.create(
                     module=pub_mod,
                     title=lesson.title,
+                    description=lesson.description or "",
                     lesson_type=lesson.lesson_type,
                     sort_order=lesson.sort_order,
                     external_video_url=lesson.external_video_url,
@@ -525,13 +602,78 @@ def add_course_comment(*, author: User, course: Course, body: str) -> CourseComm
     )
 
 
-def report_course_comment(*, reporter: User, comment: CourseComment, reason: str) -> CourseCommentReport:
-    """Create a CourseCommentReport with OR-DB-04 Condition A reason."""
+COMMENT_REPORT_REASONS_AR: dict[str, str] = {
+    "inappropriate_content": "محتوى غير لائق",
+    "misinformation": "معلومات خاطئة",
+    "harassment": "إزعاج أو تحرش",
+    "spam": "رسائل مزعجة",
+    "other": "أخرى",
+}
+
+_REPORT_NOTES_SEPARATOR = " :: "
+
+
+def format_stored_report_reason(reason: str, notes: str = "") -> str:
+    """Encode report reason code/label and optional details cleanly within 500 chars."""
+    clean_reason = normalize_nfc_preserve_whitespace(reason).strip()
+    clean_notes = normalize_nfc_preserve_whitespace(notes).strip()
+    if not clean_notes or clean_notes == clean_reason:
+        return clean_reason[:500]
+    combined = f"{clean_reason}{_REPORT_NOTES_SEPARATOR}{clean_notes}"
+    return combined[:500]
+
+
+def parse_stored_report_reason(stored: str) -> tuple[str, str, str | None]:
+    """Decode stored CourseCommentReport.reason into (code, arabic_label, notes)."""
+    raw = str(stored or "").strip()
+    if _REPORT_NOTES_SEPARATOR in raw:
+        code_part, notes_part = raw.split(_REPORT_NOTES_SEPARATOR, 1)
+        code = code_part.strip()
+        notes = notes_part.strip() or None
+    else:
+        code = raw
+        notes = None
+    label_ar = COMMENT_REPORT_REASONS_AR.get(code, code or "محتوى غير لائق")
+    return code, label_ar, notes
+
+
+def report_course_comment(
+    *,
+    reporter: User,
+    comment: CourseComment,
+    reason: str,
+    notes: str = "",
+) -> CourseCommentReport:
+    """Create a CourseCommentReport while blocking self-reports and duplicates."""
+    if comment.author_user_id is not None and comment.author_user_id == reporter.id:
+        raise CourseDomainError(
+            "SELF_REPORT_PROHIBITED",
+            "لا يمكنك الإبلاغ عن تعليقك الخاص.",
+            status_code=400,
+        )
     validate_non_empty_text(reason)
+    clean_reason = str(reason).strip()
+    clean_notes = str(notes or "").strip()
+    if clean_reason == "other" and not clean_notes:
+        raise CourseDomainError(
+            "VALIDATION_ERROR",
+            "يرجى توضيح سبب الإبلاغ في حقل الملاحظات.",
+            status_code=400,
+        )
+    if CourseCommentReport.objects.filter(
+        comment=comment,
+        reporter_user=reporter,
+        status="Pending",
+    ).exists():
+        raise CourseDomainError(
+            "ALREADY_REPORTED",
+            "لقد قمت بالإبلاغ عن هذا التعليق مسبقاً وهو قيد المراجعة.",
+            status_code=409,
+        )
     return CourseCommentReport.objects.create(
         comment=comment,
         reporter_user=reporter,
-        reason=normalize_nfc_preserve_whitespace(reason),
+        reason=format_stored_report_reason(clean_reason, clean_notes),
         status="Pending",
         created_at=timezone.now(),
     )

@@ -126,7 +126,7 @@ class LecturerCoursePerformanceView(APIView):
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         is_allowed = (
-            request.user.role_id in {"developer", "super_admin", "admin"}
+            request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
             or course.primary_lecturer_id == request.user.id
             or course.assistant_lecturers.filter(user=request.user).exists()
         )

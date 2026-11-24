@@ -15,6 +15,7 @@ import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
 import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
 import { blockInvalidNumberKeys, sanitizeDurationInput } from '@/core/utils/numericInput';
+import { useAuthenticatedMediaPreview } from '@/core/storage/useAuthenticatedMediaPreview';
 
 export interface ReviewContentPreviewProps {
   course: Course;
@@ -97,6 +98,21 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
         (activeChapter.items || []).find((it) => it.id === selectedTarget.itemId) || null;
     }
   }
+
+  const rawActiveItemUrl = activeItem ? (activeItem.url || activeItem.externalUrl || undefined) : undefined;
+  const isExternalEmbedUrl = Boolean(
+    rawActiveItemUrl &&
+    (rawActiveItemUrl.includes('youtube.com') ||
+      rawActiveItemUrl.includes('youtu.be') ||
+      rawActiveItemUrl.includes('drive.google.com'))
+  );
+  const {
+    previewUrl: resolvedActiveMediaUrl,
+    error: activeMediaPreviewError,
+  } = useAuthenticatedMediaPreview(
+    !isExternalEmbedUrl ? rawActiveItemUrl : undefined,
+    activeItem?.type || 'video'
+  );
 
   // Find baseline counterparts for comparison
   let baselineChapter: CourseChapter | null = null;
@@ -217,7 +233,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label htmlFor="course-title-input" className="block text-xs font-semibold text-text">
-                      عنوان المقرر
+                      عنوان المقرر <span className="text-danger" aria-hidden="true">*</span>
                     </label>
                     {baselineCourse?.title && baselineCourse.title !== course.title && (
                       <span className="text-[11px] text-text-muted" data-testid="baseline-comparison-title">
@@ -238,7 +254,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label htmlFor="course-desc-input" className="block text-xs font-semibold text-text">
-                      وصف المقرر
+                      وصف المقرر <span className="text-danger" aria-hidden="true">*</span>
                     </label>
                     {baselineCourse?.description && baselineCourse.description !== course.description && (
                       <span className="text-[11px] text-text-muted" data-testid="baseline-comparison-description">
@@ -451,7 +467,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label htmlFor="chapter-title-input" className="block text-xs font-semibold text-text">
-                        عنوان الفصل
+                        عنوان الفصل <span className="text-danger" aria-hidden="true">*</span>
                       </label>
                       {baselineChapter?.title && baselineChapter.title !== activeChapter.title && (
                         <span className="text-[11px] text-text-muted" data-testid="baseline-comparison-chapter-title">
@@ -592,7 +608,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label htmlFor="item-title-input" className="block text-xs font-semibold text-text">
-                      عنوان الدرس
+                      عنوان الدرس <span className="text-danger" aria-hidden="true">*</span>
                     </label>
                     {baselineItem?.title && baselineItem.title !== activeItem.title && (
                       <span className="text-[11px] text-text-muted" data-testid="baseline-comparison-item-title">
@@ -613,6 +629,27 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                     }
                     data-testid="edit-item-title"
                     className="w-full px-3 py-2 text-sm bg-surface border border-border rounded-lg text-text focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="item-description-edit-input" className="block text-xs font-semibold text-text mb-1">
+                    وصف الدرس / الفيديو
+                  </label>
+                  <textarea
+                    id="item-description-edit-input"
+                    rows={3}
+                    value={activeItem.description || ''}
+                    onChange={(e) =>
+                      activeChapter &&
+                      activeItem &&
+                      onUpdateItem(activeChapter.id, activeItem.id, {
+                        description: e.target.value,
+                      })
+                    }
+                    placeholder="وصف موجز لمحتوى الدرس أو الفيديو يظهر للمتدربين أسفل المشغل..."
+                    data-testid="edit-item-description"
+                    className="w-full px-3 py-2 text-sm bg-surface border border-border rounded-lg text-text focus:outline-none focus:border-primary resize-y"
                   />
                 </div>
 
@@ -676,13 +713,22 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                       type="text"
                       placeholder="https://..."
                       value={activeItem.url || activeItem.externalUrl || ''}
-                      onChange={(e) =>
-                        activeChapter &&
-                        activeItem &&
-                        onUpdateItem(activeChapter.id, activeItem.id, {
-                          url: e.target.value,
-                        })
-                      }
+                      onChange={(e) => {
+                        const nextUrl = e.target.value;
+                        const isHttpExternal = nextUrl.trim().startsWith('http');
+                        if (activeChapter && activeItem) {
+                          onUpdateItem(activeChapter.id, activeItem.id, {
+                            url: nextUrl,
+                            ...(isHttpExternal
+                              ? {
+                                externalUrl: nextUrl,
+                                mediaId: undefined,
+                                mediaReferenceId: undefined,
+                              }
+                              : {}),
+                          });
+                        }
+                      }}
                       data-testid="edit-item-url"
                       className="w-full px-3 py-2 text-sm bg-surface border border-border rounded-lg text-text focus:outline-none focus:border-primary font-mono text-left"
                       dir="ltr"
@@ -764,17 +810,25 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                           sandbox="allow-scripts allow-same-origin"
                           data-testid="preview-video-player"
                         />
-                      ) : (
+                      ) : activeMediaPreviewError ? (
+                        <div className="text-center p-6 text-xs text-red-300">
+                          {activeMediaPreviewError}
+                        </div>
+                      ) : resolvedActiveMediaUrl ? (
                         <video
                           controls
                           controlsList="nodownload"
-                          src={activeItem.url || activeItem.externalUrl}
+                          src={resolvedActiveMediaUrl}
                           onError={() => setVideoError(true)}
                           className="w-full h-full object-contain"
                           data-testid="preview-video-player"
                         >
                           المتصفح لا يدعم تشغيل الفيديو.
                         </video>
+                      ) : (
+                        <div className="text-center p-6 text-xs text-white/80">
+                          جاري تحميل معاينة الفيديو...
+                        </div>
                       )
                     ) : (
                       <div
@@ -818,14 +872,24 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                             </a>
                           </div>
 
-                          <iframe
-                            src={activeItem.url || activeItem.externalUrl}
-                            title={activeItem.title}
-                            className="w-full h-[600px] rounded-xl border border-border bg-surface"
-                            sandbox="allow-scripts allow-same-origin allow-forms"
-                            data-testid="preview-pdf-frame"
-                            onError={() => setDocumentError(true)}
-                          />
+                          {activeMediaPreviewError ? (
+                            <div className="p-4 rounded-xl border border-border bg-surface text-xs text-danger">
+                              {activeMediaPreviewError}
+                            </div>
+                          ) : resolvedActiveMediaUrl ? (
+                            <iframe
+                              src={resolvedActiveMediaUrl}
+                              title={activeItem.title}
+                              className="w-full h-[600px] rounded-xl border border-border bg-surface"
+                              sandbox="allow-scripts allow-same-origin allow-forms"
+                              data-testid="preview-pdf-frame"
+                              onError={() => setDocumentError(true)}
+                            />
+                          ) : (
+                            <div className="p-8 text-center text-xs text-text-muted border border-border rounded-xl bg-surface">
+                              جاري تحميل معاينة المستند...
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div
@@ -980,16 +1044,29 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                   <Card className="p-6 text-center" data-testid="preview-audio-viewer">
                     <Icon name="volume" size="lg" className="mx-auto text-primary mb-3" />
                     <h3 className="text-sm font-bold text-text mb-2">{activeItem.title}</h3>
-                    {activeItem.url || activeItem.externalUrl ? (
-                      <audio controls className="w-full max-w-md mx-auto mt-2">
-                        <source src={activeItem.url || activeItem.externalUrl} />
+                    {resolvedActiveMediaUrl || (!rawActiveItemUrl?.startsWith('/api/media/') && (activeItem.url || activeItem.externalUrl)) ? (
+                      <audio controls className="w-full max-w-md mx-auto mt-2" src={resolvedActiveMediaUrl || activeItem.url || activeItem.externalUrl}>
                         المتصفح لا يدعم مشغل الصوت.
                       </audio>
+                    ) : activeMediaPreviewError ? (
+                      <span className="text-danger text-xs">{activeMediaPreviewError}</span>
                     ) : (
                       <span className="text-text-muted text-xs">
-                        رابط الملف الصوتي غير متاح حالياً.
+                        {rawActiveItemUrl ? 'جاري تحميل الملف الصوتي...' : 'رابط الملف الصوتي غير متاح حالياً.'}
                       </span>
                     )}
+                  </Card>
+                )}
+
+                {activeItem.description && activeItem.description.trim() && (
+                  <Card className="p-4 space-y-1.5 bg-surface border-border" data-testid="preview-item-description">
+                    <div className="text-xs font-bold text-text-heading flex items-center gap-1.5">
+                      <Icon name="fileText" size="sm" className="text-primary" />
+                      <span>وصف الدرس / الفيديو</span>
+                    </div>
+                    <p className="text-xs text-text-muted leading-relaxed whitespace-pre-line">
+                      {activeItem.description}
+                    </p>
                   </Card>
                 )}
 

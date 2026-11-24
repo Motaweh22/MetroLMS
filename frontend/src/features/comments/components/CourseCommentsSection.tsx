@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { useToast } from '@/shared/ui/Toast';
 import { commentsApi } from '../services/commentsApi';
 import { ReportCommentModal } from './ReportCommentModal';
+import { getCommentCardAppearance } from '../utils/commentRolePresentation';
 import type { CourseComment } from '@/core/comments/types';
 
 export interface CourseCommentsSectionProps {
@@ -160,6 +161,9 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
       setComments((prev) => [created, ...prev]);
       setNewCommentText('');
       toast.success('تم إرسال التعليق بنجاح');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('metro:notifications-changed'));
+      }
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -175,10 +179,23 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
 
   // Handle successful report
   const handleReportSuccess = (updatedComment: CourseComment) => {
+    const targetId = updatedComment?.id || reportingComment?.id;
     setComments((prev) =>
-      prev.map((c) => (c.id === updatedComment.id ? { ...c, reported: true, reportedBy: user?.id } : c))
+      prev.map((c) =>
+        c.id === targetId
+          ? {
+              ...c,
+              ...updatedComment,
+              reported: true,
+              reportedBy: user?.id,
+            }
+          : c
+      )
     );
     toast.success('تم إرسال البلاغ. سيتم مراجعته من قِبل الإدارة');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('metro:notifications-changed'));
+    }
   };
 
   // Handle comment deletion (for instructors / admins)
@@ -332,7 +349,7 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
               htmlFor="course-comment-input"
               className={`block text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-text-heading'}`}
             >
-              أضف استفسارك أو تعليقك حول محتوى المقرر:
+              أضف استفسارك أو تعليقك حول محتوى المقرر: <span className="text-danger" aria-hidden="true">*</span>
             </label>
             <textarea
               id="course-comment-input"
@@ -455,23 +472,18 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
       {!isLoading && !error && comments.length > 0 && (
         <div className="space-y-3" data-testid="course-comments-list">
           {comments.map((comment) => {
-            const isAuthorLecturer = comment.isLecturer || comment.userRole === 'lecturer';
-            const isAuthorAdmin = comment.userRole === 'admin';
-            const isAuthorAssistantAdmin = comment.userRole === 'assistant_admin';
+            const appearance = getCommentCardAppearance(
+              comment,
+              user?.id,
+              courseCoLecturers,
+              isDark
+            );
             const isReportedByMe = comment.reportedBy === user?.id;
 
             return (
               <div
                 key={comment.id}
-                className={`p-4 rounded-xl border transition-colors ${
-                  isDark
-                    ? isAuthorLecturer
-                      ? 'border-sky-400/35 bg-sky-500/[0.06]'
-                      : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-                    : isAuthorLecturer
-                    ? 'bg-surface border-primary/40 bg-primary/[0.02]'
-                    : 'bg-surface border-border hover:border-border/80'
-                }`}
+                className={`p-4 rounded-xl border transition-colors ${appearance.cardClass}`}
                 data-testid={`comment-card-${comment.id}`}
               >
                 {/* Comment Header: Author, Badge, Timestamp & Actions */}
@@ -479,15 +491,7 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                   <div className="flex items-center gap-2.5">
                     {/* User Avatar Circle */}
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isAuthorLecturer
-                          ? 'bg-primary text-white'
-                          : isAuthorAdmin
-                          ? 'bg-danger text-white'
-                          : isDark
-                          ? 'bg-white/10 text-slate-100 border border-white/15'
-                          : 'bg-neutral-light text-text-heading border border-border'
-                      }`}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${appearance.avatarClass}`}
                       data-testid="comment-avatar"
                     >
                       {comment.userInitial || (comment.userName || 'م').charAt(0)}
@@ -495,7 +499,7 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
 
                     {/* Author Meta */}
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span
                           className={`font-bold text-xs sm:text-sm ${isDark ? 'text-slate-100' : 'text-text-heading'}`}
                           data-testid="comment-author-name"
@@ -503,19 +507,14 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                           {comment.userName}
                         </span>
 
-                        {isAuthorLecturer && (
-                          <Badge variant="primary" size="sm" data-testid="comment-role-badge">
-                            محاضر
+                        {appearance.roleBadgeLabel && (
+                          <Badge variant={appearance.roleBadgeVariant} size="sm" data-testid="comment-role-badge">
+                            {appearance.roleBadgeLabel}
                           </Badge>
                         )}
-                        {isAuthorAdmin && (
-                          <Badge variant="danger" size="sm" data-testid="comment-role-badge">
-                            مدير النظام
-                          </Badge>
-                        )}
-                        {isAuthorAssistantAdmin && (
-                          <Badge variant="warning" size="sm" data-testid="comment-role-badge">
-                            مدير مساعد
+                        {appearance.isOwnComment && (
+                          <Badge variant="success" size="sm" data-testid="comment-own-badge">
+                            تعليقك
                           </Badge>
                         )}
                       </div>
@@ -529,10 +528,10 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* Actions: Report (Enrolled Trainee / Assigned Instructor) or Delete (Instructor/Admin) */}
+                  {/* Actions: Report (Enrolled Trainee / Assigned Instructor, never own comment) or Delete (Instructor/Admin) */}
                   <div className="flex items-center gap-2 shrink-0">
-                    {/* Report Button (Visible only when discussion is open and user is enrolled/assigned) */}
-                    {areCommentsEnabled && canReportComment && (
+                    {/* Report Button (Visible only when discussion is open, user is enrolled/assigned, and NOT author's own comment) */}
+                    {areCommentsEnabled && canReportComment && !appearance.isOwnComment && (
                       isReportedByMe ? (
                         <button
                           type="button"

@@ -487,12 +487,17 @@ export const LearningPlayerPage: React.FC = () => {
                     : 'مستند إرشادي PDF'}
                 </span>
               </div>
-              <h1 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: '#FFFFFF' }}>
+              <h1 style={{ fontSize: '1.2rem', fontWeight: 700, margin: currentItem.description?.trim() ? '0 0 0.5rem 0' : 0, color: '#FFFFFF' }}>
                 {currentItem.title}
               </h1>
-              <p style={{ fontSize: '0.88rem', color: '#CBD5E1', lineHeight: '1.6', margin: 0 }}>
-                {course.description}
-              </p>
+              {currentItem.description?.trim() && (
+                <p
+                  data-testid="lesson-description-text"
+                  style={{ fontSize: '0.88rem', color: '#CBD5E1', lineHeight: '1.6', margin: 0, whiteSpace: 'pre-line' }}
+                >
+                  {currentItem.description}
+                </p>
+              )}
             </div>
           )}
 

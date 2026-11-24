@@ -46,7 +46,7 @@ export const UserFilterBar: React.FC<UserFilterBarProps> = ({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="ابحث بالاسم، المعرف، اسم المستخدم، المسمى الوظيفي، أو القطاع..."
+          placeholder="ابحث بالاسم (عربي/إنجليزي)، الرقم الوظيفي، المعرف، المسمى الوظيفي، أو القطاع..."
           aria-label="البحث في دليل المستخدمين"
           data-testid="user-search-input"
           className="w-full pr-10 pl-10 py-2.5 text-sm bg-bg-alt/50 border border-border rounded-xl text-text placeholder:text-text-muted/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"

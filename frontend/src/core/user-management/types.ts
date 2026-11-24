@@ -58,8 +58,12 @@ export interface ManagedUserDTO {
   id: string;
   /** Full display name (in Arabic) */
   name: string;
+  /** Optional English full display name */
+  nameEn?: string;
   /** Username for login / identity resolution */
   username: string;
+  /** Optional HR Employee Number (الرقم الوظيفي) */
+  employeeNumber?: string;
   /** Primary contact and system email */
   email: string;
   /** Contact phone number (where available from HR/legacy fixtures) */
@@ -103,7 +107,9 @@ export interface ManagedUserDTO {
  */
 export interface CreateUserRequestDTO {
   name: string;
-  username: string;
+  nameEn?: string;
+  username?: string;
+  employeeNumber?: string;
   email?: string;
   phone?: string;
   jobTitle: string;
@@ -269,4 +275,13 @@ export interface UserTranscriptDTO {
   courses: UserTranscriptCourseItem[];
   certificates?: CertificateRecord[];
 }
+
+export const DEFAULT_LEADERSHIP_TITLES: readonly string[] = [
+  'رئيس قطاع / رئيس إدارة مركزية',
+  'مدير عام',
+  'مدير إدارة',
+  'رئيس قسم / رئيس وحدة',
+  'مشرف / رئيس وردية',
+  'قائد فريق / منسق',
+];
 

@@ -39,6 +39,55 @@ export function sanitizeDigitsOnly(raw: string, maxLength?: number): string {
 }
 
 /**
+ * Canonical Egyptian local mobile number pattern: 11 digits starting with 010, 011, 012, or 015.
+ */
+export const EGYPT_LOCAL_MOBILE_RE = /^01[0125][0-9]{8}$/;
+
+/**
+ * Sanitize an Egyptian mobile input strictly to local 11-digit format (01XXXXXXXXX).
+ * Also converts pasted +201XXXXXXXXX / 201XXXXXXXXX values into 01XXXXXXXXX cleanly.
+ */
+export function sanitizeEgyptMobile11(raw: string): string {
+  const digits = toAsciiDigits(raw).replace(/\D+/g, '');
+  if (/^201[0125][0-9]{8}$/.test(digits)) {
+    return digits.slice(1, 12);
+  }
+  return digits.slice(0, 11);
+}
+
+/**
+ * Live & submit-time validator for 11-digit Egyptian mobile numbers (010/011/012/015).
+ * Returns an Arabic error immediately on invalid network prefix while typing,
+ * and on incomplete length when `enforceComplete` is true (blur or submit).
+ */
+export function getEgyptMobileLiveError(
+  raw: string,
+  enforceComplete = false
+): string | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return enforceComplete
+      ? 'يرجى إدخال رقم الهاتف (11 رقماً، مثال: 01012345678)'
+      : undefined;
+  }
+  if (!trimmed.startsWith('0') || (trimmed.length >= 2 && !trimmed.startsWith('01'))) {
+    return 'يجب أن يبدأ رقم الموبايل بـ 010 أو 011 أو 012 أو 015';
+  }
+  if (trimmed.length >= 3 && !/^01[0125]/.test(trimmed)) {
+    return 'كود الشبكة غير صحيح؛ يجب أن يبدأ الرقم بـ 010 أو 011 أو 012 أو 015';
+  }
+  if (trimmed.length < 11) {
+    return enforceComplete
+      ? `رقم الهاتف غير مكتمل (${trimmed.length} من 11 رقماً) — مثال: 01012345678`
+      : undefined;
+  }
+  if (!EGYPT_LOCAL_MOBILE_RE.test(trimmed)) {
+    return 'رقم الهاتف يجب أن يتكون من 11 رقماً يبدأ بـ 010 أو 011 أو 012 أو 015';
+  }
+  return undefined;
+}
+
+/**
  * Allow optional single leading '+' followed strictly by digits (0-9) — ideal for phone numbers.
  */
 export function sanitizePhoneInput(raw: string, maxLength = 15): string {

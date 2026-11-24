@@ -822,6 +822,48 @@ describe('Notification Center Navigation & Delivery Remediation Suite', () => {
         expect(screen.getByTestId('approvals-hub-page')).toBeInTheDocument();
       });
     });
+
+    it('31. lecturer and trainee notification links never navigate to unauthorized admin or approval routes', async () => {
+      inMemoryStore.createNotification({
+        userId: lecturerUser.id,
+        type: 'comment_reported',
+        title: 'بلاغ تعليق إداري للمحاضر',
+        message: 'تم الإبلاغ عن تعليق في مقررك',
+        courseId: 'CRS001',
+        targetUrl: '/admin/comment-moderation',
+      });
+
+      const { unmount } = renderNotificationCenter('/notifications', lecturerUser);
+      await waitFor(() => {
+        expect(screen.getByText('بلاغ تعليق إداري للمحاضر')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText(/الانتقال لإدارة التعليقات المبلغ عنها/)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText('بلاغ تعليق إداري للمحاضر'));
+      await waitFor(() => {
+        expect(screen.getByTestId('course-page')).toBeInTheDocument();
+      });
+
+      unmount();
+
+      inMemoryStore.createNotification({
+        userId: traineeUser.id,
+        type: 'general_alert',
+        title: 'تنبيه توجيه غير مصرح للمتدرب',
+        message: 'تنبيه عام',
+        targetUrl: '/approvals',
+      });
+
+      renderNotificationCenter('/notifications', traineeUser);
+      await waitFor(() => {
+        expect(screen.getByText('تنبيه توجيه غير مصرح للمتدرب')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('تنبيه توجيه غير مصرح للمتدرب'));
+      await waitFor(() => {
+        expect(screen.getByTestId('trainee-groups-list-page')).toBeInTheDocument();
+      });
+    });
   });
 });
 

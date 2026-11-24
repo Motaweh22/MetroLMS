@@ -8,6 +8,7 @@ import { Card } from '@/shared/ui/Card';
 import { Icon } from '@/shared/ui/Icon';
 import { useToast } from '@/shared/ui/Toast';
 import {
+  DEFAULT_LEADERSHIP_TITLES,
   USER_ROLE_LABELS_AR,
   USER_STATUS_LABELS_AR,
   formatMaritalStatusByGender,
@@ -20,7 +21,17 @@ import {
 } from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
 import { StyledSelect } from './StyledSelect';
-import { sanitizeDigitsOnly, sanitizePhoneInput } from '@/core/utils/numericInput';
+import { PasswordStrengthPanel } from './PasswordStrengthPanel';
+import {
+  getEgyptMobileLiveError,
+  sanitizeDigitsOnly,
+  sanitizeEgyptMobile11,
+} from '@/core/utils/numericInput';
+import {
+  copyTextToClipboard,
+  evaluatePasswordStrength,
+  generateStrongPassword,
+} from '@/core/utils/passwordPolicy';
 
 interface CatalogItem {
   id: number | string;
@@ -33,7 +44,7 @@ interface CatalogItem {
 
 interface FormState {
   name: string;
-  username: string;
+  nameEn: string;
   email: string;
   phone: string;
   gender: UserGender;
@@ -46,17 +57,19 @@ interface FormState {
   appointmentDate: string;
   serviceEndDate: string;
   metroLineId: string;
+  employeeNumber: string;
   jobTitle: string;
   leadershipTitle: string;
   department: string;
   role: UserRole;
   status: UserStatus;
   password: string;
+  confirmPassword: string;
 }
 
 interface FormErrors {
   name?: string;
-  username?: string;
+  nameEn?: string;
   email?: string;
   phone?: string;
   nationalId?: string;
@@ -64,13 +77,16 @@ interface FormErrors {
   address?: string;
   educationalQualification?: string;
   appointmentDate?: string;
+  serviceEndDate?: string;
   jobTitle?: string;
   department?: string;
+  password?: string;
+  confirmPassword?: string;
 }
 
 const INITIAL_FORM_STATE: FormState = {
   name: '',
-  username: '',
+  nameEn: '',
   email: '',
   phone: '',
   gender: 'male',
@@ -83,12 +99,14 @@ const INITIAL_FORM_STATE: FormState = {
   appointmentDate: '',
   serviceEndDate: '',
   metroLineId: '',
+  employeeNumber: '',
   jobTitle: '',
   leadershipTitle: '',
   department: '',
   role: 'user',
   status: 'active',
   password: '',
+  confirmPassword: '',
 };
 
 const INPUT_BASE =
@@ -160,16 +178,26 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 }) => {
   const toast = useToast();
   const { user: currentUser } = useAuth();
-  const [formData, setFormData] = useState<FormState>(INITIAL_FORM_STATE);
+  const [formData, setFormData] = useState<FormState>(() => {
+    const initialPw = generateStrongPassword(12);
+    return {
+      ...INITIAL_FORM_STATE,
+      password: initialPw,
+      confirmPassword: initialPw,
+    };
+  });
   const [errors, setErrors] = useState<FormErrors>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(true);
   const [maritalStatuses, setMaritalStatuses] = useState<CatalogItem[]>([]);
   const [militaryStatuses, setMilitaryStatuses] = useState<CatalogItem[]>([]);
   const [metroLines, setMetroLines] = useState<CatalogItem[]>([]);
   const [departmentRecords, setDepartmentRecords] = useState<CatalogItem[]>([]);
   const [jobTitleRecords, setJobTitleRecords] = useState<CatalogItem[]>([]);
+  const [leadershipTitleOptions, setLeadershipTitleOptions] = useState<string[]>([...DEFAULT_LEADERSHIP_TITLES]);
   const [hasEdited, setHasEdited] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
   const jobDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -227,13 +255,20 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
       apiClient<{ metroLines?: CatalogItem[] }>('/api/admin/organization/metro-lines'),
       apiClient<{ departments?: CatalogItem[] }>('/api/admin/organization/departments'),
       apiClient<{ jobTitles?: CatalogItem[] }>('/api/admin/organization/job-titles'),
-    ]).then(([maritalRes, militaryRes, lineRes, deptRes, jobRes]) => {
+      apiClient<{ leadershipTitles?: CatalogItem[] }>('/api/admin/organization/leadership-titles'),
+    ]).then(([maritalRes, militaryRes, lineRes, deptRes, jobRes, leadershipRes]) => {
       if (!active) return;
       const mList = maritalRes.status === 'fulfilled' ? maritalRes.value.maritalStatuses || [] : [];
       const milList = militaryRes.status === 'fulfilled' ? militaryRes.value.militaryStatuses || [] : [];
       const lList = lineRes.status === 'fulfilled' ? lineRes.value.metroLines || [] : [];
       const dRecords = deptRes.status === 'fulfilled' ? deptRes.value.departments || [] : [];
       const jRecords = jobRes.status === 'fulfilled' ? jobRes.value.jobTitles || [] : [];
+      const ltRecords =
+        leadershipRes.status === 'fulfilled' ? leadershipRes.value.leadershipTitles || [] : [];
+      const ltNames = ltRecords.map((lt) => lt.nameAr || lt.name || '').filter(Boolean);
+      if (ltNames.length > 0) {
+        setLeadershipTitleOptions(ltNames);
+      }
       const dList = dRecords.map((d) => d.nameAr || d.name || '').filter(Boolean);
       const jList = jRecords.map((j) => j.nameAr || j.name || '').filter(Boolean);
       setMaritalStatuses(mList);
@@ -321,20 +356,17 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
       errs.name = 'يرجى إدخال الاسم الكامل للمستخدم';
     }
 
-    if (!formData.username.trim()) {
-      errs.username = 'يرجى إدخال اسم المستخدم';
-    } else if (!/^[a-zA-Z0-9_.-]+$/.test(formData.username.trim())) {
-      errs.username = 'اسم المستخدم يجب أن يحتوي على أحرف إنجليزية وأرقام وشرطة سفلية فقط';
+    if (formData.nameEn.trim() && !/^[A-Za-z0-9\s.'-]+$/.test(formData.nameEn.trim())) {
+      errs.nameEn = 'يرجى كتابة الاسم بالإنجليزية باستخدام حروف إنجليزية فقط';
     }
 
     if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       errs.email = 'صيغة البريد الإلكتروني غير صحيحة';
     }
 
-    if (!formData.phone.trim()) {
-      errs.phone = 'يرجى إدخال رقم الهاتف (مثال: 010XXXXXXXX أو +2010XXXXXXXX)';
-    } else if (!/^(01[0125][0-9]{8}|\+201[0125][0-9]{8})$/.test(formData.phone.trim())) {
-      errs.phone = 'رقم الهاتف يجب أن يكون رقم محمول مصري صحيح (010/011/012/015)';
+    const phoneErr = getEgyptMobileLiveError(formData.phone, true);
+    if (phoneErr) {
+      errs.phone = phoneErr;
     }
 
     if (!/^[0-9]{14}$/.test(formData.nationalId.trim())) {
@@ -357,12 +389,35 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
       errs.appointmentDate = 'يرجى تحديد تاريخ التعيين';
     }
 
+    if (
+      formData.serviceEndDate &&
+      formData.appointmentDate &&
+      formData.serviceEndDate < formData.appointmentDate
+    ) {
+      errs.serviceEndDate = 'تاريخ انتهاء الخدمة لا يمكن أن يسبق تاريخ التعيين';
+    }
+
     if (!formData.jobTitle.trim()) {
       errs.jobTitle = 'يرجى تحديد أو إدخال المسمى الوظيفي';
     }
 
     if (!formData.department.trim()) {
       errs.department = 'يرجى اختيار القطاع أو الإدارة';
+    }
+
+    if (!formData.password) {
+      errs.password = 'يرجى إدخال كلمة المرور أو استخدام زر التوليد التلقائي';
+    } else {
+      const pwStrength = evaluatePasswordStrength(formData.password, {
+        phone: formData.phone,
+        name: formData.name,
+      });
+      if (!pwStrength.isValidForSave && pwStrength.errorMessage) {
+        errs.password = pwStrength.errorMessage;
+      }
+      if (formData.password !== formData.confirmPassword) {
+        errs.confirmPassword = 'كلمة المرور وتأكيدها غير متطابقتين';
+      }
     }
 
     setErrors(errs);
@@ -374,13 +429,20 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
     if (isSubmitting) return;
     setGeneralError(null);
 
-    if (!validate()) return;
+    if (!validate()) {
+      toast.error('يرجى مراجعة الحقول الإلزامية المميزة باللون الأحمر قبل الحفظ.');
+      if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const payload: CreateUserRequestDTO = {
         name: formData.name.trim(),
-        username: formData.username.trim().toLowerCase(),
+        nameEn: formData.nameEn.trim() || undefined,
+        username: formData.phone.trim(),
         email: formData.email.trim() ? formData.email.trim().toLowerCase() : undefined,
         phone: formData.phone.trim(),
         gender: formData.gender,
@@ -393,12 +455,13 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
         appointmentDate: formData.appointmentDate,
         serviceEndDate: formData.serviceEndDate || null,
         metroLineId: formData.metroLineId || undefined,
+        employeeNumber: formData.employeeNumber.trim() || undefined,
         jobTitle: formData.jobTitle.trim(),
         leadershipTitle: formData.leadershipTitle.trim() || undefined,
         department: formData.department.trim(),
         role: formData.role,
         status: formData.status,
-        password: formData.password.trim() || undefined,
+        password: formData.password || undefined,
       };
 
       const newUser = await userManagementApi.createUser(payload);
@@ -417,6 +480,10 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
       const msg =
         err instanceof Error ? err.message : 'تعذر إضافة المستخدم. يرجى المحاولة مرة أخرى.';
       setGeneralError(msg);
+      toast.error(msg);
+      if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -457,22 +524,22 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="add-user-username" className="text-xs font-semibold text-text">
-              اسم المستخدم <span className="text-danger" aria-hidden="true">*</span>
+            <label htmlFor="add-user-name-en" className="text-xs font-semibold text-text">
+              الاسم بالإنجليزية <span className="text-text-muted font-normal">(اختياري)</span>
             </label>
             <input
-              id="add-user-username"
-              data-testid="add-user-username-input"
+              id="add-user-name-en"
+              data-testid="add-user-name-en-input"
               type="text"
-              required
               disabled={isSubmitting}
               dir="ltr"
-              placeholder="e.g. tarek_abdelrahman"
-              value={formData.username}
-              onChange={(e) => updateField('username', e.target.value)}
-              className={inputClass(errors.username, 'text-left')}
+              maxLength={255}
+              placeholder="e.g. Tarek Mohamed Abdelrahman"
+              value={formData.nameEn}
+              onChange={(e) => updateField('nameEn', e.target.value)}
+              className={inputClass(errors.nameEn, 'text-left')}
             />
-            {errors.username && <span className="text-[11px] text-danger">{errors.username}</span>}
+            {errors.nameEn && <span className="text-[11px] text-danger">{errors.nameEn}</span>}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -507,23 +574,42 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-phone" className="text-xs font-semibold text-text">
-              رقم الهاتف <span className="text-danger" aria-hidden="true">*</span>
+              رقم الهاتف (11 رقماً) <span className="text-danger" aria-hidden="true">*</span>
             </label>
             <input
               id="add-user-phone"
               data-testid="add-user-phone-input"
               type="tel"
-              inputMode="tel"
-              maxLength={15}
+              inputMode="numeric"
+              maxLength={11}
               required
               disabled={isSubmitting}
               dir="ltr"
-              placeholder="010XXXXXXXX"
+              placeholder="01012345678"
               value={formData.phone}
-              onChange={(e) => updateField('phone', sanitizePhoneInput(e.target.value, 15))}
+              onChange={(e) => {
+                const nextPhone = sanitizeEgyptMobile11(e.target.value);
+                setHasEdited(true);
+                setFormData((prev) => ({ ...prev, phone: nextPhone }));
+                setErrors((prev) => ({
+                  ...prev,
+                  phone: getEgyptMobileLiveError(nextPhone, phoneTouched),
+                }));
+              }}
+              onBlur={() => {
+                setPhoneTouched(true);
+                setErrors((prev) => ({
+                  ...prev,
+                  phone: getEgyptMobileLiveError(formData.phone, true),
+                }));
+              }}
               className={inputClass(errors.phone, 'text-left')}
             />
-            {errors.phone && <span className="text-[11px] text-danger">{errors.phone}</span>}
+            {errors.phone && (
+              <span className="text-[11px] text-danger" data-testid="add-user-phone-error">
+                {errors.phone}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -631,6 +717,24 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
         iconName="calendar"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="add-user-employee-number" className="text-xs font-semibold text-text">
+              الرقم الوظيفي <span className="text-text-muted font-normal">(اختياري)</span>
+            </label>
+            <input
+              id="add-user-employee-number"
+              data-testid="add-user-employee-number-input"
+              type="text"
+              dir="ltr"
+              maxLength={50}
+              disabled={isSubmitting}
+              placeholder="مثال: EMP-1042"
+              value={formData.employeeNumber}
+              onChange={(e) => updateField('employeeNumber', e.target.value)}
+              className={inputClass(undefined, 'text-left')}
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-dept" className="text-xs font-semibold text-text">
               القطاع / الإدارة <span className="text-danger" aria-hidden="true">*</span>
@@ -767,12 +871,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               emptyMessage="لا توجد مسميات قيادية"
               options={[
                 { value: '', label: '— بدون (فارغ) —' },
-                { value: 'رئيس قطاع / رئيس إدارة مركزية', label: 'رئيس قطاع / رئيس إدارة مركزية' },
-                { value: 'مدير عام', label: 'مدير عام' },
-                { value: 'مدير إدارة', label: 'مدير إدارة' },
-                { value: 'رئيس قسم / رئيس وحدة', label: 'رئيس قسم / رئيس وحدة' },
-                { value: 'مشرف / رئيس وردية', label: 'مشرف / رئيس وردية' },
-                { value: 'قائد فريق / منسق', label: 'قائد فريق / منسق' },
+                ...leadershipTitleOptions.map((title) => ({ value: title, label: title })),
               ]}
             />
           </div>
@@ -845,8 +944,11 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               disabled={isSubmitting}
               value={formData.serviceEndDate}
               onChange={(e) => updateField('serviceEndDate', e.target.value)}
-              className={inputClass()}
+              className={inputClass(errors.serviceEndDate)}
             />
+            {errors.serviceEndDate && (
+              <span className="text-[11px] text-danger">{errors.serviceEndDate}</span>
+            )}
           </div>
         </div>
       </SectionWrapper>
@@ -933,21 +1035,149 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
             />
           </div>
 
-          <div className="flex flex-col gap-1.5 md:col-span-2">
-            <label htmlFor="add-user-password" className="text-xs font-semibold text-text">
-              كلمة المرور المبدئية{' '}
-              <span className="text-text-muted text-[11px]">(اختياري — الافتراضي Metro@12345)</span>
-            </label>
-            <input
-              id="add-user-password"
-              data-testid="add-user-password-input"
-              type="password"
-              disabled={isSubmitting}
-              dir="ltr"
-              placeholder="كلمة مرور الدخول المبدئية"
-              value={formData.password}
-              onChange={(e) => updateField('password', e.target.value)}
-              className={inputClass(undefined, 'text-left')}
+          <div className="md:col-span-2 pt-3 border-t border-border space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-xs font-semibold text-text">
+                  كلمة المرور المبدئية <span className="text-danger" aria-hidden="true">*</span>
+                </div>
+                <p className="text-[11px] text-text-muted mt-0.5">
+                  تُدار كلمات المرور من قِبل مدير النظام فقط؛ يمكنك تعديل الكلمة أو توليد كلمة مرور قوية ونسخها للمستخدم.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    const generated = generateStrongPassword(12);
+                    setHasEdited(true);
+                    setShowPassword(true);
+                    setFormData((prev) => ({
+                      ...prev,
+                      password: generated,
+                      confirmPassword: generated,
+                    }));
+                    setErrors((prev) => ({
+                      ...prev,
+                      password: undefined,
+                      confirmPassword: undefined,
+                    }));
+                  }}
+                  data-testid="add-user-generate-password-btn"
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-1.5 cursor-pointer font-medium"
+                >
+                  <Icon name="refresh" size="sm" />
+                  <span>توليد كلمة مرور</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting || !formData.password}
+                  onClick={async () => {
+                    const ok = await copyTextToClipboard(formData.password);
+                    if (ok) {
+                      toast.success('تم نسخ كلمة المرور المبدئية بنجاح.');
+                    } else {
+                      toast.error('تعذر النسخ التلقائي؛ يمكنك تحديد كلمة المرور ونسخها يدوياً.');
+                    }
+                  }}
+                  data-testid="add-user-copy-password-btn"
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-bg transition-colors inline-flex items-center gap-1.5 cursor-pointer font-medium disabled:opacity-50"
+                >
+                  <Icon name="copy" size="sm" />
+                  <span>نسخ</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  data-testid="add-user-toggle-password-btn"
+                  className="text-xs px-2 py-1.5 rounded-lg text-primary hover:bg-primary/5 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Icon name={showPassword ? 'eyeOff' : 'eye'} size="sm" />
+                  <span>{showPassword ? 'إخفاء' : 'إظهار'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="add-user-password" className="text-xs font-semibold text-text">
+                  كلمة المرور <span className="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="add-user-password"
+                  data-testid="add-user-password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  required
+                  disabled={isSubmitting}
+                  dir="ltr"
+                  placeholder="8 أحرف على الأقل (حرف كبير وصغير ورقم)"
+                  value={formData.password}
+                  onChange={(e) => {
+                    const nextPw = e.target.value;
+                    setHasEdited(true);
+                    setFormData((prev) => ({ ...prev, password: nextPw }));
+                    setErrors((prev) => ({
+                      ...prev,
+                      password: undefined,
+                      confirmPassword:
+                        formData.confirmPassword && nextPw !== formData.confirmPassword
+                          ? 'كلمة المرور وتأكيدها غير متطابقتين'
+                          : undefined,
+                    }));
+                  }}
+                  className={inputClass(errors.password, 'text-left font-mono')}
+                />
+                {errors.password && (
+                  <span className="text-[11px] text-danger" data-testid="add-user-password-error">
+                    {errors.password}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="add-user-confirm-password" className="text-xs font-semibold text-text">
+                  تأكيد كلمة المرور <span className="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="add-user-confirm-password"
+                  data-testid="add-user-confirm-password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  required
+                  disabled={isSubmitting}
+                  dir="ltr"
+                  placeholder="أعد إدخال كلمة المرور"
+                  value={formData.confirmPassword}
+                  onChange={(e) => {
+                    const nextConfirm = e.target.value;
+                    setHasEdited(true);
+                    setFormData((prev) => ({ ...prev, confirmPassword: nextConfirm }));
+                    setErrors((prev) => ({
+                      ...prev,
+                      confirmPassword:
+                        nextConfirm && nextConfirm !== formData.password
+                          ? 'كلمة المرور وتأكيدها غير متطابقتين'
+                          : undefined,
+                    }));
+                  }}
+                  className={inputClass(errors.confirmPassword, 'text-left font-mono')}
+                />
+                {errors.confirmPassword && (
+                  <span className="text-[11px] text-danger" data-testid="add-user-confirm-password-error">
+                    {errors.confirmPassword}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <PasswordStrengthPanel
+              password={formData.password}
+              phone={formData.phone}
+              name={formData.name}
+              testIdPrefix="add-user-password-strength"
             />
           </div>
         </div>

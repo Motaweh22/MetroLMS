@@ -236,7 +236,7 @@ export const CourseBuilderPage: React.FC = () => {
       if ((res as any)?.approvalRequired) {
         toast.info(
           (res as any).message ||
-            'تم إرسال طلب حفظ تعديلات المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+          'تم إرسال طلب حفظ تعديلات المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
         );
         return;
       }
@@ -313,8 +313,8 @@ export const CourseBuilderPage: React.FC = () => {
 
   const isPendingReview = Boolean(
     course &&
-      (course.status === 'pending_admin' ||
-        (isPublished && course.isUpdatePendingApproval === true))
+    (course.status === 'pending_admin' ||
+      (isPublished && course.isUpdatePendingApproval === true))
   );
 
   const isResubmission = Boolean(
@@ -326,12 +326,24 @@ export const CourseBuilderPage: React.FC = () => {
   const isDirectPublisher =
     user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer';
 
-  const handleDirectPublish = async () => {
-    if (!course || !courseId) return;
+  const validateReadyForSubmission = (dirtyWarning: string): boolean => {
+    if (!course || !courseId) return false;
     if (isDirty) {
-      toast.warning('يرجى حفظ المسودة أولاً قبل الاعتماد والنشر.');
-      return;
+      toast.warning(dirtyWarning);
+      return false;
     }
+    if (!course.description?.trim()) {
+      const msg = 'وصف المقرر وأهدافه التعليمية مطلوب قبل تقديم المقرر للمراجعة أو النشر.';
+      setErrorMessage(msg);
+      toast.warning(msg);
+      return false;
+    }
+    return true;
+  };
+
+  const handleDirectPublish = async () => {
+    if (!validateReadyForSubmission('يرجى حفظ المسودة أولاً قبل الاعتماد والنشر.')) return;
+    if (!course || !courseId) return;
     setIsSubmittingReview(true);
     setErrorMessage(null);
     try {
@@ -361,11 +373,8 @@ export const CourseBuilderPage: React.FC = () => {
 
   // Handle Submit / Resubmit for Review (Phase 7)
   const handleSubmitForReview = async () => {
+    if (!validateReadyForSubmission('يرجى حفظ المسودة أولاً قبل تقديم المقرر للمراجعة والاعتماد.')) return;
     if (!course || !courseId) return;
-    if (isDirty) {
-      toast.warning('يرجى حفظ المسودة أولاً قبل تقديم المقرر للمراجعة والاعتماد.');
-      return;
-    }
     setIsSubmittingReview(true);
     setErrorMessage(null);
     try {
@@ -373,7 +382,7 @@ export const CourseBuilderPage: React.FC = () => {
       if ((res as any)?.approvalRequired) {
         toast.info(
           (res as any).message ||
-            'تم إرسال طلب تقديم المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
+          'تم إرسال طلب تقديم المقرر للاعتماد بنجاح؛ بانتظار موافقة مدير النظام.'
         );
         return;
       }
@@ -389,8 +398,14 @@ export const CourseBuilderPage: React.FC = () => {
     }
   };
 
-  // 1. Unauthenticated, Trainee, or Scoped Assistant Lecturer Guard
-  if (!authLoading && (!isAuthenticated || user?.role === 'user' || previewRole === 'assistant_lecturer')) {
+  // 1. Unauthenticated, Trainee, Assistant Admin, or Scoped Assistant Lecturer Guard
+  if (
+    !authLoading &&
+    (!isAuthenticated ||
+      user?.role === 'user' ||
+      user?.role === 'assistant_admin' ||
+      previewRole === 'assistant_lecturer')
+  ) {
     return (
       <div className="max-w-2xl mx-auto py-16 px-4 text-center space-y-4" data-testid="builder-access-denied">
         <div className="w-16 h-16 rounded-full bg-danger/10 text-danger flex items-center justify-center mx-auto">
@@ -589,10 +604,10 @@ export const CourseBuilderPage: React.FC = () => {
                     ? 'جاري النشر...'
                     : 'جاري التقديم...'
                   : isDirectPublisher
-                  ? 'اعتماد ونشر مباشرة'
-                  : isResubmission
-                  ? 'إعادة التقديم للاعتماد'
-                  : 'تقديم للاعتماد'}
+                    ? 'اعتماد ونشر مباشرة'
+                    : isResubmission
+                      ? 'إعادة التقديم للاعتماد'
+                      : 'تقديم للاعتماد'}
               </span>
             </Button>
           )}
@@ -697,11 +712,10 @@ export const CourseBuilderPage: React.FC = () => {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${
-                activeTab === tab.id
-                  ? 'border-primary text-primary bg-primary/5'
-                  : 'border-transparent text-text-muted hover:text-text hover:bg-neutral-light/50'
-              }`}
+              className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${activeTab === tab.id
+                ? 'border-primary text-primary bg-primary/5'
+                : 'border-transparent text-text-muted hover:text-text hover:bg-neutral-light/50'
+                }`}
               data-testid={`builder-tab-${tab.id}`}
             >
               <Icon name={tab.icon} size="sm" />
@@ -836,7 +850,11 @@ export const CourseBuilderPage: React.FC = () => {
                             </Badge>
                           )}
                           <span className="text-xs font-semibold text-text">
-                            بواسطة: {entry.actorName} ({entry.actorRole === 'admin' ? 'مدير نظام ومراجع جودة' : 'محاضر'})
+                            بواسطة: {entry.actorName} (
+                            {entry.actorRole === 'admin' || entry.actorRole === 'super_admin' || entry.actorRole === 'developer'
+                              ? 'مدير نظام ومراجع جودة'
+                              : 'محاضر'}
+                            )
                           </span>
                         </div>
                         <span className="text-xs text-text-muted font-mono">

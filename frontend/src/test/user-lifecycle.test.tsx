@@ -425,8 +425,8 @@ describe('Increment 11 — Phase 2: User Lifecycle, Role Mutations & Account Sta
       fireEvent.change(screen.getByTestId('add-user-name-input'), {
         target: { value: 'م. إبراهيم كمال' },
       });
-      fireEvent.change(screen.getByTestId('add-user-username-input'), {
-        target: { value: 'ibrahim_kamal' },
+      fireEvent.change(screen.getByTestId('add-user-name-en-input'), {
+        target: { value: 'Ibrahim Kamal' },
       });
       fireEvent.change(screen.getByTestId('add-user-phone-input'), {
         target: { value: '01012345678' },

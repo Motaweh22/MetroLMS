@@ -219,3 +219,121 @@ class Bp11CommunicationsAndSchedulingTests(TestCase):
             1,
         )
 
+    def test_admin_and_lecturer_notifications_end_to_end(self) -> None:
+        lec_client = Client()
+        lec_client.force_login(self.lecturer)
+        adm_client = Client()
+        adm_client.force_login(self.admin)
+        trn_client = Client()
+        trn_client.force_login(self.trainee)
+
+        # 1. Lecturer creates & submits course -> Admin receives content_pending_review
+        c_res = lec_client.post(
+            "/api/lecturer/courses",
+            data={"title": "دورة الإشعارات الجديدة", "courseType": "main", "description": "وصف متكامل"},
+            content_type="application/json",
+        )
+        self.assertEqual(c_res.status_code, 201)
+        cid = c_res.json()["data"]["course"]["id"]
+        sub_res = lec_client.post(f"/api/admin/courses/{cid}/review/submit", data={}, content_type="application/json")
+        self.assertEqual(sub_res.status_code, 201)
+
+        adm_notifs = adm_client.get("/api/notifications").json()["data"]["notifications"]
+        pending_notifs = [n for n in adm_notifs if n["type"] == "content_pending_review" and n["courseId"] == str(cid)]
+        self.assertEqual(len(pending_notifs), 1)
+        self.assertTrue(pending_notifs[0]["actionRequired"])
+        self.assertEqual(pending_notifs[0]["targetUrl"], f"/admin/review/{cid}")
+
+        # 2. Admin rejects/returns course -> Lecturer receives content_rejected
+        rej_res = adm_client.post(
+            f"/api/admin/review/{cid}/decision",
+            data={"outcome": "rejected", "summaryMessage": "يرجى إضافة مراجع"},
+            content_type="application/json",
+        )
+        self.assertEqual(rej_res.status_code, 200)
+        lec_notifs = lec_client.get("/api/notifications").json()["data"]["notifications"]
+        rej_notifs = [n for n in lec_notifs if n["type"] == "content_rejected" and n["courseId"] == str(cid)]
+        self.assertEqual(len(rej_notifs), 1)
+        self.assertEqual(rej_notifs[0]["targetUrl"], f"/lecturer/builder/{cid}")
+        self.assertTrue(rej_notifs[0]["actionRequired"])
+
+        # 3. Resubmit & Approve -> Lecturer receives content_approved
+        self.assertEqual(
+            lec_client.post(f"/api/admin/courses/{cid}/review/submit", data={}, content_type="application/json").status_code,
+            201,
+        )
+        app_res = adm_client.post(
+            f"/api/admin/review/{cid}/decision",
+            data={"outcome": "approved", "approvalNote": "ممتاز"},
+            content_type="application/json",
+        )
+        self.assertEqual(app_res.status_code, 200)
+        lec_notifs2 = lec_client.get("/api/notifications").json()["data"]["notifications"]
+        app_notifs = [n for n in lec_notifs2 if n["type"] == "content_approved" and n["courseId"] == str(cid)]
+        self.assertEqual(len(app_notifs), 1)
+        self.assertEqual(app_notifs[0]["targetUrl"], f"/courses/{cid}")
+
+        # 4. Comment on published self.course -> Lecturer gets new_comment; Report -> Admin gets comment_reported
+        self.course.access_mode = "all_trainees"
+        self.course.save(update_fields=["access_mode"])
+        cmt_res = trn_client.post(
+            f"/api/courses/{self.course.id}/comments",
+            data={"body": "ملاحظة على الدرس"},
+            content_type="application/json",
+        )
+        self.assertEqual(cmt_res.status_code, 201)
+        cmt_id = cmt_res.json()["data"]["comment"]["id"]
+
+        # Self-reporting own comment is strictly prohibited
+        self_rep = trn_client.post(
+            f"/api/comments/{cmt_id}/report",
+            data={"reason": "inappropriate_content"},
+            content_type="application/json",
+        )
+        self.assertEqual(self_rep.status_code, 400)
+        self.assertEqual(self_rep.json()["code"], "SELF_REPORT_PROHIBITED")
+
+        # Another user (lecturer) reports the comment with preset reason + custom notes
+        rep_res = lec_client.post(
+            f"/api/comments/{cmt_id}/report",
+            data={"reason": "misinformation", "notes": "المعلومة غير مطابقة لتعليمات التشغيل"},
+            content_type="application/json",
+        )
+        self.assertEqual(rep_res.status_code, 201)
+        rep_data = rep_res.json()["data"]
+        self.assertTrue(rep_data["reported"])
+        self.assertEqual(rep_data["reportReason"], "misinformation")
+        self.assertEqual(rep_data["reportReasonLabelAr"], "معلومات خاطئة")
+        self.assertEqual(rep_data["reportNotes"], "المعلومة غير مطابقة لتعليمات التشغيل")
+
+        lec_cmt_notifs = [
+            n
+            for n in lec_client.get("/api/notifications").json()["data"]["notifications"]
+            if n["type"] == "new_comment" and n["commentId"] == str(cmt_id)
+        ]
+        self.assertEqual(len(lec_cmt_notifs), 1)
+
+        adm_rep_notifs = [
+            n
+            for n in adm_client.get("/api/notifications").json()["data"]["notifications"]
+            if n["type"] == "comment_reported" and n["commentId"] == str(cmt_id)
+        ]
+        self.assertEqual(len(adm_rep_notifs), 1)
+        self.assertEqual(adm_rep_notifs[0]["targetUrl"], "/admin/comment-moderation")
+        self.assertTrue(adm_rep_notifs[0]["actionRequired"])
+        self.assertIn("معلومات خاطئة", adm_rep_notifs[0]["body"])
+        self.assertIn("المعلومة غير مطابقة لتعليمات التشغيل", adm_rep_notifs[0]["body"])
+        self.assertEqual(adm_rep_notifs[0]["metadata"]["reportReasonLabelAr"], "معلومات خاطئة")
+        self.assertEqual(adm_rep_notifs[0]["metadata"]["reportNotes"], "المعلومة غير مطابقة لتعليمات التشغيل")
+
+        # Admin reported-comments queue & summary reflect reason, notes, and reporter
+        reported_list = adm_client.get("/api/admin/comments/reported").json()["data"]
+        self.assertEqual(len(reported_list), 1)
+        self.assertEqual(reported_list[0]["reportReason"], "misinformation")
+        self.assertEqual(reported_list[0]["reportReasonLabelAr"], "معلومات خاطئة")
+        self.assertEqual(reported_list[0]["reportNotes"], "المعلومة غير مطابقة لتعليمات التشغيل")
+        self.assertEqual(reported_list[0]["reportedByName"], self.lecturer.full_name)
+
+        summary = adm_client.get("/api/admin/comments/summary").json()["data"]
+        self.assertEqual(summary["reportedCommentsCount"], 1)
+

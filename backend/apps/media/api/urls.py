@@ -9,10 +9,12 @@ from apps.media.api.views.media import (
     MediaReferenceLifecycleView,
     MediaReferenceListCreateView,
     MediaReferenceStreamView,
+    MediaStreamTicketView,
 )
 
 urlpatterns = [
     path("media/assets/upload", MediaAssetUploadView.as_view(), name="media-asset-upload"),
+    path("media/stream-ticket", MediaStreamTicketView.as_view(), name="media-stream-ticket"),
     path("media/assets/<int:asset_id>", MediaAssetDetailView.as_view(), name="media-asset-detail"),
     path("media/assets/<int:asset_id>/stream", MediaAssetStreamView.as_view(), name="media-asset-stream"),
     path("media/references", MediaReferenceListCreateView.as_view(), name="media-reference-create"),

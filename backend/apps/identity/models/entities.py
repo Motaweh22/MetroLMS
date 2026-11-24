@@ -93,6 +93,7 @@ class User(AbstractBaseUser):
     )
     status = models.CharField(max_length=20, choices=USER_STATUS_CHOICES, default="Active", db_default="Active")
     full_name = models.CharField(max_length=200, validators=[validate_non_empty_text])
+    full_name_en = models.CharField(max_length=255, null=True, blank=True)
     gender = models.CharField(
         max_length=10,
         choices=[("male", "ذكر"), ("female", "أنثى")],
@@ -124,6 +125,7 @@ class User(AbstractBaseUser):
         related_name="users",
     )
     email = models.EmailField(max_length=254, null=True, blank=True)
+    employee_number = models.CharField(max_length=50, null=True, blank=True)
     leadership_title = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -161,6 +163,11 @@ class User(AbstractBaseUser):
                 fields=["email"],
                 condition=Q(email__isnull=False),
                 name="uq_identity_user_email_not_null",
+            ),
+            models.UniqueConstraint(
+                fields=["employee_number"],
+                condition=Q(employee_number__isnull=False),
+                name="uq_identity_user_employee_number_not_null",
             ),
         ]
 

@@ -102,7 +102,9 @@ export const UserManagementPage: React.FC = () => {
       result = result.filter((u) => {
         const matchesDirect =
           (u.name || '').toLowerCase().includes(q) ||
+          (u.nameEn || '').toLowerCase().includes(q) ||
           (u.username || '').toLowerCase().includes(q) ||
+          (u.employeeNumber || '').toLowerCase().includes(q) ||
           (u.id || '').toLowerCase().includes(q) ||
           (u.email || '').toLowerCase().includes(q) ||
           (u.phone || '').includes(q) ||

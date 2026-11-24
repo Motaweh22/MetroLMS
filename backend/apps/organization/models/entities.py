@@ -57,6 +57,20 @@ class MetroLine(models.Model):
         return self.name_ar
 
 
+class LeadershipTitleCatalog(models.Model):
+    """Admin-managed Leadership / Supervisory Title catalog."""
+
+    id = models.BigAutoField(primary_key=True)
+    name_ar = models.CharField(max_length=100, unique=True)
+    name_en = models.CharField(max_length=100, null=True, blank=True)
+
+    class Meta:
+        db_table = "organization_leadershiptitlecatalog"
+
+    def __str__(self) -> str:
+        return self.name_ar
+
+
 class MaritalStatusCatalog(models.Model):
     """Admin-managed Marital Status catalog."""
 

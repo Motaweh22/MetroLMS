@@ -7,7 +7,11 @@ import { Button } from '@/shared/ui/Button';
 import { Icon } from '@/shared/ui/Icon';
 import { brandConfig } from '@/shared/config/brand';
 import { buildWhatsAppUrl, usePublicSupportContacts } from '@/features/whatsapp';
-import { sanitizePhoneInput } from '@/core/utils/numericInput';
+import {
+  EGYPT_LOCAL_MOBILE_RE,
+  getEgyptMobileLiveError,
+  sanitizeEgyptMobile11,
+} from '@/core/utils/numericInput';
 
 const SIGNUP_DRAFT_MESSAGE =
   'مرحبًا، أرغب في إنشاء حساب جديد على منصة التدريب الإلكتروني. يرجى إرشادي إلى خطوات التسجيل.';
@@ -37,14 +41,11 @@ const showRoleTestCards =
   !import.meta.env.PROD || import.meta.env.VITE_SHOW_TEST_CARDS === 'true';
 
 function normalizeEgyptPhone(raw: string): string {
-  const cleaned = raw.trim().replace(/[\s\-()]/g, '');
-  if (/^01[0125][0-9]{8}$/.test(cleaned)) {
-    return `+2${cleaned}`;
+  const local = sanitizeEgyptMobile11(raw);
+  if (EGYPT_LOCAL_MOBILE_RE.test(local)) {
+    return `+2${local}`;
   }
-  if (/^201[0125][0-9]{8}$/.test(cleaned)) {
-    return `+${cleaned}`;
-  }
-  return cleaned;
+  return local;
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
@@ -54,6 +55,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [isCapsLockOn, setIsCapsLockOn] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ phone?: string; password?: string }>({});
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [showSignupModal, setShowSignupModal] = useState(false);
@@ -77,12 +80,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
   const validate = (): boolean => {
     const errors: { phone?: string; password?: string } = {};
-    const normalizedPhone = normalizeEgyptPhone(phone);
+    const phoneErr = getEgyptMobileLiveError(phone, true);
 
     if (!phone.trim()) {
-      errors.phone = 'يرجى إدخال رقم الموبايل';
-    } else if (!/^\+201[0125][0-9]{8}$/.test(normalizedPhone)) {
-      errors.phone = 'يرجى إدخال رقم موبايل مصري صحيح (مثال: 01012345678)';
+      errors.phone = 'يرجى إدخال رقم الموبايل (11 رقماً، مثال: 01012345678)';
+    } else if (phoneErr) {
+      errors.phone = phoneErr;
     }
 
     if (!password) {
@@ -115,9 +118,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
     if (isSubmitting) return;
     setPhone(account.phone);
     setPassword(account.password);
+    setPhoneTouched(false);
     setFieldErrors({});
     clearError();
   };
+
+  const forgotDraftMessage = phone.trim()
+    ? `${FORGOT_PASSWORD_DRAFT_MESSAGE}\nرقم الهاتف المسجل: ${phone.trim()}`
+    : FORGOT_PASSWORD_DRAFT_MESSAGE;
 
   return (
     <div className="login-surface-wrapper">
@@ -202,27 +210,40 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
           <form className="login-form" id="login-form" onSubmit={handleSubmit} noValidate>
             {/* Mobile Phone Input Group */}
             <div className="input-group">
-              <label htmlFor="phone">رقم الموبايل</label>
+              <label htmlFor="phone">
+                رقم الموبايل <span className="text-danger" aria-hidden="true">*</span>
+              </label>
               <div className="input-wrapper">
                 <input
                   type="tel"
-                  inputMode="tel"
-                  maxLength={15}
+                  inputMode="numeric"
+                  maxLength={11}
                   id="phone"
                   name="phone"
                   dir="ltr"
-                  placeholder="01XXXXXXXXX"
+                  placeholder="01012345678"
                   required
                   autoComplete="tel"
                   value={phone}
                   disabled={isSubmitting}
                   className={fieldErrors.phone ? 'input-has-error' : ''}
                   onChange={(e) => {
-                    setPhone(sanitizePhoneInput(e.target.value, 15));
-                    if (fieldErrors.phone) {
-                      setFieldErrors((prev) => ({ ...prev, phone: undefined }));
-                    }
+                    const nextPhone = sanitizeEgyptMobile11(e.target.value);
+                    setPhone(nextPhone);
+                    setFieldErrors((prev) => ({
+                      ...prev,
+                      phone: getEgyptMobileLiveError(nextPhone, phoneTouched),
+                    }));
                     if (error) clearError();
+                  }}
+                  onBlur={() => {
+                    setPhoneTouched(true);
+                    if (phone.trim()) {
+                      setFieldErrors((prev) => ({
+                        ...prev,
+                        phone: getEgyptMobileLiveError(phone, true),
+                      }));
+                    }
                   }}
                 />
                 <span className="input-icon" aria-hidden="true">
@@ -247,7 +268,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
 
             {/* Password Input Group with visibility toggle */}
             <div className="input-group">
-              <label htmlFor="password">كلمة المرور</label>
+              <label htmlFor="password">
+                كلمة المرور <span className="text-danger" aria-hidden="true">*</span>
+              </label>
               <div className="input-wrapper">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -266,6 +289,17 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                     }
                     if (error) clearError();
                   }}
+                  onKeyDown={(e) => {
+                    if (typeof e.getModifierState === 'function') {
+                      setIsCapsLockOn(e.getModifierState('CapsLock'));
+                    }
+                  }}
+                  onKeyUp={(e) => {
+                    if (typeof e.getModifierState === 'function') {
+                      setIsCapsLockOn(e.getModifierState('CapsLock'));
+                    }
+                  }}
+                  onBlur={() => setIsCapsLockOn(false)}
                 />
                 <span className="input-icon" aria-hidden="true">
                   <svg
@@ -325,6 +359,15 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
               </div>
               {fieldErrors.password && (
                 <div className="input-field-error">{fieldErrors.password}</div>
+              )}
+              {isCapsLockOn && (
+                <div
+                  className="text-[11px] text-warning-dark font-medium mt-1 flex items-center gap-1"
+                  data-testid="caps-lock-warning"
+                >
+                  <Icon name="alert" size="sm" className="shrink-0" />
+                  <span>تنبيه: زر الأحرف الكبيرة (Caps Lock) مفعّل حالياً</span>
+                </div>
               )}
             </div>
 
@@ -436,7 +479,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                 </div>
               )}
               <a
-                href={buildWhatsAppUrl(forgotContacts[0].number, FORGOT_PASSWORD_DRAFT_MESSAGE)}
+                href={buildWhatsAppUrl(forgotContacts[0].number, forgotDraftMessage)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="modal-whatsapp-btn"
@@ -478,7 +521,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                     </div>
 
                     <a
-                      href={buildWhatsAppUrl(contact.number, FORGOT_PASSWORD_DRAFT_MESSAGE)}
+                      href={buildWhatsAppUrl(contact.number, forgotDraftMessage)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shrink-0 shadow-2xs"

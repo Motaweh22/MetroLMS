@@ -79,8 +79,7 @@ export const CourseReviewPage: React.FC = () => {
     previewRole !== 'assistant_lecturer' &&
     (user?.role === 'admin' ||
       user?.role === 'super_admin' ||
-      user?.role === 'developer' ||
-      user?.role === 'assistant_admin');
+      user?.role === 'developer');
 
   // Load review data and working notes
   const loadReviewStudioData = useCallback(async () => {
@@ -574,7 +573,9 @@ export const CourseReviewPage: React.FC = () => {
         >
           <Icon name="info" size="sm" className="text-primary shrink-0" />
           <span>
-            استوديو المراجعة في وضع المعاينة الآمنة والقراءة فقط دون تعديل. لتعديل بيانات المقرر أو الفصول والدروس قبل اتخاذ قرار الاعتماد، انقر على زر &quot;تفعيل وضع التعديل&quot; في الشريط العلوي.
+            {isOperationalAdmin
+              ? 'استوديو المراجعة في وضع المعاينة الآمنة والقراءة فقط دون تعديل. لتعديل بيانات المقرر أو الفصول والدروس قبل اتخاذ قرار الاعتماد، انقر على زر "تفعيل وضع التعديل" في الشريط العلوي.'
+              : 'استوديو المراجعة في وضع المعاينة والتدقيق للقراءة فقط. تعديل المحتوى أو إصدار قرارات الاعتماد والإرجاع مخصص لمدير النظام التنفيذي.'}
           </span>
         </div>
       ) : (

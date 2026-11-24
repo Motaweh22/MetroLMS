@@ -183,7 +183,7 @@ export const JoinGroupPage: React.FC = () => {
             <form onSubmit={handleManualCodeSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-text mb-1.5">
-                  رمز الانضمام للمجموعة:
+                  رمز الانضمام للمجموعة: <span className="text-danger" aria-hidden="true">*</span>
                 </label>
                 <input
                   type="text"

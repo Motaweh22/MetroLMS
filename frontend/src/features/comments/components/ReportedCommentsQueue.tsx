@@ -4,7 +4,7 @@ import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import type { CourseComment } from '@/core/comments/types';
 import { COMMENT_REPORT_REASONS_AR } from '@/core/comments/types';
-import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
+import { resolveCommentRoleMeta } from '../utils/commentRolePresentation';
 
 export interface ReportedCommentsQueueProps {
   comments: CourseComment[];
@@ -67,10 +67,7 @@ export const ReportedCommentsQueue: React.FC<ReportedCommentsQueueProps> = ({
           comment.reportReason ||
           'محتوى غير لائق';
 
-        const roleLabel =
-          ROLE_CANONICAL_LABELS_AR[comment.userRole as keyof typeof ROLE_CANONICAL_LABELS_AR] ||
-          comment.userRole ||
-          'متدرب';
+        const roleMeta = resolveCommentRoleMeta(comment);
 
         const formattedDate = comment.reportedAt
           ? new Date(comment.reportedAt).toLocaleDateString('ar-EG', {
@@ -112,8 +109,8 @@ export const ReportedCommentsQueue: React.FC<ReportedCommentsQueueProps> = ({
                   <span className="font-bold text-text" data-testid="comment-author-name">
                     {comment.userName}
                   </span>
-                  <Badge variant="neutral" size="sm">
-                    {roleLabel}
+                  <Badge variant={roleMeta.roleBadgeVariant} size="sm">
+                    {roleMeta.moderationLabel}
                   </Badge>
                 </div>
                 <span className="text-[11px] text-text-muted">
@@ -128,6 +125,22 @@ export const ReportedCommentsQueue: React.FC<ReportedCommentsQueueProps> = ({
                 {comment.text}
               </p>
             </div>
+
+            {/* Report Custom Notes Box (only when additional details exist beyond the badge) */}
+            {comment.reportNotes && comment.reportNotes !== reportReasonLabel && (
+              <div
+                className="bg-danger/5 border border-danger/20 rounded-xl p-3 text-xs space-y-1"
+                data-testid={`report-reason-box-${comment.id}`}
+              >
+                <div className="font-bold text-danger-dark flex items-center gap-1.5">
+                  <Icon name="alertCircle" size="sm" />
+                  <span>تفاصيل البلاغ:</span>
+                </div>
+                <p className="text-text leading-relaxed whitespace-pre-wrap pr-5">
+                  {comment.reportNotes}
+                </p>
+              </div>
+            )}
 
             {/* Card Footer: Reporter Identity & Moderation Actions */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">

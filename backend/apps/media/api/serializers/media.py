@@ -4,6 +4,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.media.models import MediaAsset, MediaContentReference
+from apps.media.services.media_service import get_asset_transcode_status
 
 
 class MediaAssetSerializer(serializers.ModelSerializer):
@@ -13,11 +14,15 @@ class MediaAssetSerializer(serializers.ModelSerializer):
     mimeType = serializers.CharField(source="mime_type", read_only=True)
     sizeBytes = serializers.IntegerField(source="size_bytes", read_only=True)
     sha256Checksum = serializers.CharField(source="sha256_checksum", read_only=True)
+    transcodeStatus = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
 
     class Meta:
         model = MediaAsset
-        fields = ["id", "fileName", "mimeType", "sizeBytes", "sha256Checksum", "createdAt"]
+        fields = ["id", "fileName", "mimeType", "sizeBytes", "sha256Checksum", "transcodeStatus", "createdAt"]
+
+    def get_transcodeStatus(self, obj: MediaAsset) -> str:
+        return get_asset_transcode_status(obj)
 
 
 class MediaContentReferenceSerializer(serializers.ModelSerializer):

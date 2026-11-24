@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from apps.courses.models import (
     Course,
+    CourseAssistantLecturer,
     CourseAudienceDepartment,
     CourseAudienceJobTitle,
     CourseAudienceLeadership,
@@ -19,6 +20,7 @@ from apps.courses.models import (
     Module,
     PublishedCourseVersion,
 )
+from apps.courses.services.course_service import parse_stored_report_reason
 
 
 class CourseListSerializer(serializers.ListSerializer):
@@ -191,6 +193,8 @@ class CourseSerializer(serializers.ModelSerializer):
     lecturerName = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
     thumbnail = serializers.SerializerMethodField()
+    coverType = serializers.SerializerMethodField()
+    coverColor = serializers.SerializerMethodField()
     hasDraft = serializers.SerializerMethodField()
     rating = serializers.SerializerMethodField()
     ratingCount = serializers.SerializerMethodField()
@@ -229,6 +233,8 @@ class CourseSerializer(serializers.ModelSerializer):
             "lecturerName",
             "duration",
             "thumbnail",
+            "coverType",
+            "coverColor",
             "hasDraft",
             "rating",
             "ratingCount",
@@ -460,7 +466,11 @@ class CourseSerializer(serializers.ModelSerializer):
                 pub = self._get_latest_pub(obj)
                 mods = list(Module.objects.filter(published_version=pub).order_by("sort_order", "id")) if pub else []
 
-        refs = {r.title: r for r in self._get_active_refs(obj)}
+        refs_by_title: dict[str, list] = {}
+        for r in self._get_active_refs(obj):
+            if not str(r.title or "").startswith("__"):
+                refs_by_title.setdefault(r.title, []).append(r)
+
         if hasattr(obj, "_ser_lessons_by_mod"):
             lessons_by_mod = obj._ser_lessons_by_mod
         else:
@@ -470,21 +480,38 @@ class CourseSerializer(serializers.ModelSerializer):
                 for lesson in LessonItem.objects.filter(module_id__in=mod_ids).order_by("sort_order", "id"):
                     lessons_by_mod.setdefault(lesson.module_id, []).append(lesson)
 
+        import re as _re
+
+        def _format_duration_str(total_sec: int) -> str | None:
+            if not total_sec or total_sec <= 0:
+                return None
+            mins, secs = divmod(int(total_sec), 60)
+            hours, rem_mins = divmod(mins, 60)
+            if hours > 0:
+                return f"{hours}:{rem_mins:02d}:{secs:02d}"
+            return f"{mins}:{secs:02d}"
+
         result = []
         for m in mods:
             items_out = []
             for l in lessons_by_mod.get(m.id, []):
-                ref = refs.get(l.title)
+                matching_refs = refs_by_title.get(l.title) or []
+                ref = matching_refs.pop(0) if matching_refs else None
                 dl_policy = getattr(l, "download_policy", "never") or "never"
+                dur_sec = l.duration_seconds or 0
                 item_dict = {
                     "id": str(l.id),
                     "title": l.title,
+                    "description": l.description or "",
                     "type": l.lesson_type,
-                    "durationSeconds": l.duration_seconds or 0,
+                    "durationSeconds": dur_sec,
                     "externalVideoUrl": l.external_video_url or "",
                     "downloadPolicy": dl_policy,
                     "canDownload": dl_policy != "never",
                 }
+                dur_formatted = _format_duration_str(dur_sec)
+                if dur_formatted:
+                    item_dict["duration"] = dur_formatted
                 if ref is not None:
                     item_dict["mediaId"] = str(ref.media_asset_id)
                     item_dict["mediaReferenceId"] = str(ref.id)
@@ -495,7 +522,27 @@ class CourseSerializer(serializers.ModelSerializer):
                     if l.lesson_type == "video":
                         item_dict["videoSourceType"] = "upload"
                 elif l.external_video_url:
-                    item_dict["url"] = l.external_video_url
+                    ext = l.external_video_url.strip()
+                    item_dict["externalUrl"] = ext
+                    item_dict["url"] = ext
+                    yt_match = _re.search(
+                        r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{6,15})",
+                        ext,
+                    )
+                    drive_match = _re.search(
+                        r"drive\.google\.com/(?:file/d/|open\?id=|uc\?(?:.*&)?id=)([A-Za-z0-9_-]+)",
+                        ext,
+                    )
+                    if yt_match:
+                        yt_id = yt_match.group(1)
+                        item_dict["videoSourceType"] = "youtube"
+                        item_dict["youtubeVideoId"] = yt_id
+                        item_dict["url"] = f"https://www.youtube.com/embed/{yt_id}"
+                    elif drive_match:
+                        gd_id = drive_match.group(1)
+                        item_dict["videoSourceType"] = "drive"
+                        item_dict["driveFileId"] = gd_id
+                        item_dict["url"] = f"https://drive.google.com/file/d/{gd_id}/preview"
                 items_out.append(item_dict)
             result.append({"id": str(m.id), "title": m.title, "items": items_out})
         obj._ser_modules = result
@@ -512,6 +559,25 @@ class CourseSerializer(serializers.ModelSerializer):
         if pub is not None:
             return getattr(pub, "course_zip_policy", "disabled") or "disabled"
         return "disabled"
+
+    def get_coverType(self, obj: Course) -> str:
+        source = self._get_draft(obj) or self._get_latest_pub(obj)
+        explicit_type = getattr(source, "cover_type", None) if source is not None else None
+        if explicit_type in {"image", "color", "default"}:
+            return explicit_type
+        if source is not None and getattr(source, "cover_color", None):
+            return "color"
+        if self.get_thumbnail(obj):
+            return "image"
+        return "default"
+
+    def get_coverColor(self, obj: Course) -> str | None:
+        source = self._get_draft(obj) or self._get_latest_pub(obj)
+        if source is not None:
+            val = getattr(source, "cover_color", None)
+            if val:
+                return str(val)
+        return None
 
     def get_refresherConfig(self, obj: Course):
         import copy
@@ -599,7 +665,7 @@ class CourseReviewSubmissionSerializer(serializers.ModelSerializer):
 
 
 class CourseCommentSerializer(serializers.ModelSerializer):
-    """Serializer for CourseComment enforcing D-02 anonymization label."""
+    """Serializer for CourseComment enforcing D-02 anonymization and full report metadata."""
 
     id = serializers.CharField(read_only=True)
     courseId = serializers.CharField(source="course_id", read_only=True)
@@ -608,8 +674,16 @@ class CourseCommentSerializer(serializers.ModelSerializer):
     userName = serializers.SerializerMethodField()
     userId = serializers.SerializerMethodField()
     userRole = serializers.SerializerMethodField()
+    isLecturer = serializers.SerializerMethodField()
+    isCourseAssistant = serializers.SerializerMethodField()
     text = serializers.CharField(source="body", read_only=True)
     reported = serializers.SerializerMethodField()
+    reportReason = serializers.SerializerMethodField()
+    reportReasonLabelAr = serializers.SerializerMethodField()
+    reportNotes = serializers.SerializerMethodField()
+    reportedBy = serializers.SerializerMethodField()
+    reportedByName = serializers.SerializerMethodField()
+    reportedAt = serializers.SerializerMethodField()
     isAuthorDeleted = serializers.BooleanField(source="is_author_deleted", read_only=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
 
@@ -623,12 +697,40 @@ class CourseCommentSerializer(serializers.ModelSerializer):
             "userName",
             "userId",
             "userRole",
+            "isLecturer",
+            "isCourseAssistant",
             "isAuthorDeleted",
             "body",
             "text",
             "reported",
+            "reportReason",
+            "reportReasonLabelAr",
+            "reportNotes",
+            "reportedBy",
+            "reportedByName",
+            "reportedAt",
             "createdAt",
         ]
+
+    def _get_latest_pending_report(self, obj: CourseComment) -> CourseCommentReport | None:
+        cached = getattr(obj, "_cached_latest_pending_report", None)
+        if cached is not False and hasattr(obj, "_cached_latest_pending_report"):
+            return cached
+        pending = (
+            obj.reports.filter(status="Pending")
+            .select_related("reporter_user")
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        obj._cached_latest_pending_report = pending
+        return pending
+
+    def _get_parsed_report(self, obj: CourseComment) -> tuple[str | None, str | None, str | None]:
+        rep = self._get_latest_pending_report(obj)
+        if rep is None:
+            return None, None, None
+        code, label_ar, notes = parse_stored_report_reason(rep.reason)
+        return code, label_ar, notes
 
     def get_authorName(self, obj: CourseComment) -> str:
         if obj.is_author_deleted or obj.author_user is None:
@@ -646,10 +748,62 @@ class CourseCommentSerializer(serializers.ModelSerializer):
     def get_userRole(self, obj: CourseComment) -> str:
         if obj.is_author_deleted or obj.author_user is None:
             return "user"
-        return str(getattr(obj.author_user, "role_id", None) or "user")
+        raw_role = str(getattr(obj.author_user, "role_id", None) or "trainee")
+        return "user" if raw_role == "trainee" else raw_role
+
+    def get_isLecturer(self, obj: CourseComment) -> bool:
+        if obj.is_author_deleted or obj.author_user is None:
+            return False
+        if getattr(obj.author_user, "role_id", None) == "lecturer":
+            return True
+        course = getattr(obj, "course", None)
+        return bool(course is not None and course.primary_lecturer_id == obj.author_user_id)
+
+    def get_isCourseAssistant(self, obj: CourseComment) -> bool:
+        if obj.is_author_deleted or obj.author_user_id is None:
+            return False
+        if CourseAssistantLecturer.objects.filter(
+            course_id=obj.course_id,
+            user_id=obj.author_user_id,
+        ).exists():
+            return True
+        from apps.groups.models import GroupAssistantAssignment
+
+        return GroupAssistantAssignment.objects.filter(
+            training_group__renewal_cycles__course_assignments__course_id=obj.course_id,
+            user_id=obj.author_user_id,
+            assignment_role="assistant_lecturer",
+        ).exists()
 
     def get_reported(self, obj: CourseComment) -> bool:
-        return CourseCommentReport.objects.filter(comment=obj, status="Pending").exists()
+        return self._get_latest_pending_report(obj) is not None
+
+    def get_reportReason(self, obj: CourseComment) -> str | None:
+        return self._get_parsed_report(obj)[0]
+
+    def get_reportReasonLabelAr(self, obj: CourseComment) -> str | None:
+        return self._get_parsed_report(obj)[1]
+
+    def get_reportNotes(self, obj: CourseComment) -> str | None:
+        return self._get_parsed_report(obj)[2]
+
+    def get_reportedBy(self, obj: CourseComment) -> str | None:
+        rep = self._get_latest_pending_report(obj)
+        if rep is None or rep.reporter_user_id is None:
+            return None
+        return str(rep.reporter_user_id)
+
+    def get_reportedByName(self, obj: CourseComment) -> str | None:
+        rep = self._get_latest_pending_report(obj)
+        if rep is None:
+            return None
+        if rep.reporter_user is not None:
+            return rep.reporter_user.full_name
+        return "مستخدم المنظومة"
+
+    def get_reportedAt(self, obj: CourseComment):
+        rep = self._get_latest_pending_report(obj)
+        return rep.created_at if rep is not None else None
 
 
 class CourseCommentReportSerializer(serializers.ModelSerializer):

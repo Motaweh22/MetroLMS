@@ -76,7 +76,7 @@ class Bp01SqlServerSchemaTests(TestCase):
             )
             tables = [row[0] for row in cur.fetchall()]
             feature_tables = [t for t in tables if t.startswith(tuple(f"dbo.{p}" for p in feature_prefixes))]
-            self.assertEqual(len(feature_tables), 56)
+            self.assertEqual(len(feature_tables), 57)
             self.assertFalse(any("inpersonattendance" in t.lower() for t in tables))
 
             cur.execute(

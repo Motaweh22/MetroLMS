@@ -18,6 +18,7 @@ import { YouTubePlayer } from '@/features/learning-player/components/YouTubePlay
 import { GoogleDrivePlayer } from '@/features/learning-player/components/GoogleDrivePlayer';
 import { extractYouTubeVideoId, extractGoogleDriveFileId } from '../utils/videoUrlHelpers';
 import { mediaStorageService, MediaStorageError } from '@/core/storage/mediaStorageService';
+import { useAuthenticatedMediaPreview } from '@/core/storage/useAuthenticatedMediaPreview';
 import {
   type VideoEmbedPolicy,
   getMandatoryVideoEmbedPolicy,
@@ -49,10 +50,11 @@ const CONTENT_TYPE_CONFIG: Record<
     label: 'محاضرة فيديو',
     shortLabel: 'فيديو',
     icon: 'video',
-    accept: 'video/mp4,video/webm,video/ogg',
-    maxSizeMB: 100,
+    accept:
+      'video/mp4,video/quicktime,video/x-matroska,video/webm,video/ogg,video/x-msvideo,.mp4,.mov,.mkv,.webm,.ogv,.avi,.m4v',
+    maxSizeMB: 2048,
     isInAppViewer: true,
-    badgeLabel: 'يفتح في مشغل التعلم',
+    badgeLabel: 'يفتح في مشغل التعلم (تحويل تلقائي إلى MP4)',
     badgeVariant: 'primary',
   },
   pdf: {
@@ -139,27 +141,56 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   const [activeTab, setActiveTab] = useState<'content' | 'resources'>('content');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const initialExternalCandidate =
+    item?.externalUrl ||
+    (item as { externalVideoUrl?: string } | null | undefined)?.externalVideoUrl ||
+    item?.url ||
+    '';
+  const detectedYoutubeId =
+    item?.youtubeVideoId || extractYouTubeVideoId(initialExternalCandidate) || '';
+  const detectedDriveId =
+    item?.driveFileId || extractGoogleDriveFileId(initialExternalCandidate) || '';
+  const inferredVideoSourceType: VideoSourceType =
+    item?.videoSourceType ||
+    (detectedYoutubeId ? 'youtube' : detectedDriveId ? 'drive' : 'upload');
+
+  const formatInitialDuration = (): string => {
+    if (item?.duration != null && String(item.duration).trim()) {
+      return String(item.duration);
+    }
+    const sec = (item as { durationSeconds?: number } | null | undefined)?.durationSeconds;
+    if (typeof sec === 'number' && sec > 0) {
+      const mins = Math.floor(sec / 60);
+      const rem = sec % 60;
+      return `${mins}:${rem < 10 ? '0' : ''}${rem}`;
+    }
+    return '';
+  };
+
   const [title, setTitle] = useState(item?.title || '');
+  const [description, setDescription] = useState(item?.description || '');
   const [type, setType] = useState<ContentItemType>(item?.type || 'video');
-  const [duration, setDuration] = useState<string>(
-    item?.duration != null ? String(item.duration) : ''
-  );
+  const [duration, setDuration] = useState<string>(formatInitialDuration);
   const [downloadPolicy, setDownloadPolicy] = useState<ItemDownloadPolicy>(
     item?.downloadPolicy || (item?.type === 'video' ? 'never' : 'immediate')
   );
 
   // Video Source States
-  const [videoSourceType, setVideoSourceType] = useState<VideoSourceType>(
-    item?.videoSourceType || 'upload'
-  );
+  const [videoSourceType, setVideoSourceType] = useState<VideoSourceType>(inferredVideoSourceType);
   const [youtubeUrl, setYoutubeUrl] = useState<string>(
-    item?.videoSourceType === 'youtube'
-      ? item.externalUrl || item.url || (item.youtubeVideoId ? `https://www.youtube.com/watch?v=${item.youtubeVideoId}` : '')
+    inferredVideoSourceType === 'youtube'
+      ? item?.externalUrl ||
+          (item as { externalVideoUrl?: string } | null | undefined)?.externalVideoUrl ||
+          item?.url ||
+          (detectedYoutubeId ? `https://www.youtube.com/watch?v=${detectedYoutubeId}` : '')
       : ''
   );
   const [driveUrl, setDriveUrl] = useState<string>(
-    item?.videoSourceType === 'drive'
-      ? item.externalUrl || item.url || (item.driveFileId ? `https://drive.google.com/file/d/${item.driveFileId}/view` : '')
+    inferredVideoSourceType === 'drive'
+      ? item?.externalUrl ||
+          (item as { externalVideoUrl?: string } | null | undefined)?.externalVideoUrl ||
+          item?.url ||
+          (detectedDriveId ? `https://drive.google.com/file/d/${detectedDriveId}/view` : '')
       : ''
   );
 
@@ -200,6 +231,18 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   const [fileUrl, setFileUrl] = useState(item?.url || '');
   const [mediaId, setMediaId] = useState<string | undefined>(item?.mediaId);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
+
+  const {
+    previewUrl: authenticatedPreviewUrl,
+    isLoading: isPreviewLoading,
+    error: previewLoadError,
+  } = useAuthenticatedMediaPreview(
+    type !== 'video' || videoSourceType === 'upload' ? fileUrl || undefined : undefined,
+    type
+  );
+  const effectivePreviewUrl = authenticatedPreviewUrl;
 
   // Lesson-level external resources
   const [lessonResources, setLessonResources] = useState<ExternalResource[]>(
@@ -209,6 +252,14 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   // Object URL memory tracking ref to avoid memory leaks
   const createdObjectUrlRef = useRef<string | null>(null);
   const pendingFileRef = useRef<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const errorAlertRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (fileError) {
+      errorAlertRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [fileError]);
 
   // Recreate object URL if reopening a lesson with an existing persistent mediaId
   useEffect(() => {
@@ -249,18 +300,13 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
 
   const config = CONTENT_TYPE_CONFIG[type];
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const processSelectedFile = (file: File): boolean => {
     setFileError(null);
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const file = files[0];
 
     // 1. Empty file validation
     if (file.size === 0) {
       setFileError('عذراً، الملف المحدد فارغ (0 بايت). يرجى اختيار ملف صالح.');
-      e.target.value = '';
-      return;
+      return false;
     }
 
     // 2. Maximum file size validation
@@ -269,8 +315,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
       setFileError(
         `عذراً، حجم الملف (${(file.size / (1024 * 1024)).toFixed(1)} ميجابايت) يتجاوز الحد الأقصى المسموح لهذا النوع (${config.maxSizeMB} ميجابايت).`
       );
-      e.target.value = '';
-      return;
+      return false;
     }
 
     // Revoke previous object URL if any
@@ -279,25 +324,27 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
       createdObjectUrlRef.current = null;
     }
 
-    // Store pending file for IndexedDB persistence on save
+    // Store pending file for server upload on save
     pendingFileRef.current = file;
 
-    // Generate stable media ID and initiate persistence
+    // Generate stable temporary media ID and cache in IndexedDB only for smaller files (<= 50 MB)
     const assignedMediaId = mediaStorageService.generateMediaId();
     setMediaId(assignedMediaId);
-    mediaStorageService
-      .saveMedia(file, {
-        id: assignedMediaId,
-        fileName: file.name,
-        mimeType: file.type,
-      })
-      .catch((err: unknown) => {
-        if (err instanceof MediaStorageError) {
-          setFileError(err.message);
-        } else {
-          console.warn('[ItemEditorModal] Media persistence error:', err);
-        }
-      });
+    if (file.size <= 50 * 1024 * 1024) {
+      mediaStorageService
+        .saveMedia(file, {
+          id: assignedMediaId,
+          fileName: file.name,
+          mimeType: file.type,
+        })
+        .catch((err: unknown) => {
+          if (err instanceof MediaStorageError) {
+            setFileError(err.message);
+          } else {
+            console.warn('[ItemEditorModal] Media persistence error:', err);
+          }
+        });
+    }
 
     // 3. Extract metadata
     setFileName(file.name);
@@ -319,6 +366,18 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
         const remSec = sec % 60;
         setDuration(`${mins}:${remSec < 10 ? '0' : ''}${remSec}`);
       };
+    }
+
+    return true;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const ok = processSelectedFile(files[0]);
+    if (!ok) {
+      e.target.value = '';
     }
   };
 
@@ -354,6 +413,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
 
     let finalUrl = fileUrl;
     let finalMediaId = mediaId;
+    let hasNewUpload = false;
     let ytId: string | undefined;
     let gdriveId: string | undefined;
 
@@ -390,9 +450,10 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
       }
     }
 
-    // Upload pending file to Django Backend (/api/media/assets/upload)
+    // Upload pending file to Django Backend (/api/media/assets/upload) with real progress tracking
     if ((type !== 'video' || videoSourceType === 'upload') && pendingFileRef.current) {
       setIsSubmitting(true);
+      setUploadProgress(0);
       try {
         const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
         const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
@@ -404,27 +465,60 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
         if (chapterId) {
           formData.append('chapterId', chapterId);
         }
-        const uploadResp = await fetch('/api/media/assets/upload', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
-          body: formData,
+
+        const uploadJson = await new Promise<{
+          status?: string;
+          message?: string;
+          data?: { asset?: { id?: string | number; fileName?: string; sizeBytes?: number } };
+        }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/media/assets/upload', true);
+          xhr.withCredentials = true;
+          if (csrfToken) {
+            xhr.setRequestHeader('X-CSRFToken', csrfToken);
+          }
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable && ev.total > 0) {
+              setUploadProgress(Math.min(99, Math.round((ev.loaded / ev.total) * 100)));
+            }
+          };
+          xhr.onload = () => {
+            try {
+              const parsed = JSON.parse(xhr.responseText || '{}');
+              if (xhr.status >= 200 && xhr.status < 300) {
+                setUploadProgress(100);
+                resolve(parsed);
+              } else {
+                reject(new Error(parsed?.message || 'فشل رفع الملف إلى الخادم.'));
+              }
+            } catch {
+              reject(new Error('فشل رفع الملف إلى الخادم.'));
+            }
+          };
+          xhr.onerror = () => reject(new Error('تعذر الاتصال بخادم رفع الوسائط. يرجى المحاولة مرة أخرى.'));
+          xhr.onabort = () => reject(new Error('تم إلغاء عملية الرفع.'));
+          xhr.send(formData);
         });
-        const uploadJson = await uploadResp.json();
-        if (!uploadResp.ok || uploadJson?.status !== 'OK' || !uploadJson?.data?.asset?.id) {
+
+        const uploadedAsset = uploadJson?.data?.asset;
+        if (uploadJson?.status !== 'OK' || !uploadedAsset?.id) {
           setFileError(uploadJson?.message || 'فشل رفع الملف إلى الخادم.');
           return;
         }
-        finalMediaId = String(uploadJson.data.asset.id);
+        finalMediaId = String(uploadedAsset.id);
         finalUrl = `/api/media/assets/${finalMediaId}/stream`;
+        if (uploadedAsset.fileName) setFileName(uploadedAsset.fileName);
+        if (typeof uploadedAsset.sizeBytes === 'number') setFileSize(uploadedAsset.sizeBytes);
         setMediaId(finalMediaId);
         setFileUrl(finalUrl);
+        hasNewUpload = true;
         pendingFileRef.current = null;
-      } catch {
-        setFileError('تعذر الاتصال بخادم رفع الوسائط. يرجى المحاولة مرة أخرى.');
+      } catch (err: unknown) {
+        setFileError(err instanceof Error ? err.message : 'تعذر الاتصال بخادم رفع الوسائط. يرجى المحاولة مرة أخرى.');
         return;
       } finally {
         setIsSubmitting(false);
+        setUploadProgress(null);
       }
     }
 
@@ -440,13 +534,20 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
         ? { requireMinimumViewingTime }
         : item?.completionPolicy;
 
+    const resolvedDurationStr = type === 'video' ? duration.trim() || '10:00' : undefined;
     const updatedItem: ChapterItem = {
       id: item?.id || `ITEM_${Date.now()}`,
       title: title.trim(),
+      description: description.trim() || undefined,
       type,
       url: finalUrl || (type === 'video' ? '/dev-media/test-video.mp4' : undefined),
       mediaId: finalMediaId,
-      duration: type === 'video' ? duration.trim() || '10:00' : undefined,
+      mediaReferenceId: isExternalVideo || hasNewUpload ? undefined : item?.mediaReferenceId,
+      duration: resolvedDurationStr,
+      durationSeconds:
+        type === 'video' && resolvedDurationStr
+          ? parseDurationToSeconds(resolvedDurationStr)
+          : item?.durationSeconds,
       downloadPolicy: isExternalVideo ? 'never' : downloadPolicy,
       canDownload: isExternalVideo ? false : downloadPolicy !== 'never',
       originalFileName: isExternalVideo ? undefined : fileName || undefined,
@@ -542,6 +643,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           {fileError && (
             <div
+              ref={errorAlertRef}
               className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-xs font-semibold"
               role="alert"
             >
@@ -566,6 +668,22 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                   required
                   autoFocus
                   data-testid="item-title-input"
+                />
+              </div>
+
+              {/* Lesson / Video Description */}
+              <div className="space-y-1.5">
+                <label htmlFor="item-description-input" className="block text-xs font-bold text-text-heading">
+                  وصف الدرس / الفيديو
+                </label>
+                <textarea
+                  id="item-description-input"
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="اشرح باختصار محتوى هذا الفيديو أو الدرس والنقاط التي يتعلمها المتدرب..."
+                  className="w-full px-3.5 py-2.5 text-sm bg-surface border border-border rounded-xl text-text placeholder:text-text-muted/60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-y"
+                  data-testid="item-description-input"
                 />
               </div>
 
@@ -736,33 +854,86 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                   <label className="block text-xs font-bold text-text-heading">
                     الملف المرفق للمحتوى
                   </label>
-                  <div className="p-4 border-2 border-dashed border-border rounded-xl bg-bg-alt/30 text-center space-y-2 hover:border-primary/50 transition-colors">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label="منطقة رفع الملف — اضغط لاختيار ملف أو اسحب وأفلت الملف هنا"
+                    onClick={() => {
+                      if (!isSubmitting) {
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (!isSubmitting && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (!isSubmitting) setIsDraggingFile(true);
+                    }}
+                    onDragLeave={() => setIsDraggingFile(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingFile(false);
+                      if (isSubmitting) return;
+                      const dropped = e.dataTransfer.files?.[0];
+                      if (dropped) {
+                        processSelectedFile(dropped);
+                      }
+                    }}
+                    data-testid="item-file-dropzone"
+                    className={`p-4 border-2 border-dashed rounded-xl text-center space-y-2 transition-colors ${
+                      isSubmitting ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                    } ${
+                      fileError
+                        ? 'border-danger/60 bg-danger/5'
+                        : isDraggingFile
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border bg-bg-alt/30 hover:border-primary/60 hover:bg-primary/[0.03]'
+                    }`}
+                  >
                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
                       <Icon name="upload" size="md" />
                     </div>
                     <div>
                       <label
                         htmlFor="item-file-upload"
+                        onClick={(e) => e.stopPropagation()}
                         className="cursor-pointer text-xs font-bold text-primary hover:underline"
                         data-testid="choose-file-label"
                       >
-                        {fileName ? 'اضغط لتغيير الملف المختار' : 'اضغط لاختيار ملف من جهازك'}
+                        {fileName ? 'اضغط لتغيير الملف المختار' : 'اضغط في أي مكان لاختيار ملف أو اسحبه هنا'}
                       </label>
                       <input
+                        ref={fileInputRef}
                         id="item-file-upload"
                         type="file"
                         accept={config.accept}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={handleFileChange}
                         className="hidden"
                         data-testid="item-file-input"
                       />
                       <p className="text-[11px] text-text-muted mt-0.5">
-                        الحد الأقصى المسموح: {config.maxSizeMB} ميجابايت (الامتدادات: {config.accept.replace(/\/\*/g, '')})
+                        الحد الأقصى المسموح: {config.maxSizeMB >= 1024 ? `${(config.maxSizeMB / 1024).toFixed(0)} جيجابايت (${config.maxSizeMB} ميجابايت)` : `${config.maxSizeMB} ميجابايت`} (الامتدادات:{' '}
+                        {(() => {
+                          const dotExts = config.accept
+                            .split(',')
+                            .map((s) => s.trim())
+                            .filter((s) => s.startsWith('.'));
+                          return dotExts.length > 0 ? dotExts.join('، ') : config.accept.replace(/\/\*/g, '');
+                        })()}
+                        )
                       </p>
                     </div>
 
                     {fileName && (
-                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-border mt-2 text-right">
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-border mt-2 text-right cursor-default"
+                      >
                         <div className="flex items-center gap-2 overflow-hidden">
                           <Icon name={config.icon} size="sm" className="text-primary shrink-0" />
                           <span className="text-xs font-semibold text-text truncate">{fileName}</span>
@@ -775,8 +946,11 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                           )}
                           <button
                             type="button"
-                            onClick={handleRemoveFile}
-                            className="text-text-muted hover:text-danger text-xs p-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveFile();
+                            }}
+                            className="text-text-muted hover:text-danger text-xs p-1 cursor-pointer"
                             title="إزالة الملف وإلغاء المعاينة"
                             data-testid="remove-selected-file-btn"
                           >
@@ -893,12 +1067,20 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                               <span className="text-[11px] text-text-muted">{fileName}</span>
                             </div>
                             <div className="rounded-xl overflow-hidden border border-border bg-black aspect-video max-h-64 flex items-center justify-center">
-                              <video
-                                src={fileUrl}
-                                controls
-                                className="w-full h-full object-contain"
-                                data-testid="video-preview-player"
-                              />
+                              {isPreviewLoading ? (
+                                <span className="text-xs text-white/80">جاري تحميل معاينة الفيديو...</span>
+                              ) : previewLoadError || !effectivePreviewUrl ? (
+                                <span className="text-xs text-red-300 px-3 text-center">
+                                  {previewLoadError || 'تعذر تحميل معاينة الفيديو.'}
+                                </span>
+                              ) : (
+                                <video
+                                  src={effectivePreviewUrl}
+                                  controls
+                                  className="w-full h-full object-contain"
+                                  data-testid="video-preview-player"
+                                />
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -919,12 +1101,20 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                           <span className="text-[11px] text-text-muted">{fileName}</span>
                         </div>
                         <div className="rounded-xl overflow-hidden border border-border bg-slate-900 h-64 flex items-center justify-center">
-                          <iframe
-                            src={fileUrl}
-                            title="معاينة المستند الرقمي"
-                            className="w-full h-full border-0"
-                            data-testid="pdf-preview-frame"
-                          />
+                          {isPreviewLoading ? (
+                            <span className="text-xs text-white/80">جاري تحميل معاينة المستند...</span>
+                          ) : previewLoadError || !effectivePreviewUrl ? (
+                            <span className="text-xs text-red-300 px-3 text-center">
+                              {previewLoadError || 'تعذر تحميل معاينة مستند PDF.'}
+                            </span>
+                          ) : (
+                            <iframe
+                              src={effectivePreviewUrl}
+                              title="معاينة المستند الرقمي"
+                              className="w-full h-full border-0"
+                              data-testid="pdf-preview-frame"
+                            />
+                          )}
                         </div>
                       </div>
                     ) : (
@@ -944,7 +1134,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                         </div>
                         <div className="rounded-xl overflow-hidden border border-border bg-black/30 p-2 flex items-center justify-center min-h-[160px] max-h-64">
                           <img
-                            src={fileUrl}
+                            src={effectivePreviewUrl || fileUrl}
                             alt={title || fileName || 'معاينة الصورة'}
                             className="max-h-60 max-w-full rounded-lg object-contain shadow-sm"
                             data-testid="image-preview-element"
@@ -1078,6 +1268,26 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
             </div>
           )}
 
+          {/* Upload Progress Bar (Shown while uploading large videos/files) */}
+          {isSubmitting && uploadProgress !== null && (
+            <div className="space-y-1.5 pt-2" data-testid="item-upload-progress">
+              <div className="flex items-center justify-between text-xs text-primary font-semibold">
+                <span>
+                  {uploadProgress < 100
+                    ? 'جاري رفع الملف إلى الخادم...'
+                    : 'تم الرفع؛ جاري تجهيز وتحويل الفيديو إلى MP4...'}
+                </span>
+                <span className="font-mono">{uploadProgress}%</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-bg-alt overflow-hidden border border-border">
+                <div
+                  className="h-full bg-primary transition-all duration-150"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Footer Actions */}
           <div className="flex items-center justify-between pt-4 border-t border-border">
             <span className="text-[11px] text-text-muted">
@@ -1096,7 +1306,11 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 className="px-5 font-bold"
                 data-testid="item-save-btn"
               >
-                {isSubmitting ? 'جاري الرفع والحفظ...' : 'حفظ الدرس'}
+                {isSubmitting
+                  ? uploadProgress !== null && uploadProgress < 100
+                    ? `جاري الرفع (${uploadProgress}%)...`
+                    : 'جاري المعالجة والحفظ...'
+                  : 'حفظ الدرس'}
               </Button>
             </div>
           </div>

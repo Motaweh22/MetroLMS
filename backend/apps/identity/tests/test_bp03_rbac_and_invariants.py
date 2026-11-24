@@ -173,3 +173,78 @@ class Bp03RbacAndInvariantsTests(TestCase):
         self.assertEqual(eff_res.status_code, 200)
         self.assertFalse(eff_res.json()["data"]["effective"]["groups.create"]["granted"])
 
+    def test_employee_number_create_update_conflict_and_profile(self) -> None:
+        admin_client = self._login_client(self.admin.phone_e164)
+        base_payload = {
+            "name": "موظف رقم وظيفي",
+            "nameEn": "Tarek Mohamed",
+            "phone": "01099887766",
+            "nationalId": "29501010109876",
+            "dateOfBirth": "1995-01-01",
+            "address": "القاهرة",
+            "educationalQualification": "بكالوريوس هندسة",
+            "maritalStatusId": self.marital.id,
+            "militaryServiceStatusId": self.military.id,
+            "appointmentDate": "2022-01-01",
+            "metroLineId": self.metro_line.id,
+            "department": "التشغيل",
+            "jobTitle": "مهندس تشغيل",
+            "role": "user",
+            "status": "Active",
+            "password": "StrongUserPass!99",
+            "employeeNumber": "EMP-7001",
+        }
+        create_res = admin_client.post(
+            "/api/admin/users",
+            data=base_payload,
+            content_type="application/json",
+        )
+        self.assertEqual(create_res.status_code, 201)
+        created_user = create_res.json()["data"]
+        self.assertEqual(created_user["employeeNumber"], "EMP-7001")
+        self.assertEqual(created_user["nameEn"], "Tarek Mohamed")
+
+        # Duplicate employeeNumber returns 409 CONFLICT
+        dup_payload = {
+            **base_payload,
+            "phone": "01099887767",
+            "nationalId": "29501010109877",
+        }
+        dup_res = admin_client.post(
+            "/api/admin/users",
+            data=dup_payload,
+            content_type="application/json",
+        )
+        self.assertEqual(dup_res.status_code, 409)
+
+        # Update employeeNumber and nameEn via PUT /api/admin/users/<id>
+        uid = created_user["id"]
+        update_res = admin_client.put(
+            f"/api/admin/users/{uid}",
+            data={"employeeNumber": "EMP-7002", "nameEn": "Tarek Mohamed Ali"},
+            content_type="application/json",
+        )
+        self.assertEqual(update_res.status_code, 200)
+        self.assertEqual(update_res.json()["data"]["employeeNumber"], "EMP-7002")
+        self.assertEqual(update_res.json()["data"]["nameEn"], "Tarek Mohamed Ali")
+
+        # Transcript reflects updated employeeNumber and nameEn
+        tr_res = admin_client.get(f"/api/admin/users/{uid}/transcript")
+        self.assertEqual(tr_res.status_code, 200)
+        self.assertEqual(tr_res.json()["data"]["user"]["employeeNumber"], "EMP-7002")
+        self.assertEqual(tr_res.json()["data"]["user"]["nameEn"], "Tarek Mohamed Ali")
+
+        # /api/profile returns employeeNumber and nameEn for the authenticated user
+        user_client = Client()
+        login_res = user_client.post(
+            "/api/auth/login",
+            data={"phone_e164": "+201099887766", "password": "StrongUserPass!99"},
+            content_type="application/json",
+        )
+        self.assertEqual(login_res.status_code, 200)
+        profile_res = user_client.get("/api/profile")
+        self.assertEqual(profile_res.status_code, 200)
+        self.assertEqual(profile_res.json()["data"]["user"]["employeeNumber"], "EMP-7002")
+        self.assertEqual(profile_res.json()["data"]["user"]["nameEn"], "Tarek Mohamed Ali")
+
+

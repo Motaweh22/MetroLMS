@@ -6,6 +6,7 @@ import { Alert } from '@/shared/ui/Alert';
 import { Icon } from '@/shared/ui/Icon';
 import { useToast } from '@/shared/ui/Toast';
 import {
+  DEFAULT_LEADERSHIP_TITLES,
   formatMaritalStatusByGender,
   detectGenderFromNationalId,
   type ManagedUserDTO,
@@ -13,7 +14,17 @@ import {
 } from '@/core/user-management/types';
 import { userManagementApi } from '../services/userManagementApi';
 import { StyledSelect } from './StyledSelect';
-import { sanitizeDigitsOnly, sanitizePhoneInput } from '@/core/utils/numericInput';
+import { PasswordStrengthPanel } from './PasswordStrengthPanel';
+import {
+  getEgyptMobileLiveError,
+  sanitizeDigitsOnly,
+  sanitizeEgyptMobile11,
+} from '@/core/utils/numericInput';
+import {
+  copyTextToClipboard,
+  evaluatePasswordStrength,
+  generateStrongPassword,
+} from '@/core/utils/passwordPolicy';
 
 interface CatalogItem {
   id: number | string;
@@ -42,6 +53,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 }) => {
   const toast = useToast();
   const [name, setName] = useState('');
+  const [nameEn, setNameEn] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState<UserGender>('male');
@@ -52,6 +64,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const [maritalStatusId, setMaritalStatusId] = useState('');
   const [militaryServiceStatusId, setMilitaryServiceStatusId] = useState('');
   const [metroLineId, setMetroLineId] = useState('');
+  const [employeeNumber, setEmployeeNumber] = useState('');
   const [department, setDepartment] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [leadershipTitle, setLeadershipTitle] = useState('');
@@ -66,9 +79,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const [metroLines, setMetroLines] = useState<CatalogItem[]>([]);
   const [departmentRecords, setDepartmentRecords] = useState<CatalogItem[]>([]);
   const [jobTitleRecords, setJobTitleRecords] = useState<CatalogItem[]>([]);
+  const [leadershipTitleOptions, setLeadershipTitleOptions] = useState<string[]>([...DEFAULT_LEADERSHIP_TITLES]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | undefined>(undefined);
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
   const jobDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -85,8 +101,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   useEffect(() => {
     if (!isOpen || !user) return;
     setError(null);
+    setPhoneError(undefined);
+    setPhoneTouched(false);
     setName(user.name || '');
-    setPhone(user.phone || '');
+    setNameEn(user.nameEn || '');
+    setPhone(sanitizeEgyptMobile11(user.phone || ''));
     setEmail(user.email && user.email !== user.phone ? user.email : '');
     const initialGender: UserGender =
       user.gender === 'female' || user.gender === 'male'
@@ -97,6 +116,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     setDateOfBirth(user.dateOfBirth || '');
     setAddress(user.address || '');
     setEducationalQualification(user.educationalQualification || '');
+    setEmployeeNumber(user.employeeNumber || '');
     setDepartment(user.department || '');
     setJobTitle(user.jobTitle || '');
     setLeadershipTitle(user.leadershipTitle || '');
@@ -113,13 +133,20 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       apiClient<{ metroLines?: CatalogItem[] }>('/api/admin/organization/metro-lines'),
       apiClient<{ departments?: CatalogItem[] }>('/api/admin/organization/departments'),
       apiClient<{ jobTitles?: CatalogItem[] }>('/api/admin/organization/job-titles'),
-    ]).then(([maritalRes, militaryRes, lineRes, deptRes, jobRes]) => {
+      apiClient<{ leadershipTitles?: CatalogItem[] }>('/api/admin/organization/leadership-titles'),
+    ]).then(([maritalRes, militaryRes, lineRes, deptRes, jobRes, leadershipRes]) => {
       if (!active) return;
       const mList = maritalRes.status === 'fulfilled' ? maritalRes.value.maritalStatuses || [] : [];
       const milList = militaryRes.status === 'fulfilled' ? militaryRes.value.militaryStatuses || [] : [];
       const lList = lineRes.status === 'fulfilled' ? lineRes.value.metroLines || [] : [];
       const dList = deptRes.status === 'fulfilled' ? deptRes.value.departments || [] : [];
       const jList = jobRes.status === 'fulfilled' ? jobRes.value.jobTitles || [] : [];
+      const ltRecords =
+        leadershipRes.status === 'fulfilled' ? leadershipRes.value.leadershipTitles || [] : [];
+      const ltNames = ltRecords.map((lt) => lt.nameAr || lt.name || '').filter(Boolean);
+      if (ltNames.length > 0) {
+        setLeadershipTitleOptions(ltNames);
+      }
 
       setMaritalStatuses(mList);
       setMilitaryStatuses(milList);
@@ -215,18 +242,26 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     if (!user || isSubmitting) return;
     setError(null);
 
-    if (!name.trim() || !phone.trim()) {
-      setError('الاسم الكامل ورقم الهاتف مطلوبان.');
+    if (!name.trim()) {
+      setError('الاسم الكامل مطلوب.');
       return;
     }
 
-    const trimmedPw = newPassword.trim();
-    if (trimmedPw) {
-      if (trimmedPw.length < 6) {
-        setError('يجب أن تتكون كلمة المرور الجديدة من 6 أحرف على الأقل.');
+    const nextPhoneError = getEgyptMobileLiveError(phone, true);
+    if (nextPhoneError) {
+      setPhoneTouched(true);
+      setPhoneError(nextPhoneError);
+      setError(nextPhoneError);
+      return;
+    }
+
+    if (newPassword) {
+      const pwEval = evaluatePasswordStrength(newPassword, { phone, name });
+      if (!pwEval.isValidForSave && pwEval.errorMessage) {
+        setError(pwEval.errorMessage);
         return;
       }
-      if (trimmedPw !== confirmPassword.trim()) {
+      if (newPassword !== confirmPassword) {
         setError('كلمة المرور الجديدة وتأكيدها غير متطابقتين.');
         return;
       }
@@ -236,6 +271,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     try {
       const payload: Record<string, unknown> = {
         name: name.trim(),
+        nameEn: nameEn.trim(),
         phone: phone.trim(),
         email: email.trim() || '',
         gender,
@@ -246,14 +282,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         maritalStatusId: maritalStatusId || undefined,
         militaryServiceStatusId: militaryServiceStatusId || undefined,
         metroLineId: metroLineId || undefined,
+        employeeNumber: employeeNumber.trim(),
         department: department.trim(),
         jobTitle: jobTitle.trim(),
         leadershipTitle: leadershipTitle.trim(),
         appointmentDate,
         serviceEndDate: serviceEndDate || null,
       };
-      if (trimmedPw) {
-        payload.password = trimmedPw;
+      if (newPassword) {
+        payload.password = newPassword;
       }
       await userManagementApi.updateUser(user.id, payload as any);
       toast.success(`تم تحديث بيانات "${name.trim()}" بنجاح.`);
@@ -298,21 +335,55 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <label htmlFor="edit-user-name-en" className="text-xs font-semibold text-text">
+              الاسم بالإنجليزية
+            </label>
+            <input
+              id="edit-user-name-en"
+              data-testid="edit-user-name-en-input"
+              type="text"
+              dir="ltr"
+              maxLength={255}
+              placeholder="e.g. Tarek Mohamed Abdelrahman"
+              disabled={isSubmitting}
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              className={`${INPUT_CLASS} text-left`}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-user-phone" className="text-xs font-semibold text-text">
-              رقم الهاتف <span className="text-danger">*</span>
+              رقم الهاتف (11 رقماً) <span className="text-danger">*</span>
             </label>
             <input
               id="edit-user-phone"
               type="tel"
-              inputMode="tel"
-              maxLength={15}
+              inputMode="numeric"
+              maxLength={11}
               required
               dir="ltr"
+              placeholder="01012345678"
               disabled={isSubmitting}
               value={phone}
-              onChange={(e) => setPhone(sanitizePhoneInput(e.target.value, 15))}
-              className={`${INPUT_CLASS} text-left`}
+              onChange={(e) => {
+                const nextPhone = sanitizeEgyptMobile11(e.target.value);
+                setPhone(nextPhone);
+                setPhoneError(getEgyptMobileLiveError(nextPhone, phoneTouched));
+              }}
+              onBlur={() => {
+                setPhoneTouched(true);
+                setPhoneError(getEgyptMobileLiveError(phone, true));
+              }}
+              className={`${INPUT_CLASS} text-left ${
+                phoneError ? 'border-danger focus:border-danger ring-1 ring-danger' : ''
+              }`.trim()}
             />
+            {phoneError && (
+              <span className="text-[11px] text-danger" data-testid="edit-user-phone-error">
+                {phoneError}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -441,6 +512,24 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             />
           </div>
 
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="edit-user-employee-number" className="text-xs font-semibold text-text">
+              الرقم الوظيفي
+            </label>
+            <input
+              id="edit-user-employee-number"
+              data-testid="edit-user-employee-number-input"
+              type="text"
+              dir="ltr"
+              maxLength={50}
+              disabled={isSubmitting}
+              placeholder="مثال: EMP-1042"
+              value={employeeNumber}
+              onChange={(e) => setEmployeeNumber(e.target.value)}
+              className={`${INPUT_CLASS} text-left`}
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5 relative" ref={jobDropdownRef}>
             <label htmlFor="edit-user-job" className="text-xs font-semibold text-text">
               المسمى الوظيفي
@@ -517,12 +606,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               emptyMessage="لا توجد صفات قيادية"
               options={[
                 { value: '', label: '— بدون (فارغ) —' },
-                { value: 'رئيس قطاع / رئيس إدارة مركزية', label: 'رئيس قطاع / رئيس إدارة مركزية' },
-                { value: 'مدير عام', label: 'مدير عام' },
-                { value: 'مدير إدارة', label: 'مدير إدارة' },
-                { value: 'رئيس قسم / رئيس وحدة', label: 'رئيس قسم / رئيس وحدة' },
-                { value: 'مشرف / رئيس وردية', label: 'مشرف / رئيس وردية' },
-                { value: 'قائد فريق / منسق', label: 'قائد فريق / منسق' },
+                ...(leadershipTitle && !leadershipTitleOptions.includes(leadershipTitle)
+                  ? [{ value: leadershipTitle, label: leadershipTitle }]
+                  : []),
+                ...leadershipTitleOptions.map((title) => ({ value: title, label: title })),
               ]}
             />
           </div>
@@ -623,21 +710,55 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
           {/* Optional Password Update Section */}
           <div className="sm:col-span-2 lg:col-span-3 pt-3 border-t border-border">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
                 <div className="text-xs font-bold text-text-heading">تعديل كلمة المرور (اختياري)</div>
                 <div className="text-[11px] text-text-muted">
-                  اترك الحقلين فارغين إذا كنت لا تريد تغيير كلمة المرور الحالية للمستخدم.
+                  اترك الحقلين فارغين إذا كنت لا تريد تغيير كلمة المرور الحالية للمستخدم. سيتم إنهاء الجلسات النشطة للمستخدم عند التعديل.
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="text-xs text-primary hover:underline inline-flex items-center gap-1 cursor-pointer"
-              >
-                <Icon name={showPassword ? 'eyeOff' : 'eye'} size="sm" />
-                <span>{showPassword ? 'إخفاء' : 'إظهار'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    const generated = generateStrongPassword(12);
+                    setNewPassword(generated);
+                    setConfirmPassword(generated);
+                    setShowPassword(true);
+                  }}
+                  data-testid="edit-user-generate-password-btn"
+                  className="text-xs px-2.5 py-1 rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-1 cursor-pointer font-medium"
+                >
+                  <Icon name="refresh" size="sm" />
+                  <span>توليد كلمة مرور</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting || !newPassword}
+                  onClick={async () => {
+                    const ok = await copyTextToClipboard(newPassword);
+                    if (ok) {
+                      toast.success('تم نسخ كلمة المرور الجديدة بنجاح.');
+                    } else {
+                      toast.error('تعذر النسخ التلقائي؛ يمكنك نسخها يدوياً.');
+                    }
+                  }}
+                  data-testid="edit-user-copy-password-btn"
+                  className="text-xs px-2.5 py-1 rounded-lg border border-border bg-surface text-text hover:bg-bg transition-colors inline-flex items-center gap-1 cursor-pointer font-medium disabled:opacity-50"
+                >
+                  <Icon name="copy" size="sm" />
+                  <span>نسخ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Icon name={showPassword ? 'eyeOff' : 'eye'} size="sm" />
+                  <span>{showPassword ? 'إخفاء' : 'إظهار'}</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -649,11 +770,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   id="edit-user-password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
+                  dir="ltr"
                   disabled={isSubmitting}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="6 أحرف على الأقل..."
-                  className={INPUT_CLASS}
+                  placeholder="8 أحرف على الأقل (حرف كبير وصغير ورقم)..."
+                  className={`${INPUT_CLASS} text-left font-mono`}
                   data-testid="edit-user-password-input"
                 />
               </div>
@@ -665,15 +787,32 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   id="edit-user-confirm-password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
+                  dir="ltr"
                   disabled={isSubmitting}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="أعد إدخال كلمة المرور الجديدة..."
-                  className={INPUT_CLASS}
+                  className={`${INPUT_CLASS} text-left font-mono ${
+                    confirmPassword && confirmPassword !== newPassword
+                      ? 'border-danger focus:border-danger ring-1 ring-danger'
+                      : ''
+                  }`.trim()}
                   data-testid="edit-user-confirm-password-input"
                 />
+                {confirmPassword && confirmPassword !== newPassword && (
+                  <span className="text-[11px] text-danger" data-testid="edit-user-confirm-password-error">
+                    كلمة المرور الجديدة وتأكيدها غير متطابقتين
+                  </span>
+                )}
               </div>
             </div>
+
+            <PasswordStrengthPanel
+              password={newPassword}
+              phone={phone}
+              name={name}
+              testIdPrefix="edit-user-password-strength"
+            />
           </div>
         </div>
 

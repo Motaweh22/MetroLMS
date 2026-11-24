@@ -11,15 +11,10 @@ import { userManagementApi } from '@/features/user-management/services/userManag
 import { AudienceSelectionModal } from './AudienceSelectionModal';
 import { AudienceSectionCard } from './AudienceSectionCard';
 import { blockInvalidNumberKeys, sanitizePhoneInput } from '@/core/utils/numericInput';
+import { DEFAULT_LEADERSHIP_TITLES } from '@/core/user-management/types';
 
-const LEADERSHIP_TITLE_OPTIONS: Array<{ id: number; label: string }> = [
-  { id: 1, label: 'رئيس قطاع / رئيس إدارة مركزية' },
-  { id: 2, label: 'مدير عام' },
-  { id: 3, label: 'مدير إدارة' },
-  { id: 4, label: 'رئيس قسم / رئيس وحدة' },
-  { id: 5, label: 'مشرف / رئيس وردية' },
-  { id: 6, label: 'قائد فريق / منسق' },
-];
+const DEFAULT_LEADERSHIP_TITLE_OPTIONS: Array<{ id: number; label: string }> =
+  DEFAULT_LEADERSHIP_TITLES.map((label, idx) => ({ id: idx + 1, label }));
 
 export interface MetadataEditorProps {
   course: Course;
@@ -244,6 +239,9 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
     Array<{ id: number; nameAr: string; departmentId?: number | null }>
   >([]);
   const [orgMetroLines, setOrgMetroLines] = useState<Array<{ id: number; nameAr: string }>>([]);
+  const [orgLeadershipTitles, setOrgLeadershipTitles] = useState<Array<{ id: number; label: string }>>(
+    DEFAULT_LEADERSHIP_TITLE_OPTIONS
+  );
   const [expandedAudience, setExpandedAudience] = useState<{
     departments: boolean;
     jobTitles: boolean;
@@ -275,11 +273,20 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
       apiClient<{ metroLines?: Array<{ id: number; nameAr: string }> }>(
         '/api/admin/organization/metro-lines'
       ),
-    ]).then(([deptRes, jobRes, lineRes]) => {
+      apiClient<{ leadershipTitles?: Array<{ id: number; nameAr: string }> }>(
+        '/api/admin/organization/leadership-titles'
+      ),
+    ]).then(([deptRes, jobRes, lineRes, leadershipRes]) => {
       if (!active) return;
       if (deptRes.status === 'fulfilled') setOrgDepartments(deptRes.value.departments || []);
       if (jobRes.status === 'fulfilled') setOrgJobTitles(jobRes.value.jobTitles || []);
       if (lineRes.status === 'fulfilled') setOrgMetroLines(lineRes.value.metroLines || []);
+      if (leadershipRes.status === 'fulfilled') {
+        const items = (leadershipRes.value.leadershipTitles || [])
+          .filter((lt) => Boolean(lt.nameAr))
+          .map((lt) => ({ id: Number(lt.id), label: lt.nameAr }));
+        if (items.length > 0) setOrgLeadershipTitles(items);
+      }
     });
     return () => {
       active = false;
@@ -426,6 +433,7 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
     onChange({
       ...course,
       coverType: mode,
+      ...(mode === 'color' && !course.coverColor ? { coverColor: BRAND_COVER_COLORS[0].id } : {}),
     });
   };
 
@@ -654,11 +662,12 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
           {/* Course Description */}
           <div className="space-y-1.5">
             <label htmlFor="builder-desc-input" className="block text-xs font-bold text-text-heading">
-              وصف المقرر وأهدافه التعليمية
+              وصف المقرر وأهدافه التعليمية <span className="text-danger">*</span>
             </label>
             <textarea
               id="builder-desc-input"
               rows={4}
+              required
               value={course.description || ''}
               onChange={(e) => handleFieldChange('description', e.target.value)}
               placeholder="قدم شرحاً موجزاً يوضح ما سيتعلمه المتدرب ومخرجات التدريب والمهارات المكتسبة..."
@@ -916,14 +925,14 @@ export const MetadataEditor: React.FC<MetadataEditorProps> = ({
             isOpen={activeAudienceModal === 'leadership'}
             title="تحديد الصفات القيادية / الإشرافية المستهدفة"
             description="اختر الصفات القيادية المستهدفة لهذه الدورة، أو اتركها فارغة لإتاحتها للجميع."
-            items={LEADERSHIP_TITLE_OPTIONS}
-            selectedIds={LEADERSHIP_TITLE_OPTIONS.filter((opt) =>
-              (course.targetLeadershipTitles || []).includes(opt.label)
-            ).map((opt) => opt.id)}
+            items={orgLeadershipTitles}
+            selectedIds={orgLeadershipTitles
+              .filter((opt) => (course.targetLeadershipTitles || []).includes(opt.label))
+              .map((opt) => opt.id)}
             onSave={(nextIds) => {
-              const titles = LEADERSHIP_TITLE_OPTIONS.filter((opt) =>
-                nextIds.includes(opt.id)
-              ).map((opt) => opt.label);
+              const titles = orgLeadershipTitles
+                .filter((opt) => nextIds.includes(opt.id))
+                .map((opt) => opt.label);
               onChange({ ...course, targetLeadershipTitles: titles });
               setActiveAudienceModal(null);
             }}

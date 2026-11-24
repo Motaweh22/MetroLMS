@@ -877,5 +877,77 @@ describe('Increment 11 — Phase 5C: Course Discussion UI & Reporting Dialog', (
         commentsApi.reportComment('CMT006', 'inappropriate_content')
       ).rejects.toThrow('يجب أن تكون مسجلاً في المقرر للإبلاغ عن التعليقات');
     });
+
+    it('hides report button on user own comment and distinguishes own, lecturer, assistant, and admin colors', async () => {
+      setTestSession('user', 'usr_trainee_003');
+      server.use(
+        http.get('/api/courses/CRS002/comments', () =>
+          HttpResponse.json([
+            {
+              id: 'C_OWN',
+              courseId: 'CRS002',
+              courseTitle: 'أساسيات الإشارات',
+              userId: 'usr_trainee_003',
+              userName: 'سارة عبد الله',
+              userRole: 'user',
+              text: 'تعليقي الشخصي',
+              createdAt: new Date().toISOString(),
+              reported: false,
+            },
+            {
+              id: 'C_ASST',
+              courseId: 'CRS002',
+              courseTitle: 'أساسيات الإشارات',
+              userId: 'USR_ASST',
+              userName: 'م. محاضر مساعد',
+              userRole: 'lecturer',
+              isCourseAssistant: true,
+              text: 'رد المحاضر المساعد',
+              createdAt: new Date().toISOString(),
+              reported: false,
+            },
+            {
+              id: 'C_ADM',
+              courseId: 'CRS002',
+              courseTitle: 'أساسيات الإشارات',
+              userId: 'usr_admin_001',
+              userName: 'أحمد سامي النجار',
+              userRole: 'admin',
+              text: 'تنبيه الإدارة',
+              createdAt: new Date().toISOString(),
+              reported: false,
+            },
+          ])
+        )
+      );
+
+      renderWithProviders(
+        <CourseCommentsSection
+          courseId="CRS002"
+          courseTitle="أساسيات الإشارات"
+          commentsEnabled={true}
+          isEnrolled={true}
+          courseCoLecturers={['USR_ASST']}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('comment-card-C_OWN')).toBeInTheDocument();
+      });
+
+      const ownCard = screen.getByTestId('comment-card-C_OWN');
+      expect(within(ownCard).getByTestId('comment-own-badge')).toHaveTextContent('تعليقك');
+      expect(within(ownCard).queryByTestId('report-comment-btn-C_OWN')).not.toBeInTheDocument();
+      expect(ownCard.className).toContain('emerald');
+
+      const asstCard = screen.getByTestId('comment-card-C_ASST');
+      expect(within(asstCard).getByTestId('comment-role-badge')).toHaveTextContent('محاضر مساعد');
+      expect(within(asstCard).getByTestId('report-comment-btn-C_ASST')).toBeInTheDocument();
+      expect(asstCard.className).toContain('violet');
+
+      const adminCard = screen.getByTestId('comment-card-C_ADM');
+      expect(within(adminCard).getByTestId('comment-role-badge')).toHaveTextContent('مدير النظام');
+      expect(adminCard.className).toContain('danger');
+    });
   });
 });

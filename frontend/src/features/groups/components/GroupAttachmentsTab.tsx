@@ -263,7 +263,7 @@ export const GroupAttachmentsTab: React.FC<GroupAttachmentsTabProps> = ({
           {error && <Alert variant="danger">{error}</Alert>}
 
           <FormInput
-            label="عنوان المادة المرفقة *"
+            label="عنوان المادة المرفقة"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="مثال: دليل إجراءات السلامة المعتمد للخط الثاني"
@@ -272,7 +272,7 @@ export const GroupAttachmentsTab: React.FC<GroupAttachmentsTabProps> = ({
           />
 
           <FormInput
-            label="رابط أو مسار المستند *"
+            label="رابط أو مسار المستند"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="مثال: /dev-media/emergency-guidelines.pdf"

@@ -27,6 +27,10 @@ class NotificationItem(models.Model):
     )
     title = models.CharField(max_length=255)
     body = models.TextField()
+    notif_type = models.CharField(max_length=64, default="general_alert", db_default="general_alert")
+    target_url = models.CharField(max_length=500, null=True, blank=True)
+    action_required = models.BooleanField(default=False, db_default=False)
+    metadata_json = models.JSONField(null=True, blank=True)
     is_read = models.BooleanField(default=False, db_default=False)
     created_at = models.DateTimeField()
 

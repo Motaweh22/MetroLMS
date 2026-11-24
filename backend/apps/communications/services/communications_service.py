@@ -1,6 +1,9 @@
 """Notifications (D-08) and WhatsApp Support Contacts & Visibility (D-09) services."""
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Any
+
 from django.utils import timezone
 
 from apps.communications.models import NotificationItem, UserWhatsAppVisibility, WhatsAppContact
@@ -19,9 +22,52 @@ class CommunicationsDomainError(Exception):
         self.status_code = status_code
 
 
-def send_notification(*, user: User, title: str, body: str) -> NotificationItem:
+def serialize_notification(n: NotificationItem) -> dict[str, Any]:
+    """Serialize a NotificationItem into the frontend NotificationItem DTO."""
+    meta = n.metadata_json if isinstance(n.metadata_json, dict) else {}
+    eff_type = n.notif_type or "general_alert"
+    eff_url = n.target_url
+    if eff_type == "general_alert" and "مجموعة" in (n.title or ""):
+        eff_type = "forced_enrollment"
+        if not eff_url:
+            eff_url = "/my-groups"
+
+    return {
+        "id": str(n.id),
+        "userId": str(n.user_id),
+        "type": eff_type,
+        "title": n.title,
+        "body": n.body,
+        "message": n.body,
+        "isRead": n.is_read,
+        "read": n.is_read,
+        "createdAt": n.created_at,
+        "targetUrl": eff_url,
+        "actionRequired": bool(n.action_required),
+        "courseId": meta.get("courseId"),
+        "groupId": meta.get("groupId"),
+        "requestId": meta.get("requestId"),
+        "commentId": meta.get("commentId"),
+        "auditLogId": meta.get("auditLogId"),
+        "actorId": meta.get("actorId"),
+        "actorName": meta.get("actorName"),
+        "actorRole": meta.get("actorRole"),
+        "metadata": meta or None,
+    }
+
+
+def send_notification(
+    *,
+    user: User,
+    title: str,
+    body: str,
+    notif_type: str = "general_alert",
+    target_url: str | None = None,
+    action_required: bool = False,
+    metadata: dict[str, Any] | None = None,
+) -> NotificationItem:
     """Create a D-08 NotificationItem for a target User."""
-    norm_title = normalize_nfc_stripped(title)
+    norm_title = normalize_nfc_stripped(title)[:255]
     norm_body = normalize_nfc_stripped(body)
     validate_non_empty_text(norm_title)
     validate_non_empty_text(norm_body)
@@ -29,8 +75,82 @@ def send_notification(*, user: User, title: str, body: str) -> NotificationItem:
         user=user,
         title=norm_title,
         body=norm_body,
+        notif_type=(notif_type or "general_alert")[:64],
+        target_url=target_url[:500] if target_url else None,
+        action_required=bool(action_required),
+        metadata_json=metadata,
         is_read=False,
         created_at=timezone.now(),
+    )
+
+
+def notify_users(
+    *,
+    users: Iterable[User],
+    title: str,
+    body: str,
+    notif_type: str = "general_alert",
+    target_url: str | None = None,
+    action_required: bool = False,
+    metadata: dict[str, Any] | None = None,
+    exclude_user_id: int | None = None,
+) -> int:
+    """Bulk-create identical notifications for multiple users, deduplicated by user id."""
+    norm_title = normalize_nfc_stripped(title)[:255]
+    norm_body = normalize_nfc_stripped(body)
+    if not norm_title or not norm_body:
+        return 0
+    seen_ids: set[int] = set()
+    now = timezone.now()
+    rows: list[NotificationItem] = []
+    for u in users:
+        if u is None or not getattr(u, "id", None):
+            continue
+        if exclude_user_id is not None and u.id == exclude_user_id:
+            continue
+        if u.id in seen_ids:
+            continue
+        seen_ids.add(u.id)
+        rows.append(
+            NotificationItem(
+                user=u,
+                title=norm_title,
+                body=norm_body,
+                notif_type=(notif_type or "general_alert")[:64],
+                target_url=target_url[:500] if target_url else None,
+                action_required=bool(action_required),
+                metadata_json=metadata,
+                is_read=False,
+                created_at=now,
+            )
+        )
+    if rows:
+        NotificationItem.objects.bulk_create(rows)
+    return len(rows)
+
+
+def notify_roles(
+    *,
+    role_ids: Iterable[str],
+    title: str,
+    body: str,
+    notif_type: str = "general_alert",
+    target_url: str | None = None,
+    action_required: bool = False,
+    metadata: dict[str, Any] | None = None,
+    exclude_user_id: int | None = None,
+) -> int:
+    """Send notifications to all active users holding any role in role_ids."""
+    recipients = list(User.objects.filter(role_id__in=list(role_ids), status="Active"))
+    return notify_users(
+        users=recipients,
+        title=title,
+        body=body,
+        notif_type=notif_type,
+        target_url=target_url,
+        action_required=action_required,
+        metadata=metadata,
+        exclude_user_id=exclude_user_id,
     )
 
 

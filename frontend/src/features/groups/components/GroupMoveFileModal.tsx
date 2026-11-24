@@ -78,7 +78,9 @@ export const GroupMoveFileModal: React.FC<GroupMoveFileModalProps> = ({
           </div>
         ) : (
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-text-heading">المجلد الوجهة</label>
+            <label className="text-xs font-bold text-text-heading">
+              المجلد الوجهة <span className="text-danger" aria-hidden="true">*</span>
+            </label>
             <StyledSelect
               dataTestId="target-folder-select"
               ariaLabel="المجلد الوجهة"

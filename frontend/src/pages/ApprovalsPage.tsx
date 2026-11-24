@@ -63,6 +63,11 @@ export const ApprovalsPage: React.FC = () => {
       user?.role === 'super_admin' ||
       user?.role === 'developer' ||
       user?.role === 'assistant_admin');
+  const isDecider =
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer');
   const isLecturer = previewRole !== 'assistant_lecturer' && user?.role === 'lecturer';
   const isAuthorized = isAdmin || isLecturer;
 
@@ -397,11 +402,11 @@ export const ApprovalsPage: React.FC = () => {
                           variant="primary"
                           size="sm"
                           data-testid={`review-btn-${item.id}`}
-                          onClick={() => navigate(`/admin/review/${item.id}`)}
+                          onClick={() => navigate(`/admin/review/${item.courseId || item.id}`)}
                           className="gap-1.5"
                         >
-                          <Icon name="shield" size="sm" />
-                          مراجعة المقرر
+                          <Icon name={isDecider ? 'shield' : 'eye'} size="sm" />
+                          {isDecider ? 'مراجعة المقرر' : 'معاينة للتدقيق'}
                         </Button>
                       </td>
                     </tr>
@@ -696,7 +701,7 @@ export const ApprovalsPage: React.FC = () => {
                           variant="outline"
                           size="sm"
                           data-testid={`builder-btn-${item.id}`}
-                          onClick={() => navigate(`/lecturer/builder/${item.id}`)}
+                          onClick={() => navigate(`/lecturer/builder/${item.courseId || item.id}`)}
                           className="gap-1.5"
                         >
                           <Icon name="edit" size="sm" />

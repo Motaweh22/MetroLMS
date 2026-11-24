@@ -142,8 +142,24 @@ export const CourseDetailPage: React.FC = () => {
 
       {/* Detailed Course Overview Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (2 Cols): Curriculum / Syllabus */}
+        {/* Left Column (2 Cols): Course Description, Prerequisites & Curriculum */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Course Description Overview Card */}
+          {course.description && course.description.trim() && (
+            <div
+              className="bg-surface rounded-xl border border-border p-5 space-y-2.5 shadow-xs"
+              data-testid="detail-course-description-card"
+            >
+              <div className="flex items-center gap-2 text-text-heading font-bold text-sm">
+                <Icon name="fileText" size="sm" className="text-primary-dark" />
+                <span>وصف الدورة التدريبية وأهدافها</span>
+              </div>
+              <p className="text-sm text-text leading-relaxed whitespace-pre-line">
+                {course.description}
+              </p>
+            </div>
+          )}
+
           {/* Prerequisites Section (if any defined) */}
           {((course.knowledgePrerequisites && course.knowledgePrerequisites.length > 0) ||
             (course.prerequisiteCourseIds && course.prerequisiteCourseIds.length > 0) ||

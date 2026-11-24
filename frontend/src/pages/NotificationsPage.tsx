@@ -192,6 +192,11 @@ export const NotificationsPage: React.FC = () => {
 
   // Role-Aware Category Visibility
   const currentRole = user?.role || 'user';
+  const isAdminRole =
+    currentRole === 'admin' ||
+    currentRole === 'assistant_admin' ||
+    currentRole === 'super_admin' ||
+    currentRole === 'developer';
   const visibleCategories = React.useMemo(
     () => NOTIFICATION_CATEGORIES.filter((cat) => cat.roles.includes(currentRole)),
     [currentRole]
@@ -347,26 +352,48 @@ export const NotificationsPage: React.FC = () => {
   };
 
   const resolveNotificationDestination = (notif: NotificationItem): string | null => {
-    const role = user?.role || 'user';
+    const role = currentRole;
     const explicitUrl = notif.targetUrl?.trim() || null;
 
     if (explicitUrl) {
       // Guard role boundaries so recipients are never navigated to unauthorized routes
-      if (role === 'user' && (explicitUrl.startsWith('/admin') || explicitUrl.startsWith('/lecturer'))) {
+      if (
+        role === 'user' &&
+        (explicitUrl.startsWith('/admin') ||
+          explicitUrl.startsWith('/lecturer') ||
+          explicitUrl.startsWith('/approvals'))
+      ) {
         if (notif.type === 'enrollment_rejected') return '/my-groups';
         if (notif.groupId) return `/my-groups/${encodeURIComponent(notif.groupId)}`;
         if (notif.courseId) return `/courses/${encodeURIComponent(notif.courseId)}`;
         return '/my-groups';
       }
       if (role === 'lecturer') {
-        if (explicitUrl.startsWith('/admin/review/') && notif.courseId) {
+        if (explicitUrl.startsWith('/admin')) {
+          if (explicitUrl.startsWith('/admin/review/') && notif.courseId) {
+            return `/courses/${encodeURIComponent(notif.courseId)}`;
+          }
+          if (explicitUrl.startsWith('/admin/groups/') && notif.groupId) {
+            return `/admin/groups/${encodeURIComponent(notif.groupId)}/monitoring`;
+          }
+          if (explicitUrl === '/admin/groups') {
+            return '/my-groups';
+          }
+          if (explicitUrl.startsWith('/admin/comment-moderation') && notif.courseId) {
+            return `/courses/${encodeURIComponent(notif.courseId)}`;
+          }
+          return notif.courseId ? `/courses/${encodeURIComponent(notif.courseId)}` : '/lecturer/courses';
+        }
+        if (explicitUrl.startsWith('/approvals') && notif.requestId) {
+          return '/lecturer/courses';
+        }
+      }
+      if (role === 'assistant_admin') {
+        if (explicitUrl.startsWith('/lecturer/builder/') && notif.courseId) {
           return `/courses/${encodeURIComponent(notif.courseId)}`;
         }
-        if (explicitUrl.endsWith('/edit') && notif.groupId) {
+        if (explicitUrl.startsWith('/admin/groups/') && explicitUrl.endsWith('/edit') && notif.groupId) {
           return `/admin/groups/${encodeURIComponent(notif.groupId)}/monitoring`;
-        }
-        if (explicitUrl.startsWith('/admin/users')) {
-          return '/lecturer/courses';
         }
       }
       return explicitUrl;
@@ -387,31 +414,27 @@ export const NotificationsPage: React.FC = () => {
       return `/admin/groups/${encodeURIComponent(notif.groupId)}/monitoring`;
     }
 
-    if (
-      notif.type === 'content_pending_review' &&
-      notif.courseId &&
-      (role === 'admin' || role === 'assistant_admin' || role === 'super_admin' || role === 'developer')
-    ) {
+    if (notif.type === 'content_pending_review' && notif.courseId && isAdminRole) {
       return `/admin/review/${encodeURIComponent(notif.courseId)}`;
     }
 
-    if (notif.type === 'content_rejected' && notif.courseId && (role === 'lecturer' || role === 'admin')) {
-      return `/lecturer/builder/${encodeURIComponent(notif.courseId)}`;
+    if (notif.type === 'content_rejected' && notif.courseId) {
+      if (role === 'lecturer' || role === 'admin' || role === 'super_admin' || role === 'developer') {
+        return `/lecturer/builder/${encodeURIComponent(notif.courseId)}`;
+      }
+      return `/courses/${encodeURIComponent(notif.courseId)}`;
     }
 
     if (notif.courseId) {
       return `/courses/${encodeURIComponent(notif.courseId)}`;
     }
 
-    if (
-      notif.type === 'new_registration_request' &&
-      (role === 'admin' || role === 'assistant_admin' || role === 'super_admin' || role === 'developer')
-    ) {
+    if (notif.type === 'new_registration_request' && isAdminRole) {
       return '/approvals';
     }
 
     if (notif.type === 'comment_reported') {
-      if (role === 'admin' || role === 'assistant_admin' || role === 'super_admin' || role === 'developer') {
+      if (isAdminRole) {
         return '/admin/comment-moderation';
       }
       if (notif.courseId) {
@@ -419,10 +442,7 @@ export const NotificationsPage: React.FC = () => {
       }
     }
 
-    if (
-      (notif.type === 'security_alert' || notif.auditLogId) &&
-      (role === 'admin' || role === 'assistant_admin' || role === 'super_admin' || role === 'developer')
-    ) {
+    if ((notif.type === 'security_alert' || notif.auditLogId) && isAdminRole) {
       return '/admin/audit';
     }
 
@@ -856,9 +876,27 @@ export const NotificationsPage: React.FC = () => {
                       </span>
                     </div>
 
-                    <p className="text-xs sm:text-sm text-text-muted leading-relaxed line-clamp-2">
+                    <p
+                      className={`text-xs sm:text-sm text-text-muted leading-relaxed ${
+                        notif.type === 'comment_reported' || notif.actionRequired ? '' : 'line-clamp-2'
+                      }`}
+                    >
                       {notif.message}
                     </p>
+
+                    {notif.type === 'comment_reported' &&
+                      Boolean(notif.metadata?.reportReasonLabelAr || notif.metadata?.reportNotes) && (
+                        <div
+                          className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 rounded-lg bg-danger/10 border border-danger/20 px-2.5 py-1 text-xs text-danger-dark font-semibold"
+                          data-testid={`notification-report-reason-${notif.id}`}
+                        >
+                          <Icon name="alertCircle" size="sm" />
+                          <span>
+                            سبب البلاغ: {String(notif.metadata?.reportReasonLabelAr || '')}
+                            {notif.metadata?.reportNotes ? ` — ${String(notif.metadata.reportNotes)}` : ''}
+                          </span>
+                        </div>
+                      )}
 
                     {/* Metadata Footer */}
                     <div className="flex items-center gap-2 pt-1 flex-wrap">
@@ -881,19 +919,19 @@ export const NotificationsPage: React.FC = () => {
                           <span>عرض المقرر التدريبي ({notif.courseId}) ←</span>
                         </span>
                       )}
-                      {notif.requestId && notif.targetUrl === '/approvals' && (
+                      {isAdminRole && notif.requestId && notif.targetUrl === '/approvals' && (
                         <span className="text-[11px] font-bold text-primary flex items-center gap-1 hover:underline">
                           <Icon name="checkCircle" size="sm" />
                           <span>الانتقال لمركز الاعتمادات الإدارية ({notif.requestId}) ←</span>
                         </span>
                       )}
-                      {notif.type === 'comment_reported' && (
+                      {isAdminRole && notif.type === 'comment_reported' && (
                         <span className="text-[11px] font-bold text-primary flex items-center gap-1 hover:underline">
                           <Icon name="alertCircle" size="sm" />
                           <span>الانتقال لإدارة التعليقات المبلغ عنها ←</span>
                         </span>
                       )}
-                      {(notif.type === 'security_alert' || notif.auditLogId) && (
+                      {isAdminRole && (notif.type === 'security_alert' || notif.auditLogId) && (
                         <span className="text-[11px] font-bold text-primary flex items-center gap-1 hover:underline">
                           <Icon name="shield" size="sm" />
                           <span>الانتقال لسجل الرقابة والأمان ←</span>

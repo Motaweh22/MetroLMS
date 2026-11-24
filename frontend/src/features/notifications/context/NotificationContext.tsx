@@ -132,9 +132,21 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       ) return;
       void loadNotifications();
     };
+    const handleVisibilityRefresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      handleNotificationsChanged();
+    };
     window.addEventListener('metro:notifications-changed', handleNotificationsChanged);
+    window.addEventListener('focus', handleNotificationsChanged);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityRefresh);
+    }
     return () => {
       window.removeEventListener('metro:notifications-changed', handleNotificationsChanged);
+      window.removeEventListener('focus', handleNotificationsChanged);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+      }
     };
   }, [user, sessionEpoch, loadNotifications]);
 

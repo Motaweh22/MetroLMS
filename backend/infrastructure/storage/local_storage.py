@@ -23,7 +23,13 @@ class MediaStorageError(Exception):
 
 
 ALLOWED_MEDIA_SPECS: dict[str, dict[str, object]] = {
-    "video/mp4": {"ext": ".mp4", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 500},
+    "video/mp4": {"ext": ".mp4", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 2048},
+    "video/quicktime": {"ext": ".mov", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 2048},
+    "video/webm": {"ext": ".webm", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 2048},
+    "video/x-matroska": {"ext": ".mkv", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 2048},
+    "video/ogg": {"ext": ".ogv", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 2048},
+    "video/x-msvideo": {"ext": ".avi", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 2048},
+    "video/x-m4v": {"ext": ".m4v", "max_mb_env": "METROLMS_MAX_VIDEO_MB", "default_mb": 2048},
     "application/pdf": {"ext": ".pdf", "max_mb_env": "METROLMS_MAX_DOC_MB", "default_mb": 50},
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
         "ext": ".docx",
@@ -53,8 +59,16 @@ def validate_magic_bytes(mime_type: str, header: bytes) -> bool:
     """Verify binary signature (magic bytes) matches the allowed MIME type."""
     if mime_type == "application/pdf":
         return header.startswith(b"%PDF-")
-    if mime_type == "video/mp4":
+    if mime_type in {"video/mp4", "video/x-m4v"}:
         return len(header) >= 12 and header[4:8] == b"ftyp"
+    if mime_type == "video/quicktime":
+        return len(header) >= 8 and header[4:8] in {b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip"}
+    if mime_type in {"video/webm", "video/x-matroska"}:
+        return header.startswith(b"\x1a\x45\xdf\xa3")
+    if mime_type == "video/ogg":
+        return header.startswith(b"OggS")
+    if mime_type == "video/x-msvideo":
+        return len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"AVI "
     if mime_type in {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -72,6 +86,14 @@ class LocalMediaStorage:
 
     def __init__(self, root_path: Path | str | None = None) -> None:
         self.root = Path(root_path or settings.MEDIA_ROOT).resolve()
+
+    def build_storage_key(self, ext: str, *, scope_prefix: str | None = None) -> str:
+        """Build a safe relative storage key for a given extension."""
+        now = timezone.now()
+        clean_ext = ext if ext.startswith(".") else f".{ext}"
+        if scope_prefix and _SCOPE_PREFIX_RE.match(scope_prefix):
+            return f"{scope_prefix}/{uuid.uuid4().hex}{clean_ext}"
+        return f"assets/{now:%Y}/{now:%m}/{uuid.uuid4().hex}{clean_ext}"
 
     def resolve_safe_path(self, storage_key: str) -> Path:
         """Resolve storage_key strictly inside MEDIA_ROOT, blocking path traversal."""

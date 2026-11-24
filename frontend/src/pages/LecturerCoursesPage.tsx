@@ -42,13 +42,20 @@ export const LecturerCoursesPage: React.FC = () => {
   const [deleteModalError, setDeleteModalError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
+  const canCreateCourse =
+    previewRole !== 'assistant_lecturer' &&
+    (user?.role === 'lecturer' ||
+      user?.role === 'admin' ||
+      user?.role === 'super_admin' ||
+      user?.role === 'developer');
+
   // Check URL query param to open creation modal directly if routed from /lecturer/builder/new
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('new') === 'true') {
+    if (params.get('new') === 'true' && canCreateCourse) {
       setIsCreationModalOpen(true);
     }
-  }, [location.search]);
+  }, [location.search, canCreateCourse]);
 
   // Load lecturer courses
   const fetchCourses = useCallback(async () => {
@@ -234,10 +241,7 @@ export const LecturerCoursesPage: React.FC = () => {
           </p>
         </div>
 
-        {(user?.role === 'lecturer' ||
-          user?.role === 'admin' ||
-          user?.role === 'super_admin' ||
-          user?.role === 'developer') && (
+        {canCreateCourse && (
           <Button
             type="button"
             variant="primary"
@@ -331,9 +335,11 @@ export const LecturerCoursesPage: React.FC = () => {
           <p className="text-xs text-text-muted max-w-sm mx-auto">
             {searchQuery
               ? 'لم يتم العثور على أي دورات تدريبية تطابق عبارة البحث المدخلة.'
-              : 'لم تقم بإنشاء أي دورات تدريبية بعد. يمكنك البدء بإنشاء دورتك الأولى الآن.'}
+              : canCreateCourse
+                ? 'لم تقم بإنشاء أي دورات تدريبية بعد. يمكنك البدء بإنشاء دورتك الأولى الآن.'
+                : 'لا توجد دورات تدريبية متاحة للعرض حالياً.'}
           </p>
-          {!searchQuery && (
+          {!searchQuery && canCreateCourse && (
             <Button
               variant="primary"
               size="sm"
@@ -477,16 +483,21 @@ export const LecturerCoursesPage: React.FC = () => {
                     <Icon name="link" size="sm" />
                   </Button>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/courses/${encodeURIComponent(course.id)}?preview=true`)}
-                    className="px-2.5 text-xs whitespace-nowrap shrink-0"
-                    title="معاينة الدورة كما تظهر للمتدربين"
-                    data-testid={`preview-course-btn-${course.id}`}
-                  >
-                    معاينة
-                  </Button>
+                  {(user?.role === 'lecturer' ||
+                    user?.role === 'admin' ||
+                    user?.role === 'super_admin' ||
+                    user?.role === 'developer') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/courses/${encodeURIComponent(course.id)}?preview=true`)}
+                      className="px-2.5 text-xs whitespace-nowrap shrink-0"
+                      title="معاينة الدورة كما تظهر للمتدربين"
+                      data-testid={`preview-course-btn-${course.id}`}
+                    >
+                      معاينة
+                    </Button>
+                  )}
 
                   {canDeleteCourse(course) && (
                     <Button

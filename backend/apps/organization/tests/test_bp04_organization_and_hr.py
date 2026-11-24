@@ -157,3 +157,121 @@ class Bp04OrganizationAndHrTests(TestCase):
         # INV-R8: Admin querying developer historical training gets 404
         self.assertEqual(c.get(f"/api/admin/users/{self.developer.id}/historical-training").status_code, 404)
 
+    def test_admin_user_creation_and_update_sync_department_job_title(self) -> None:
+        c = self._admin_client()
+        dept = OrganizationalDepartment.objects.create(name_ar="إدارة التدريب الهندسي")
+        job = JobTitle.objects.create(name_ar="أخصائي تدريب متقدم", department=dept)
+
+        # Even without manual DepartmentJobTitle row beforehand, POST /api/admin/users creates user + links FK safely
+        create_res = c.post(
+            "/api/admin/users",
+            data={
+                "name": "م. خالد محسن",
+                "phone": "01055566677",
+                "gender": "male",
+                "nationalId": "29501010109988",
+                "dateOfBirth": "1995-01-01",
+                "appointmentDate": "2021-01-01",
+                "address": "القاهرة",
+                "educationalQualification": "بكالوريوس هندسة",
+                "department": dept.name_ar,
+                "jobTitle": job.name_ar,
+                "role": "user",
+                "status": "active",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(create_res.status_code, 201)
+        new_uid = int(create_res.json()["data"]["id"])
+
+        # Updating user to a different department + jobTitle + 11-digit phone also succeeds cleanly
+        new_dept = OrganizationalDepartment.objects.create(name_ar="إدارة الإشارات")
+        update_res = c.put(
+            f"/api/admin/users/{new_uid}",
+            data={
+                "phone": "01122233344",
+                "department": new_dept.name_ar,
+                "jobTitle": "مهندس إشارات أول",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(update_res.status_code, 200)
+        self.assertEqual(update_res.json()["data"]["phoneE164"], "+201122233344")
+        self.assertEqual(update_res.json()["data"]["department"], new_dept.name_ar)
+        self.assertEqual(update_res.json()["data"]["jobTitle"], "مهندس إشارات أول")
+
+        # Invalid phone length (10 digits) is rejected cleanly with 400
+        bad_phone_res = c.put(
+            f"/api/admin/users/{new_uid}",
+            data={"phone": "0112223334"},
+            content_type="application/json",
+        )
+        self.assertEqual(bad_phone_res.status_code, 400)
+
+        # Weak password (<8 chars, missing complexity, or containing user phone) rejected with 400
+        for bad_pw in ("123456", "abcdefgh", "Pass01122233344"):
+            bad_pw_res = c.put(
+                f"/api/admin/users/{new_uid}",
+                data={"password": bad_pw},
+                content_type="application/json",
+            )
+            self.assertEqual(bad_pw_res.status_code, 400)
+
+        # Strong admin-assigned password succeeds and invalidates active user sessions
+        from apps.identity.models import ServerSession
+
+        new_user = User.objects.get(pk=new_uid)
+        t_client = Client()
+        t_client.force_login(new_user)
+        self.assertGreaterEqual(ServerSession.objects.filter(user=new_user).count(), 1)
+
+        good_pw_res = c.put(
+            f"/api/admin/users/{new_uid}",
+            data={"password": "MetroStrong@2026"},
+            content_type="application/json",
+        )
+        self.assertEqual(good_pw_res.status_code, 200)
+        self.assertEqual(ServerSession.objects.filter(user=new_user).count(), 0)
+
+    def test_leadership_title_catalog_crud_rename_cascade_and_in_use_guard(self) -> None:
+        c = self._admin_client()
+
+        create_res = c.post(
+            "/api/admin/organization/leadership-titles",
+            data={"nameAr": "نائب رئيس قطاع", "nameEn": "Deputy Sector Head"},
+            content_type="application/json",
+        )
+        self.assertEqual(create_res.status_code, 201)
+        lt_id = create_res.json()["data"]["leadershipTitle"]["id"]
+
+        list_res = c.get("/api/admin/organization/leadership-titles")
+        self.assertEqual(list_res.status_code, 200)
+        names = [item["nameAr"] for item in list_res.json()["data"]["leadershipTitles"]]
+        self.assertIn("نائب رئيس قطاع", names)
+
+        # Assign to trainee
+        self.trainee.leadership_title = "نائب رئيس قطاع"
+        self.trainee.save(update_fields=["leadership_title"])
+
+        # Deleting while assigned to a User returns 409 CATALOG_IN_USE
+        del_blocked = c.delete(f"/api/admin/organization/leadership-titles/{lt_id}")
+        self.assertEqual(del_blocked.status_code, 409)
+        self.assertEqual(del_blocked.json()["code"], "CATALOG_IN_USE")
+
+        # Renaming cascades to assigned users
+        upd_res = c.put(
+            f"/api/admin/organization/leadership-titles/{lt_id}",
+            data={"nameAr": "مساعد رئيس قطاع", "nameEn": "Assistant Sector Head"},
+            content_type="application/json",
+        )
+        self.assertEqual(upd_res.status_code, 200)
+        self.trainee.refresh_from_db()
+        self.assertEqual(self.trainee.leadership_title, "مساعد رئيس قطاع")
+
+        # Unassign and delete cleanly
+        self.trainee.leadership_title = None
+        self.trainee.save(update_fields=["leadership_title"])
+        del_ok = c.delete(f"/api/admin/organization/leadership-titles/{lt_id}")
+        self.assertEqual(del_ok.status_code, 200)
+
+

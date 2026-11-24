@@ -27,7 +27,7 @@ export const CourseHero: React.FC<CourseHeroProps> = ({ course, enrollmentState 
   if (course.coverType === 'color' && course.coverColor) {
     heroStyle.backgroundColor = course.coverColor;
     heroStyle.backgroundImage = 'none';
-  } else if (course.coverType === 'image' && course.thumbnail) {
+  } else if (course.coverType !== 'default' && course.thumbnail) {
     heroStyle.backgroundImage = `linear-gradient(rgba(0, 51, 102, 0.85), rgba(15, 23, 42, 0.94)), url(${course.thumbnail})`;
     heroStyle.backgroundSize = 'cover';
     heroStyle.backgroundPosition = 'center';

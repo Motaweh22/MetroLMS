@@ -112,6 +112,11 @@ export const ProfilePage: React.FC = () => {
                     <h2 className="text-xl sm:text-2xl font-extrabold text-text-heading">
                       {profileData.user.name}
                     </h2>
+                    {profileData.user.nameEn && (
+                      <p className="text-xs sm:text-sm text-text-muted font-medium text-right" dir="ltr">
+                        {profileData.user.nameEn}
+                      </p>
+                    )}
                     <p className="text-xs sm:text-sm text-text-muted font-medium">
                       {profileData.user.jobTitle || 'غير مسجل'}
                     </p>
@@ -132,6 +137,15 @@ export const ProfilePage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4 border-t border-border">
                 <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
                   <span className="text-xs text-text-muted font-medium block mb-1">
+                    الاسم بالإنجليزية
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
+                    {profileData.user.nameEn || 'غير مسجل'}
+                  </span>
+                </div>
+
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
                     رقم الهاتف
                   </span>
                   <span className="text-sm font-semibold text-text-heading dir-ltr text-right block">
@@ -148,6 +162,14 @@ export const ProfilePage: React.FC = () => {
                   </span>
                 </div>
 
+                <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
+                  <span className="text-xs text-text-muted font-medium block mb-1">
+                    الرقم الوظيفي
+                  </span>
+                  <span className="text-sm font-semibold text-text-heading dir-ltr text-right block font-mono">
+                    {profileData.user.employeeNumber || 'غير مسجل'}
+                  </span>
+                </div>
                 <div className="bg-surface-alt/50 p-3.5 rounded-xl border border-border/60">
                   <span className="text-xs text-text-muted font-medium block mb-1">
                     الرقم القومي

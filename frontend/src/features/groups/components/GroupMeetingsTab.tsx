@@ -339,7 +339,7 @@ export const GroupMeetingsTab: React.FC<GroupMeetingsTabProps> = ({
           {error && <Alert variant="danger">{error}</Alert>}
 
           <FormInput
-            label="عنوان اللقاء التفاعلي *"
+            label="عنوان اللقاء التفاعلي"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="مثال: ورشة تدريبية تفاعلية — أنظمة الإشارات والتحكم"
@@ -391,7 +391,7 @@ export const GroupMeetingsTab: React.FC<GroupMeetingsTabProps> = ({
           {/* Meeting URL */}
           <div className="space-y-1">
             <FormInput
-              label={`رابط الاجتماع (${MEETING_PLATFORMS[platform].label}) *`}
+              label={`رابط الاجتماع (${MEETING_PLATFORMS[platform].label})`}
               type="url"
               value={url}
               onChange={(e) => handleUrlChange(e.target.value)}

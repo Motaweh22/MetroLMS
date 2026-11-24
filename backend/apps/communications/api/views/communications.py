@@ -10,6 +10,7 @@ from apps.communications.models import NotificationItem, UserWhatsAppVisibility,
 from apps.communications.services.communications_service import (
     CommunicationsDomainError,
     add_course_whatsapp_contact,
+    serialize_notification,
     set_user_whatsapp_visibility,
 )
 from apps.courses.models import Course
@@ -41,21 +42,7 @@ class NotificationsListView(APIView):
         unread_count = qs.filter(is_read=False).count()
         if request.query_params.get("unreadOnly") == "true":
             qs = qs.filter(is_read=False)
-        items = [
-            {
-                "id": str(n.id),
-                "userId": str(n.user_id),
-                "type": "forced_enrollment" if "مجموعة" in (n.title or "") else "general_alert",
-                "title": n.title,
-                "body": n.body,
-                "message": n.body,
-                "isRead": n.is_read,
-                "read": n.is_read,
-                "createdAt": n.created_at,
-                "targetUrl": "/my-groups" if "مجموعة" in (n.title or "") else None,
-            }
-            for n in qs
-        ]
+        items = [serialize_notification(n) for n in qs]
         return success_response(
             {
                 "unreadCount": unread_count,
@@ -83,17 +70,7 @@ class NotificationMarkReadView(APIView):
                 "id": item.id,
                 "isRead": item.is_read,
                 "unreadCount": unread,
-                "notification": {
-                    "id": str(item.id),
-                    "userId": str(item.user_id),
-                    "type": "general_alert",
-                    "title": item.title,
-                    "body": item.body,
-                    "message": item.body,
-                    "isRead": item.is_read,
-                    "read": item.is_read,
-                    "createdAt": item.created_at,
-                },
+                "notification": serialize_notification(item),
             }
         )
 

@@ -1,7 +1,7 @@
 """Organization & HR API views."""
 from __future__ import annotations
 
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -18,6 +18,7 @@ from apps.organization.models import (
     DepartmentTrack,
     HistoricalServiceTrainingRecord,
     JobTitle,
+    LeadershipTitleCatalog,
     MaritalStatusCatalog,
     MetroLine,
     MilitaryServiceStatusCatalog,
@@ -183,6 +184,8 @@ class _BaseCatalogListView(APIView):
         serializer.is_valid(raise_exception=True)
         try:
             obj = self.model.objects.create(**serializer.validated_data)
+            if isinstance(obj, JobTitle) and obj.department is not None:
+                link_department_job_title(obj.department, obj)
         except IntegrityError:
             return error_response(
                 "CONFLICT",
@@ -209,6 +212,8 @@ class _BaseCatalogDetailView(APIView):
             setattr(obj, attr, val)
         try:
             obj.save()
+            if isinstance(obj, JobTitle) and obj.department is not None:
+                link_department_job_title(obj.department, obj)
         except IntegrityError:
             return error_response(
                 "CONFLICT",
@@ -270,6 +275,63 @@ class MetroLineListView(_BaseCatalogListView):
 
 class MetroLineDetailView(_BaseCatalogDetailView):
     model = MetroLine
+
+
+class LeadershipTitleListView(_BaseCatalogListView):
+    model = LeadershipTitleCatalog
+    key_name = "leadershipTitles"
+
+
+class LeadershipTitleDetailView(_BaseCatalogDetailView):
+    model = LeadershipTitleCatalog
+
+    def _update(self, request: Request, item_id: int, partial: bool):
+        obj = LeadershipTitleCatalog.objects.filter(pk=item_id).first()
+        if obj is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        serializer = self.serializer_class(data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        old_name = obj.name_ar
+        new_name = serializer.validated_data.get("name_ar", old_name)
+        try:
+            with transaction.atomic():
+                for attr, val in serializer.validated_data.items():
+                    setattr(obj, attr, val)
+                obj.save()
+                if new_name != old_name:
+                    from apps.courses.models import CourseAudienceLeadership
+                    from apps.identity.models import User
+
+                    User.objects.filter(leadership_title=old_name).update(leadership_title=new_name)
+                    CourseAudienceLeadership.objects.filter(leadership_title=old_name).update(
+                        leadership_title=new_name
+                    )
+        except IntegrityError:
+            return error_response(
+                "CONFLICT",
+                "تعارض في معالجة الطلب. قد يكون الاسم مسجلاً بالفعل.",
+                status.HTTP_409_CONFLICT,
+            )
+        return success_response({"item": self.serializer_class(obj).data})
+
+    def delete(self, request: Request, item_id: int):
+        obj = LeadershipTitleCatalog.objects.filter(pk=item_id).first()
+        if obj is None:
+            return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+        from apps.courses.models import CourseAudienceLeadership
+        from apps.identity.models import User
+
+        if (
+            User.objects.filter(leadership_title=obj.name_ar).exists()
+            or CourseAudienceLeadership.objects.filter(leadership_title=obj.name_ar).exists()
+        ):
+            return error_response(
+                "CATALOG_IN_USE",
+                "لا يمكن حذف هذه الصفة القيادية لارتباطها بمستخدمين أو مقررات قائمة.",
+                status.HTTP_409_CONFLICT,
+            )
+        obj.delete()
+        return success_response({"deleted": True, "id": item_id})
 
 
 class MaritalStatusListView(_BaseCatalogListView):

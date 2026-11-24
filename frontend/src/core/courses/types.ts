@@ -73,6 +73,7 @@ export interface ChapterItem {
   driveFileId?: string;
   externalResources?: ExternalResource[];
   mediaId?: string;
+  mediaReferenceId?: string;
   // Source-Aware Video Embed Policy (Google Drive Top Crop & Popup Blocking Sandbox)
   embedPolicy?: VideoEmbedPolicy;
   // Lesson Completion Policy (e.g. Google Drive Minimum Viewing-Time Requirement)

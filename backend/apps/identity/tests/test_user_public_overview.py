@@ -132,3 +132,32 @@ class UserPublicOverviewTests(APITestCase):
         self.assertEqual(data["user"]["nationalId"], "29501010108003")
         self.assertIn("enrolledCoursesCount", data["metrics"])
         self.assertIsInstance(data["courses"], list)
+
+    def test_trainee_and_lecturer_overview_rbac_boundaries(self) -> None:
+        other_trainee = User.objects.create_user(
+            phone_e164="+201088000099",
+            password="StrongPass!123",
+            role=self.roles["trainee"],
+            full_name="متدرب آخر",
+            national_id="29501010108099",
+            marital_status=self.marital,
+            appointment_date=datetime.date(2020, 1, 1),
+            military_service_status=self.military,
+            educational_qualification="بكالوريوس",
+            address="القاهرة",
+            date_of_birth=datetime.date(1995, 1, 1),
+            metro_line=self.line1,
+        )
+
+        # Trainee cannot inspect peer trainees or admins
+        self.client.force_authenticate(user=self.trainee)
+        self.assertEqual(self.client.get(f"/api/users/{other_trainee.id}/overview").status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(f"/api/users/{self.admin.id}/overview").status_code, status.HTTP_403_FORBIDDEN)
+        # Trainee CAN inspect self
+        self.assertEqual(self.client.get(f"/api/users/{self.trainee.id}/overview").status_code, status.HTTP_200_OK)
+
+        # Lecturer can inspect trainee inside their supervised group, but not unrelated trainee or admin
+        self.client.force_authenticate(user=self.lecturer)
+        self.assertEqual(self.client.get(f"/api/users/{self.trainee.id}/overview").status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.get(f"/api/users/{other_trainee.id}/overview").status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(f"/api/users/{self.admin.id}/overview").status_code, status.HTTP_403_FORBIDDEN)

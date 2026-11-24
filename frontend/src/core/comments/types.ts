@@ -36,12 +36,14 @@ export interface CourseComment {
   userInitial?: string;
   userAvatar?: string;
   isLecturer?: boolean;
+  isCourseAssistant?: boolean;
   text: string;
   time?: string;
   createdAt: string; // ISO string
   reported: boolean;
   reportReason?: CommentReportReason | string | null;
   reportReasonLabelAr?: string | null;
+  reportNotes?: string | null;
   reportedBy?: string | null;
   reportedByName?: string | null;
   reportedAt?: string | null;

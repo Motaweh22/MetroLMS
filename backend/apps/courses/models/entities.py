@@ -257,6 +257,8 @@ class CourseDraft(models.Model):
     title_snapshot = models.CharField(max_length=255)
     course_zip_policy = models.CharField(max_length=32, default="disabled", db_default="disabled")
     refresher_config_json = models.JSONField(null=True, blank=True, default=None)
+    cover_type = models.CharField(max_length=16, null=True, blank=True, default=None)
+    cover_color = models.CharField(max_length=32, null=True, blank=True, default=None)
     updated_at = models.DateTimeField()
     updated_by_user = models.ForeignKey(
         "identity.User",
@@ -301,6 +303,8 @@ class PublishedCourseVersion(models.Model):
     version_number = models.IntegerField()
     course_zip_policy = models.CharField(max_length=32, default="disabled", db_default="disabled")
     refresher_config_json = models.JSONField(null=True, blank=True, default=None)
+    cover_type = models.CharField(max_length=16, null=True, blank=True, default=None)
+    cover_color = models.CharField(max_length=32, null=True, blank=True, default=None)
     published_at = models.DateTimeField()
     published_by_user = models.ForeignKey(
         "identity.User",
@@ -382,6 +386,7 @@ class LessonItem(models.Model):
         related_name="lessons",
     )
     title = models.CharField(max_length=255, validators=[validate_non_empty_text])
+    description = models.TextField(blank=True, default="", db_default="")
     lesson_type = models.CharField(max_length=32)
     sort_order = models.IntegerField(default=0, db_default=0)
     external_video_url = models.CharField(max_length=2048, null=True, blank=True, validators=[validate_https_url])

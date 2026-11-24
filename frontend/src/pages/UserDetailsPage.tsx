@@ -231,7 +231,11 @@ export const UserDetailsPage: React.FC = () => {
                 <span className="font-mono text-xs bg-bg-alt text-text-muted px-2 py-0.5 rounded border border-border">
                   {user.id}
                 </span>
-                <span className="text-xs text-text-muted">@{user.username}</span>
+                {user.nameEn && (
+                  <span className="text-xs text-text-muted" dir="ltr">
+                    {user.nameEn}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-xs sm:text-sm text-text-muted flex-wrap">
                 <span className="font-semibold text-text">{user.jobTitle || 'غير محدد'}</span>
@@ -307,9 +311,21 @@ export const UserDetailsPage: React.FC = () => {
         {/* Detailed Metadata Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-border/60 text-xs">
           <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">الاسم بالإنجليزية</span>
+            <span className="font-medium text-text" dir="ltr">
+              {user.nameEn || '—'}
+            </span>
+          </div>
+          <div>
             <span className="text-text-muted block text-[11px] mb-0.5">البريد الإلكتروني الوظيفي</span>
             <span className="font-medium text-text font-mono" dir="ltr">
               {user.email || '—'}
+            </span>
+          </div>
+          <div>
+            <span className="text-text-muted block text-[11px] mb-0.5">الرقم الوظيفي</span>
+            <span className="font-medium text-text font-mono" dir="ltr">
+              {user.employeeNumber || '—'}
             </span>
           </div>
           <div>

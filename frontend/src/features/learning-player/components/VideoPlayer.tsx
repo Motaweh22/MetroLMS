@@ -92,15 +92,38 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setProtectedBlobUrl(null);
 
     const controller = new AbortController();
-    fetch(src, {
-      method: 'GET',
+    const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
+
+    fetch('/api/media/stream-ticket', {
+      method: 'POST',
       credentials: 'include',
       headers: {
-        'X-MetroLMS-Stream': '1',
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
       },
+      body: JSON.stringify({ url: src }),
       signal: controller.signal,
     })
-      .then(async (res) => {
+      .then(async (ticketRes) => {
+        if (ticketRes.ok) {
+          const ticketJson = await ticketRes.json();
+          const streamUrl = ticketJson?.data?.streamUrl;
+          if (streamUrl && !cancelled) {
+            setProtectedBlobUrl(streamUrl);
+            setIsBuffering(false);
+            return;
+          }
+        }
+        // Fallback for legacy endpoints without stream-ticket
+        const res = await fetch(src, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'X-MetroLMS-Stream': '1',
+          },
+          signal: controller.signal,
+        });
         if (!res.ok || res.status === 204) {
           throw new Error(`HTTP ${res.status}`);
         }

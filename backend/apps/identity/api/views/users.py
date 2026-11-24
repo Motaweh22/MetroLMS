@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from datetime import date
+import secrets
 
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils.dateparse import parse_date
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -18,6 +20,7 @@ from apps.identity.services.user_deletion_service import UserDeletionError, dele
 from apps.identity.services.user_overview_service import get_user_courses_and_groups_overview
 from apps.learning.models import Enrollment
 from apps.organization.models import (
+    DepartmentJobTitle,
     JobTitle,
     MaritalStatusCatalog,
     MetroLine,
@@ -38,6 +41,62 @@ def _safe_pk(value: object) -> int | None:
     if s.isdigit():
         return int(s)
     return None
+
+
+def _normalize_egypt_phone_to_e164(raw_phone: str) -> str:
+    """Convert 11-digit Egyptian mobile (01XXXXXXXXX) or 201... into canonical +201XXXXXXXXX."""
+    phone = normalize_phone_e164(raw_phone).replace(" ", "").replace("-", "")
+    if phone.startswith("01") and len(phone) == 11 and phone.isdigit():
+        return f"+2{phone}"
+    if phone.startswith("201") and len(phone) == 12 and phone.isdigit():
+        return f"+{phone}"
+    return phone
+
+
+def _validate_admin_password(raw_pw: str, *, phone_e164: str = "", full_name: str = "") -> str | None:
+    """Validate admin-provisioned password complexity; return Arabic error message or None."""
+    if len(raw_pw) < 8:
+        return "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل."
+    if not (any(ch.isupper() for ch in raw_pw) and any(ch.islower() for ch in raw_pw) and any(ch.isdigit() for ch in raw_pw)):
+        return "يجب أن تحتوي كلمة المرور على حرف إنجليزي كبير وصغير ورقم واحد على الأقل."
+    lower_pw = raw_pw.lower()
+    local_phone = phone_e164[2:] if phone_e164.startswith("+2") else phone_e164
+    if (local_phone and len(local_phone) >= 6 and local_phone in lower_pw) or (
+        full_name and len(full_name.strip()) >= 3 and lower_pw == full_name.strip().lower()
+    ):
+        return "يجب ألا تتطابق كلمة المرور مع رقم الهاتف أو الاسم."
+    try:
+        validate_password(raw_pw)
+    except ValidationError as exc:
+        return "; ".join(exc.messages)
+    return None
+
+
+def _assign_user_department_and_job(
+    *,
+    user: User,
+    dept_name: str,
+    job_name: str,
+    replace_existing: bool = False,
+) -> None:
+    """Link User to department and job title while respecting SQL Server composite FKs."""
+    if not dept_name:
+        return
+    dept_obj, _ = OrganizationalDepartment.objects.get_or_create(name_ar=dept_name)
+    if replace_existing:
+        # Remove dependent UserJobTitle rows before changing UserOrganizationalDepartment (fk_userjobtitle_user_dept)
+        UserJobTitle.objects.filter(user=user).delete()
+        UserOrganizationalDepartment.objects.filter(user=user).exclude(department=dept_obj).delete()
+    UserOrganizationalDepartment.objects.get_or_create(user=user, department=dept_obj)
+
+    if job_name:
+        job_obj, _ = JobTitle.objects.get_or_create(
+            name_ar=job_name,
+            defaults={"department": dept_obj},
+        )
+        # Ensure fk_userjobtitle_dept_job composite parent exists in organization_departmentjobtitle
+        DepartmentJobTitle.objects.get_or_create(department=dept_obj, job_title=job_obj)
+        UserJobTitle.objects.get_or_create(user=user, department=dept_obj, job_title=job_obj)
 
 
 _MARITAL_LABELS_BY_GENDER: dict[str, dict[str, str]] = {
@@ -112,11 +171,13 @@ class ProfileView(APIView):
 
         user_data = AuthenticatedUserSerializer(user).data
         user_data["name"] = user.full_name
+        user_data["nameEn"] = user.full_name_en or ""
         user_data["role"] = "user" if user.role_id == "trainee" else user.role_id
         user_data["initials"] = user.full_name[:2] if user.full_name else "م"
         user_data["department"] = dept_name
         user_data["jobTitle"] = job_name
         user_data["leadershipTitle"] = user.leadership_title or ""
+        user_data["employeeNumber"] = user.employee_number or ""
         user_data["nationalId"] = user.national_id
         user_data["gender"] = user.gender or "male"
         user_data["genderLabel"] = _gender_label_ar(user.gender)
@@ -199,6 +260,7 @@ class AdminUserListView(APIView):
             {
                 "id": str(u.id),
                 "name": u.full_name,
+                "nameEn": u.full_name_en or "",
                 "username": u.phone_e164,
                 "phoneE164": u.phone_e164,
                 "phone": u.phone_e164,
@@ -208,6 +270,7 @@ class AdminUserListView(APIView):
                 "department": dept_map.get(u.id, ""),
                 "jobTitle": job_map.get(u.id, ""),
                 "leadershipTitle": u.leadership_title or "",
+                "employeeNumber": u.employee_number or "",
                 "nationalId": u.national_id,
                 "gender": u.gender or "male",
                 "genderLabel": _gender_label_ar(u.gender),
@@ -235,7 +298,8 @@ class AdminUserListView(APIView):
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية إنشاء مستخدمين.", status.HTTP_403_FORBIDDEN)
         name = str(request.data.get("name") or request.data.get("fullName") or "").strip()
         raw_phone = str(request.data.get("phoneE164") or request.data.get("phone") or "").strip()
-        password = str(request.data.get("password") or "Metro@12345")
+        raw_password = request.data.get("password")
+        password_input = str(raw_password) if raw_password is not None else ""
         raw_role = str(request.data.get("role") or "user").strip()
         role_id = "trainee" if raw_role == "user" else raw_role
         email = request.data.get("email") or None
@@ -253,13 +317,20 @@ class AdminUserListView(APIView):
                 status.HTTP_403_FORBIDDEN,
             )
 
-        phone = normalize_phone_e164(raw_phone)
-        if phone.startswith("01") and len(phone) == 11 and phone.isdigit():
-            phone = f"+2{phone}"
+        phone = _normalize_egypt_phone_to_e164(raw_phone)
         if not EGYPT_PHONE_RE.match(phone):
-            return error_response("VALIDATION_ERROR", "يرجى إدخال رقم هاتف مصري صحيح بصيغة +201XXXXXXXXX.", status.HTTP_400_BAD_REQUEST)
+            return error_response("VALIDATION_ERROR", "يرجى إدخال رقم هاتف مصري صحيح مكون من 11 رقماً (010/011/012/015).", status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(phone_e164=phone).exists():
             return error_response("CONFLICT", "رقم الهاتف مسجل بالفعل.", status.HTTP_409_CONFLICT)
+
+        if password_input.strip():
+            pw_error = _validate_admin_password(password_input, phone_e164=phone, full_name=name)
+            if pw_error:
+                return error_response("VALIDATION_ERROR", pw_error, status.HTTP_400_BAD_REQUEST)
+            password = password_input
+        else:
+            # Generate unique non-guessable initial password when omitted by API callers
+            password = f"M{secrets.token_urlsafe(10)}9a!"
 
         email = normalize_email_optional(str(email)) if email is not None else None
         if email and User.objects.filter(email=email).exists():
@@ -335,70 +406,95 @@ class AdminUserListView(APIView):
                 status.HTTP_400_BAD_REQUEST,
             )
 
+        dept_name = str(request.data.get("department") or "").strip()
+        job_name = str(request.data.get("jobTitle") or "").strip()
+        leadership_title = str(request.data.get("leadershipTitle") or "").strip() or None
+        raw_employee_number = (
+            request.data.get("employeeNumber")
+            or request.data.get("employee_number")
+            or request.data.get("employeeId")
+            or ""
+        )
+        employee_number = str(raw_employee_number).strip()[:50] or None
+        if employee_number and User.objects.filter(employee_number=employee_number).exists():
+            return error_response("CONFLICT", "الرقم الوظيفي مسجل بالفعل.", status.HTTP_409_CONFLICT)
+
+        raw_name_en = (
+            request.data.get("nameEn")
+            or request.data.get("fullNameEn")
+            or request.data.get("full_name_en")
+            or ""
+        )
+        name_en = str(raw_name_en).strip()[:255] or None
+
         try:
-            user = User.objects.create_user(
-                phone_e164=phone,
-                full_name=name,
-                gender=gender,
-                national_id=national_id,
-                marital_status=marital_obj,
-                appointment_date=appointment_date,
-                military_service_status=military_obj,
-                educational_qualification=educational_qualification,
-                address=address,
-                date_of_birth=dob,
-                service_end_date=service_end_date,
-                metro_line=metro_line_obj,
-                role_id=role_id,
-                password=password,
-                email=email,
-                status=user_status,
-            )
+            with transaction.atomic():
+                user = User.objects.create_user(
+                    phone_e164=phone,
+                    full_name=name,
+                    full_name_en=name_en,
+                    gender=gender,
+                    national_id=national_id,
+                    marital_status=marital_obj,
+                    appointment_date=appointment_date,
+                    military_service_status=military_obj,
+                    educational_qualification=educational_qualification,
+                    address=address,
+                    date_of_birth=dob,
+                    service_end_date=service_end_date,
+                    metro_line=metro_line_obj,
+                    role_id=role_id,
+                    password=password,
+                    email=email,
+                    employee_number=employee_number,
+                    status=user_status,
+                )
+                if leadership_title is not None:
+                    user.leadership_title = leadership_title
+                    user.save(update_fields=["leadership_title"])
+
+                _assign_user_department_and_job(
+                    user=user,
+                    dept_name=dept_name,
+                    job_name=job_name,
+                    replace_existing=False,
+                )
+
+                from apps.governance.services.governance_service import record_audit_log
+
+                record_audit_log(
+                    action="user.created",
+                    actor=request.user,
+                    target_entity_type="User",
+                    target_entity_id=str(user.id),
+                    details_snapshot={
+                        "role": user.role_id,
+                        "department": dept_name,
+                        "jobTitle": job_name,
+                        "leadershipTitle": user.leadership_title or "",
+                    },
+                )
         except ValidationError as exc:
             return error_response("VALIDATION_ERROR", "; ".join(exc.messages), status.HTTP_400_BAD_REQUEST)
         except IntegrityError:
             return error_response("CONFLICT", "تعارض في البيانات الفريدة (رقم الهاتف أو الرقم القومي أو البريد).", status.HTTP_409_CONFLICT)
 
-        dept_name = str(request.data.get("department") or "").strip()
-        job_name = str(request.data.get("jobTitle") or "").strip()
-        leadership_title = str(request.data.get("leadershipTitle") or "").strip() or None
-        if leadership_title is not None:
-            user.leadership_title = leadership_title
-            user.save(update_fields=["leadership_title"])
-        dept_obj = None
-        if dept_name:
-            dept_obj, _ = OrganizationalDepartment.objects.get_or_create(name_ar=dept_name)
-            UserOrganizationalDepartment.objects.get_or_create(user=user, department=dept_obj)
-        if job_name and dept_obj is not None:
-            job_obj, _ = JobTitle.objects.get_or_create(name_ar=job_name)
-            UserJobTitle.objects.get_or_create(user=user, department=dept_obj, job_title=job_obj)
-
-        from apps.governance.services.governance_service import record_audit_log
-
-        record_audit_log(
-            action="user.created",
-            actor=request.user,
-            target_entity_type="User",
-            target_entity_id=str(user.id),
-            details_snapshot={
-                "role": user.role_id,
-                "department": dept_name,
-                "jobTitle": job_name,
-                "leadershipTitle": user.leadership_title or "",
-            },
-        )
-
         return success_response(
             {
                 "id": str(user.id),
                 "name": user.full_name,
+                "nameEn": user.full_name_en or "",
+                "username": user.phone_e164,
                 "phoneE164": user.phone_e164,
+                "phone": user.phone_e164,
                 "email": user.email or user.phone_e164,
                 "role": "user" if user.role_id == "trainee" else user.role_id,
                 "status": user.status.lower(),
                 "department": dept_name,
                 "jobTitle": job_name,
                 "leadershipTitle": user.leadership_title or "",
+                "employeeNumber": user.employee_number or "",
+                "metroLine": metro_line_obj.name_ar if metro_line_obj else "",
                 "initials": user.full_name[:2] if user.full_name else "م",
             },
             status_code=status.HTTP_201_CREATED,
@@ -430,13 +526,27 @@ class AdminUserDeleteView(APIView):
                 return error_response("VALIDATION_ERROR", "الاسم الكامل مطلوب.", status.HTTP_400_BAD_REQUEST)
             target.full_name = new_name
 
+        if "nameEn" in data or "fullNameEn" in data or "full_name_en" in data:
+            raw_name_en = (
+                data.get("nameEn")
+                if "nameEn" in data
+                else data.get("fullNameEn")
+                if "fullNameEn" in data
+                else data.get("full_name_en")
+            )
+            target.full_name_en = str(raw_name_en or "").strip()[:255] or None
+
         if "phone" in data or "phoneE164" in data:
             raw_phone = str(data.get("phoneE164") or data.get("phone") or "").strip()
             if not raw_phone:
                 return error_response("VALIDATION_ERROR", "رقم الهاتف مطلوب.", status.HTTP_400_BAD_REQUEST)
-            phone = normalize_phone_e164(raw_phone)
-            if phone.startswith("01") and len(phone) == 11 and phone.isdigit():
-                phone = f"+2{phone}"
+            phone = _normalize_egypt_phone_to_e164(raw_phone)
+            if not EGYPT_PHONE_RE.match(phone):
+                return error_response(
+                    "VALIDATION_ERROR",
+                    "يرجى إدخال رقم هاتف مصري صحيح مكون من 11 رقماً (010/011/012/015).",
+                    status.HTTP_400_BAD_REQUEST,
+                )
             if User.objects.filter(phone_e164=phone).exclude(pk=target.pk).exists():
                 return error_response("CONFLICT", "رقم الهاتف مسجل بالفعل.", status.HTTP_409_CONFLICT)
             target.phone_e164 = phone
@@ -523,14 +633,32 @@ class AdminUserDeleteView(APIView):
         if "leadershipTitle" in data:
             target.leadership_title = str(data.get("leadershipTitle") or "").strip() or None
 
+        if "employeeNumber" in data or "employee_number" in data or "employeeId" in data:
+            raw_emp = (
+                data.get("employeeNumber")
+                if "employeeNumber" in data
+                else data.get("employee_number")
+                if "employee_number" in data
+                else data.get("employeeId")
+            )
+            emp_num = str(raw_emp or "").strip()[:50] or None
+            if emp_num and User.objects.filter(employee_number=emp_num).exclude(pk=target.pk).exists():
+                return error_response("CONFLICT", "الرقم الوظيفي مسجل بالفعل.", status.HTTP_409_CONFLICT)
+            target.employee_number = emp_num
+
         password_changed = False
-        if "password" in data:
-            raw_pw = str(data.get("password") or "").strip()
-            if raw_pw:
-                if len(raw_pw) < 6:
+        if "password" in data and data.get("password") is not None:
+            raw_pw = str(data.get("password") or "")
+            if raw_pw.strip():
+                pw_error = _validate_admin_password(
+                    raw_pw,
+                    phone_e164=target.phone_e164,
+                    full_name=target.full_name,
+                )
+                if pw_error:
                     return error_response(
                         "VALIDATION_ERROR",
-                        "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.",
+                        pw_error,
                         status.HTTP_400_BAD_REQUEST,
                     )
                 target.set_password(raw_pw)
@@ -557,14 +685,12 @@ class AdminUserDeleteView(APIView):
         if "department" in data or "jobTitle" in data:
             dept_name = str(data.get("department") or "").strip()
             job_name = str(data.get("jobTitle") or "").strip()
-            if dept_name:
-                dept_obj, _ = OrganizationalDepartment.objects.get_or_create(name_ar=dept_name)
-                UserOrganizationalDepartment.objects.filter(user=target).exclude(department=dept_obj).delete()
-                UserOrganizationalDepartment.objects.get_or_create(user=target, department=dept_obj)
-                if job_name:
-                    job_obj, _ = JobTitle.objects.get_or_create(name_ar=job_name)
-                    UserJobTitle.objects.filter(user=target).delete()
-                    UserJobTitle.objects.create(user=target, department=dept_obj, job_title=job_obj)
+            _assign_user_department_and_job(
+                user=target,
+                dept_name=dept_name,
+                job_name=job_name,
+                replace_existing=True,
+            )
 
         new_line_id = target.metro_line_id
         new_dept_ids = set(UserOrganizationalDepartment.objects.filter(user=target).values_list("department_id", flat=True))
@@ -602,6 +728,7 @@ class AdminUserDeleteView(APIView):
             {
                 "id": str(target.id),
                 "name": target.full_name,
+                "nameEn": target.full_name_en or "",
                 "username": target.phone_e164,
                 "phoneE164": target.phone_e164,
                 "phone": target.phone_e164,
@@ -611,6 +738,7 @@ class AdminUserDeleteView(APIView):
                 "department": dept_out,
                 "jobTitle": job_out,
                 "leadershipTitle": target.leadership_title or "",
+                "employeeNumber": target.employee_number or "",
                 "nationalId": target.national_id,
                 "gender": target.gender or "male",
                 "genderLabel": _gender_label_ar(target.gender),
@@ -865,6 +993,7 @@ class AdminUserTranscriptView(APIView):
         user_payload = {
             "id": str(target.id),
             "name": target.full_name,
+            "nameEn": target.full_name_en or "",
             "username": target.phone_e164,
             "phoneE164": target.phone_e164,
             "phone": target.phone_e164,
@@ -874,6 +1003,7 @@ class AdminUserTranscriptView(APIView):
             "department": dept_name,
             "jobTitle": job_name,
             "leadershipTitle": target.leadership_title or "",
+            "employeeNumber": target.employee_number or "",
             "nationalId": target.national_id,
             "gender": target.gender or "male",
             "genderLabel": _gender_label_ar(target.gender),
@@ -924,6 +1054,54 @@ class PublicUserOverviewView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
         if target.role_id == "developer" and request.user.role_id != "developer":
             return error_response("RESOURCE_NOT_FOUND", "المستخدم غير موجود.", status.HTTP_404_NOT_FOUND)
+
+        if target.id != request.user.id:
+            actor_role = request.user.role_id
+            if actor_role == "trainee":
+                # Trainees may inspect public instructor overviews (course/group lecturers)
+                # but must never inspect peer trainees' or administrative accounts' profiles.
+                if target.role_id != "lecturer":
+                    return error_response(
+                        "PERMISSION_DENIED",
+                        "ليس لديك صلاحية استعراض ملف هذا المستخدم.",
+                        status.HTTP_403_FORBIDDEN,
+                    )
+            elif actor_role == "lecturer":
+                if target.role_id in {"super_admin", "admin", "assistant_admin"}:
+                    return error_response(
+                        "PERMISSION_DENIED",
+                        "ليس لديك صلاحية استعراض ملفات مسؤولي النظام.",
+                        status.HTTP_403_FORBIDDEN,
+                    )
+                if target.role_id == "trainee":
+                    from django.db.models import Q
+                    from apps.groups.models import GroupMembership
+
+                    teaches_trainee = Enrollment.objects.filter(
+                        user=target,
+                        source_grants__isnull=False,
+                    ).filter(
+                        Q(course__primary_lecturer=request.user)
+                        | Q(course__assistant_lecturers__user=request.user)
+                    ).exists()
+                    shares_supervised_group = GroupMembership.objects.filter(
+                        user=target,
+                    ).filter(
+                        Q(training_group__assistant_assignments__user=request.user)
+                        | Q(training_group__renewal_cycles__course_assignments__course__primary_lecturer=request.user)
+                    ).exists()
+                    if not teaches_trainee and not shares_supervised_group:
+                        return error_response(
+                            "PERMISSION_DENIED",
+                            "ليس لديك صلاحية استعراض ملف متدرب خارج دوراتك ومجموعاتك.",
+                            status.HTTP_403_FORBIDDEN,
+                        )
+            elif actor_role not in {"developer", "super_admin", "admin", "assistant_admin"}:
+                return error_response(
+                    "PERMISSION_DENIED",
+                    "ليس لديك صلاحية استعراض ملف هذا المستخدم.",
+                    status.HTTP_403_FORBIDDEN,
+                )
 
         dept_link = (
             UserOrganizationalDepartment.objects.filter(user=target)

@@ -1188,7 +1188,7 @@ export const GroupEditorPage: React.FC = () => {
                     {/* Presets and Custom Input */}
                     <div className="space-y-2.5">
                       <label htmlFor="renewal-interval-days-input" className="block text-xs font-bold text-text">
-                        فترة التجديد الدوري (بالأيام)
+                        فترة التجديد الدوري (بالأيام) <span className="text-danger" aria-hidden="true">*</span>
                       </label>
 
                       {/* Preset shortcuts */}

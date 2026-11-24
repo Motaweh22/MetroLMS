@@ -89,7 +89,14 @@ def _can_view_group(user: User, group: TrainingGroup) -> bool:
     return GroupMembership.objects.filter(training_group=group, user=user).exists()
 
 
-def _sync_group_instructors(group: TrainingGroup, primary_id, assistant_ids) -> None:
+def _sync_group_instructors(group: TrainingGroup, primary_id, assistant_ids, *, actor: User | None = None) -> None:
+    from apps.communications.services.communications_service import notify_users
+
+    existing_ids = set(
+        GroupAssistantAssignment.objects.filter(training_group=group).values_list("user_id", flat=True)
+    )
+    newly_assigned: list[User] = []
+
     if primary_id is not None:
         GroupAssistantAssignment.objects.filter(training_group=group, assignment_role="primary").delete()
         if str(primary_id).strip():
@@ -101,6 +108,8 @@ def _sync_group_instructors(group: TrainingGroup, primary_id, assistant_ids) -> 
                     user=user,
                     assignment_role="primary",
                 )
+                if user.id not in existing_ids and user.status == "Active":
+                    newly_assigned.append(user)
     if isinstance(assistant_ids, list):
         GroupAssistantAssignment.objects.filter(training_group=group).exclude(assignment_role="primary").delete()
         for raw_uid in assistant_ids:
@@ -113,6 +122,29 @@ def _sync_group_instructors(group: TrainingGroup, primary_id, assistant_ids) -> 
                         user=user,
                         assignment_role="assistant_lecturer",
                     )
+                    if user.id not in existing_ids and user.status == "Active":
+                        newly_assigned.append(user)
+
+    if newly_assigned:
+        meta = {"groupId": str(group.id)}
+        if actor is not None:
+            meta.update(
+                {
+                    "actorId": str(actor.id),
+                    "actorName": actor.full_name,
+                    "actorRole": actor.role_id,
+                }
+            )
+        notify_users(
+            users=newly_assigned,
+            title=f"تم تعيينك ضمن طاقم التدريب: {group.name}",
+            body=f"تمت إضافتك إلى طاقم التدريب للمجموعة التدريبية «{group.name}».",
+            notif_type="instructor_assigned",
+            target_url=f"/admin/groups/{group.id}/monitoring",
+            action_required=False,
+            metadata=meta,
+            exclude_user_id=actor.id if actor is not None else None,
+        )
 
 
 class AdminGroupListView(APIView):
@@ -150,6 +182,7 @@ class AdminGroupListView(APIView):
             group,
             request.data.get("primaryInstructorId"),
             request.data.get("assistantLecturerIds"),
+            actor=request.user,
         )
         return success_response(
             {
@@ -210,6 +243,7 @@ class AdminGroupDetailView(APIView):
             group,
             request.data.get("primaryInstructorId") if "primaryInstructorId" in request.data else None,
             request.data.get("assistantLecturerIds") if "assistantLecturerIds" in request.data else None,
+            actor=request.user,
         )
         return success_response(TrainingGroupSerializer(group).data)
 
@@ -384,6 +418,31 @@ class GroupQrJoinView(APIView):
             req = submit_qr_join_request(trainee=request.user, raw_token=raw_token)
         except GroupDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
+
+        from apps.communications.services.communications_service import notify_users
+
+        admins = list(User.objects.filter(role_id__in=["developer", "super_admin", "admin"], status="Active"))
+        instructors = [
+            a.user
+            for a in GroupAssistantAssignment.objects.filter(training_group=req.training_group).select_related("user")
+            if a.user is not None and a.user.status == "Active"
+        ]
+        notify_users(
+            users=[*admins, *instructors],
+            title=f"طلب انضمام جديد للمجموعة: {req.training_group.name}",
+            body=f"طلب المتدرب «{request.user.full_name}» الانضمام إلى المجموعة «{req.training_group.name}».",
+            notif_type="enrollment_request",
+            target_url=f"/admin/groups/{req.training_group_id}/monitoring?tab=requests",
+            action_required=True,
+            metadata={
+                "groupId": str(req.training_group_id),
+                "requestId": str(req.id),
+                "actorId": str(request.user.id),
+                "actorName": request.user.full_name,
+                "actorRole": request.user.role_id,
+            },
+            exclude_user_id=request.user.id,
+        )
         return success_response({"joinRequest": GroupJoinRequestSerializer(req).data}, status_code=status.HTTP_201_CREATED)
 
 
@@ -409,6 +468,30 @@ class GroupJoinRequestDecideView(APIView):
             )
         except GroupDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
+
+        if decided.user_id != request.user.id:
+            from apps.communications.services.communications_service import send_notification
+
+            is_approved = decided.request_status == "Approved"
+            send_notification(
+                user=decided.user,
+                title=(
+                    f"تم قبول طلب انضمامك إلى: {decided.training_group.name}"
+                    if is_approved
+                    else f"تم رفض طلب انضمامك إلى: {decided.training_group.name}"
+                ),
+                body=f"تمت مراجعة طلب انضمامك إلى المجموعة التدريبية «{decided.training_group.name}».",
+                notif_type="enrollment_approved" if is_approved else "enrollment_rejected",
+                target_url=f"/my-groups/{decided.training_group_id}" if is_approved else "/my-groups",
+                action_required=False,
+                metadata={
+                    "groupId": str(decided.training_group_id),
+                    "requestId": str(decided.id),
+                    "actorId": str(request.user.id),
+                    "actorName": request.user.full_name,
+                    "actorRole": request.user.role_id,
+                },
+            )
         return success_response({"joinRequest": GroupJoinRequestSerializer(decided).data})
 
 

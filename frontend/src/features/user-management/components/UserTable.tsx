@@ -172,8 +172,23 @@ export const UserTable: React.FC<UserTableProps> = ({
                           <span className="font-mono bg-bg-alt px-1.5 py-0.5 rounded text-[11px] text-text-muted border border-border">
                             {u.id}
                           </span>
-                          <span className="text-text-muted/60">•</span>
-                          <span>@{u.username}</span>
+                          {u.employeeNumber && (
+                            <>
+                              <span className="text-text-muted/60">•</span>
+                              <span
+                                className="font-mono bg-primary/5 text-primary px-1.5 py-0.5 rounded text-[11px] border border-primary/20"
+                                title="الرقم الوظيفي"
+                              >
+                                {u.employeeNumber}
+                              </span>
+                            </>
+                          )}
+                          {u.nameEn && (
+                            <>
+                              <span className="text-text-muted/60">•</span>
+                              <span dir="ltr">{u.nameEn}</span>
+                            </>
+                          )}
                           {u.legacyAliases && u.legacyAliases.length > 0 && (
                             <span
                               className="text-[11px] text-text-muted/80 bg-neutral-light px-1 py-0.2 rounded"

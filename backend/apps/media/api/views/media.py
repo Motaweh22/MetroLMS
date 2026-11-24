@@ -20,11 +20,13 @@ from apps.media.services.media_service import (
     authorize_stream_reference,
     delete_media_asset_if_unreferenced,
     detach_media_reference,
+    mint_stream_ticket,
     move_media_reference,
     repoint_media_reference,
     restore_media_reference,
     update_media_reference_metadata,
     upload_media_asset,
+    verify_stream_ticket,
 )
 from infrastructure.storage import LocalMediaStorage, MediaStorageError
 from shared.api import error_response, success_response
@@ -38,6 +40,64 @@ def _parse_pos_int(val: object) -> int | None:
         return num if num > 0 else None
     except (TypeError, ValueError):
         return None
+
+
+def _is_user_authorized_for_asset(user, asset: MediaAsset) -> bool:
+    """Enforce asset-level RBAC across MediaAssetDetailView, MediaStreamTicketView, and MediaAssetStreamView."""
+    if user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
+        return True
+    if asset.uploaded_by_user_id == user.id:
+        return True
+
+    # 1. Check group-scoped materials manifest membership/monitoring if stored under groups/group_<id>/
+    grp_match = re.match(r"\Agroups/group_(\d+)/", asset.storage_key or "")
+    if grp_match:
+        from apps.groups.api.views.groups import _load_materials_manifest
+        from apps.groups.models import GroupAssistantAssignment, GroupCourseAssignment, GroupMembership
+
+        gid = int(grp_match.group(1))
+        if user.role_id == "lecturer":
+            is_group_lecturer = (
+                GroupAssistantAssignment.objects.filter(training_group_id=gid, user=user).exists()
+                or GroupCourseAssignment.objects.filter(
+                    group_renewal_cycle__training_group_id=gid,
+                    course__primary_lecturer=user,
+                ).exists()
+            )
+            if is_group_lecturer:
+                return True
+        elif user.role_id == "trainee" and GroupMembership.objects.filter(training_group_id=gid, user=user).exists():
+            manifest = _load_materials_manifest(gid)
+            aid_str = str(asset.id)
+            for f in manifest.get("rootFiles", []):
+                if (
+                    isinstance(f, dict)
+                    and str(f.get("mediaId") or f.get("mediaAssetId") or "") == aid_str
+                    and f.get("isVisible", True) is not False
+                ):
+                    return True
+            for fld in manifest.get("folders", []):
+                if not isinstance(fld, dict) or fld.get("isVisible", True) is False:
+                    continue
+                for f in fld.get("files", []):
+                    if (
+                        isinstance(f, dict)
+                        and str(f.get("mediaId") or f.get("mediaAssetId") or "") == aid_str
+                        and f.get("isVisible", True) is not False
+                    ):
+                        return True
+
+    # 2. Check active MediaContentReference bindings (courses / group renewal cycles)
+    ref_filter = {"media_asset": asset, "detached_at__isnull": True}
+    if user.role_id == "trainee":
+        ref_filter["is_visible"] = True
+    for candidate_ref in MediaContentReference.objects.filter(**ref_filter):
+        try:
+            authorize_stream_reference(user, candidate_ref)
+            return True
+        except MediaDomainError:
+            continue
+    return False
 
 
 class MediaAssetUploadView(APIView):
@@ -83,14 +143,7 @@ class MediaAssetDetailView(APIView):
         asset = MediaAsset.objects.filter(pk=asset_id).first()
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
-        is_staff_or_lecturer = request.user.role_id in {
-            "developer",
-            "super_admin",
-            "admin",
-            "assistant_admin",
-            "lecturer",
-        }
-        if not is_staff_or_lecturer and asset.uploaded_by_user_id != request.user.id:
+        if not _is_user_authorized_for_asset(request.user, asset):
             return error_response(
                 "PERMISSION_DENIED",
                 "غير مصرح لك باستعراض بيانات هذا الأصل.",
@@ -235,7 +288,12 @@ class MediaReferenceStreamView(APIView):
             )
 
         is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
-        has_stream_token = request.headers.get("X-MetroLMS-Stream") == "1"
+        st_token = (request.query_params.get("st") or "").strip()
+        has_valid_ticket = bool(
+            st_token and verify_stream_ticket(st_token, user_id=request.user.id, kind="ref", target_id=ref.id)
+        )
+        has_header_token = request.headers.get("X-MetroLMS-Stream") == "1"
+        has_stream_token = has_header_token or has_valid_ticket
         is_test_server = request.META.get("SERVER_NAME") == "testserver"
         if is_av_media and not has_stream_token and not is_test_server:
             return error_response(
@@ -245,7 +303,7 @@ class MediaReferenceStreamView(APIView):
             )
         effective_content_type = (
             "application/x-metrolms-stream"
-            if (is_av_media and has_stream_token)
+            if (is_av_media and has_header_token and not has_valid_ticket)
             else asset.mime_type
         )
 
@@ -303,6 +361,49 @@ class MediaReferenceStreamView(APIView):
         return resp
 
 
+class MediaStreamTicketView(APIView):
+    """POST /api/media/stream-ticket — Mint short-lived user-bound Range streaming ticket."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def post(self, request: Request):
+        raw_url = str(request.data.get("url") or "").strip()
+        ref_id = _parse_pos_int(request.data.get("mediaReferenceId"))
+        asset_id = _parse_pos_int(request.data.get("mediaAssetId"))
+
+        if not ref_id and raw_url:
+            m_ref = re.search(r"/api/media/references/(\d+)/stream", raw_url)
+            if m_ref:
+                ref_id = int(m_ref.group(1))
+        if not asset_id and not ref_id and raw_url:
+            m_asset = re.search(r"/api/media/assets/(\d+)/stream", raw_url)
+            if m_asset:
+                asset_id = int(m_asset.group(1))
+
+        if ref_id:
+            ref = MediaContentReference.objects.select_related("media_asset").filter(pk=ref_id).first()
+            if ref is None:
+                return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+            try:
+                authorize_stream_reference(request.user, ref)
+            except MediaDomainError as exc:
+                return error_response(exc.code, exc.message, exc.status_code)
+            ticket = mint_stream_ticket(user_id=request.user.id, kind="ref", target_id=ref.id)
+            return success_response({"ticket": ticket, "streamUrl": f"/api/media/references/{ref.id}/stream?st={ticket}"})
+
+        if asset_id:
+            asset = MediaAsset.objects.filter(pk=asset_id).first()
+            if asset is None:
+                return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
+            if not _is_user_authorized_for_asset(request.user, asset):
+                return error_response("PERMISSION_DENIED", "غير مصرح لك بالوصول إلى هذا الملف.", status.HTTP_403_FORBIDDEN)
+            ticket = mint_stream_ticket(user_id=request.user.id, kind="asset", target_id=asset.id)
+            return success_response({"ticket": ticket, "streamUrl": f"/api/media/assets/{asset.id}/stream?st={ticket}"})
+
+        return error_response("VALIDATION_ERROR", "معرف أو رابط الوسائط مطلوب.", status.HTTP_400_BAD_REQUEST)
+
+
 class MediaAssetStreamView(APIView):
     """GET /api/media/assets/<asset_id>/stream — Authenticated direct stream for cover images & assets."""
 
@@ -312,63 +413,12 @@ class MediaAssetStreamView(APIView):
         asset = MediaAsset.objects.filter(pk=asset_id).first()
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
-        if request.user.role_id == "trainee" and asset.uploaded_by_user_id != request.user.id:
-            authorized_any = False
-            # 1. Check group-scoped materials manifest membership & visibility if stored under groups/group_<id>/
-            grp_match = re.match(r"\Agroups/group_(\d+)/", asset.storage_key or "")
-            if grp_match:
-                from apps.groups.api.views.groups import _load_materials_manifest
-                from apps.groups.models import GroupMembership
-
-                gid = int(grp_match.group(1))
-                if GroupMembership.objects.filter(training_group_id=gid, user=request.user).exists():
-                    manifest = _load_materials_manifest(gid)
-                    aid_str = str(asset.id)
-                    for f in manifest.get("rootFiles", []):
-                        if (
-                            isinstance(f, dict)
-                            and str(f.get("mediaId") or f.get("mediaAssetId") or "") == aid_str
-                            and f.get("isVisible", True) is not False
-                        ):
-                            authorized_any = True
-                            break
-                    if not authorized_any:
-                        for fld in manifest.get("folders", []):
-                            if not isinstance(fld, dict) or fld.get("isVisible", True) is False:
-                                continue
-                            for f in fld.get("files", []):
-                                if (
-                                    isinstance(f, dict)
-                                    and str(f.get("mediaId") or f.get("mediaAssetId") or "") == aid_str
-                                    and f.get("isVisible", True) is not False
-                                ):
-                                    authorized_any = True
-                                    break
-                            if authorized_any:
-                                break
-
-            # 2. Check active MediaContentReference bindings (courses / group renewal cycles)
-            if not authorized_any:
-                active_refs = list(
-                    MediaContentReference.objects.filter(
-                        media_asset=asset,
-                        detached_at__isnull=True,
-                        is_visible=True,
-                    )
-                )
-                for candidate_ref in active_refs:
-                    try:
-                        authorize_stream_reference(request.user, candidate_ref)
-                        authorized_any = True
-                        break
-                    except MediaDomainError:
-                        continue
-            if not authorized_any:
-                return error_response(
-                    "PERMISSION_DENIED",
-                    "غير مصرح لك بالوصول إلى هذا الملف.",
-                    status.HTTP_403_FORBIDDEN,
-                )
+        if not _is_user_authorized_for_asset(request.user, asset):
+            return error_response(
+                "PERMISSION_DENIED",
+                "غير مصرح لك بالوصول إلى هذا الملف.",
+                status.HTTP_403_FORBIDDEN,
+            )
 
         if request.query_params.get("format") == "json" and asset.size_bytes <= 25 * 1024 * 1024:
             import base64
@@ -384,7 +434,12 @@ class MediaAssetStreamView(APIView):
             )
 
         is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
-        has_stream_token = request.headers.get("X-MetroLMS-Stream") == "1"
+        st_token = (request.query_params.get("st") or "").strip()
+        has_valid_ticket = bool(
+            st_token and verify_stream_ticket(st_token, user_id=request.user.id, kind="asset", target_id=asset.id)
+        )
+        has_header_token = request.headers.get("X-MetroLMS-Stream") == "1"
+        has_stream_token = has_header_token or has_valid_ticket
         is_test_server = request.META.get("SERVER_NAME") == "testserver"
         if is_av_media and not has_stream_token and not is_test_server:
             return error_response(
@@ -394,10 +449,46 @@ class MediaAssetStreamView(APIView):
             )
         effective_content_type = (
             "application/x-metrolms-stream"
-            if (is_av_media and has_stream_token)
+            if (is_av_media and has_header_token and not has_valid_ticket)
             else asset.mime_type
         )
+        range_header = request.META.get("HTTP_RANGE", "").strip()
         storage = LocalMediaStorage()
+        if range_header:
+            file_size = asset.size_bytes
+            match = _RANGE_HEADER_RE.match(range_header)
+            if not match or file_size == 0:
+                resp = HttpResponse(status=416)
+                resp["Content-Range"] = f"bytes */{file_size}"
+                return resp
+            start_str, end_str = match.group(1), match.group(2)
+            if not start_str and not end_str:
+                resp = HttpResponse(status=416)
+                resp["Content-Range"] = f"bytes */{file_size}"
+                return resp
+            if start_str:
+                start = int(start_str)
+                end = int(end_str) if end_str else file_size - 1
+            else:
+                suffix = int(end_str)
+                start = max(0, file_size - suffix)
+                end = file_size - 1
+            if start >= file_size or end < start or end >= file_size:
+                resp = HttpResponse(status=416)
+                resp["Content-Range"] = f"bytes */{file_size}"
+                return resp
+            try:
+                stream = storage.open_range_stream(asset.storage_key, start, end)
+            except MediaStorageError as exc:
+                return error_response(exc.code, exc.message, exc.status_code)
+            resp = StreamingHttpResponse(stream, status=206, content_type=effective_content_type)
+            resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            resp["Content-Length"] = str((end - start) + 1)
+            resp["Accept-Ranges"] = "bytes"
+            resp["X-Original-Mime-Type"] = asset.mime_type
+            resp["X-Content-Type-Options"] = "nosniff"
+            resp["Cache-Control"] = "no-store"
+            return resp
         try:
             stream = storage.open_range_stream(asset.storage_key, 0, max(0, asset.size_bytes - 1))
         except MediaStorageError as exc:

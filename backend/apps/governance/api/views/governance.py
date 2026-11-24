@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
+from apps.communications.services.communications_service import notify_roles, send_notification
 from apps.governance.api.serializers.governance import (
     AuditLogEntrySerializer,
     PendingApprovalRequestSerializer,
@@ -19,6 +20,7 @@ from apps.governance.services.governance_service import (
     create_pending_approval,
     decide_pending_approval,
 )
+from apps.identity.models import User
 from shared.api import error_response, success_response
 from shared.permissions import has_capability
 
@@ -62,6 +64,21 @@ class ApprovalListView(APIView):
             payload_snapshot=payload,
             reason=str(reason) if reason is not None else None,
         )
+        notify_roles(
+            role_ids=["developer", "super_admin", "admin"],
+            title="طلب اعتماد إداري جديد بانتظار الموافقة",
+            body=f"أرسل «{request.user.full_name}» طلباً ({req.action_type}) بانتظار موافقة مدير النظام.",
+            notif_type="general_alert",
+            target_url="/approvals",
+            action_required=True,
+            metadata={
+                "requestId": str(req.id),
+                "actorId": str(request.user.id),
+                "actorName": request.user.full_name,
+                "actorRole": request.user.role_id,
+            },
+            exclude_user_id=request.user.id,
+        )
         return success_response(
             {
                 "status": "PendingApproval",
@@ -100,6 +117,25 @@ class ApprovalDecisionView(APIView):
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
         except ApprovalAlreadyDecidedError as exc:
             return error_response("ALREADY_DECIDED", str(exc), status.HTTP_409_CONFLICT)
+
+        if str(updated.requested_by_id or "").isdigit() and int(updated.requested_by_id) != request.user.id:
+            requester = User.objects.filter(pk=int(updated.requested_by_id), status="Active").first()
+            if requester is not None:
+                is_approved = updated.execution_status == "Executed"
+                send_notification(
+                    user=requester,
+                    title="تمت الموافقة على طلب الاعتماد" if is_approved else "تم رفض طلب الاعتماد",
+                    body=f"بتّ «{request.user.full_name}» في طلبك ({updated.action_type}).",
+                    notif_type="general_alert",
+                    target_url="/approvals",
+                    action_required=False,
+                    metadata={
+                        "requestId": str(updated.id),
+                        "actorId": str(request.user.id),
+                        "actorName": request.user.full_name,
+                        "actorRole": request.user.role_id,
+                    },
+                )
 
         return success_response({"approval": PendingApprovalRequestSerializer(updated).data})
 
