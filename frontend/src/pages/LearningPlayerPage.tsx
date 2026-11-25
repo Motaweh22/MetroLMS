@@ -44,6 +44,7 @@ export const LearningPlayerPage: React.FC = () => {
   const { course, isLoading: courseLoading, isNotFound } = useCourseDetail(effectiveCourseId);
   const { isEnrolledInCourse, isLoading: enrollmentLoading } = useEnrollment();
   const isEnrolled = courseId ? isEnrolledInCourse(courseId) : false;
+  const isStaffPreview = Boolean(user?.role && user.role !== 'user' && !isEnrolled);
   const progressCourseId =
     effectiveCourseId && (user?.role === 'user' || isEnrolled) ? effectiveCourseId : undefined;
   const {
@@ -179,8 +180,8 @@ export const LearningPlayerPage: React.FC = () => {
 
   // Handle lesson completion and trigger celebration if course hits 100%
   const handleComplete = useCallback(async (completedItemId: string): Promise<boolean> => {
-    // Review-only guard (MFR-23, MFR-42): Prohibit completion mutations when in review-only mode
-    if (progress?.accessMode === 'review_only') {
+    // Review-only & staff preview guard (MFR-23, MFR-42): Prohibit completion mutations outside active trainee learning
+    if (progress?.accessMode === 'review_only' || isStaffPreview) {
       return false;
     }
     const res = await completeLesson(completedItemId);
@@ -191,7 +192,7 @@ export const LearningPlayerPage: React.FC = () => {
       return true;
     }
     return false;
-  }, [completeLesson, progress?.accessMode]);
+  }, [completeLesson, progress?.accessMode, isStaffPreview]);
 
   // 1. Unauthenticated Visitor Guard
   if (!authLoading && !isAuthenticated) {
@@ -403,13 +404,22 @@ export const LearningPlayerPage: React.FC = () => {
                 <VideoPlayer
                   courseId={course.id}
                   itemId={currentItem.id}
-                  src={resolvedMediaUrl || currentItem.url || '/sample-video.mp4'}
+                  src={
+                    resolvedMediaUrl ||
+                    currentItem.url ||
+                    (currentItem.mediaId && /^\d+$/.test(currentItem.mediaId)
+                      ? `/api/media/assets/${currentItem.mediaId}/stream`
+                      : currentItem.mediaId
+                        ? undefined
+                        : '/sample-video.mp4')
+                  }
                   poster={course.thumbnail}
                   title={currentItem.title}
                   initialPosition={currentItem.progress?.lastPositionSeconds || 0}
                   furthestWatched={currentItem.progress?.furthestWatchedSeconds || 0}
                   isCompleted={currentItem.isCompleted}
-                  isReadOnly={progress?.accessMode === 'review_only'}
+                  isReadOnly={progress?.accessMode === 'review_only' || isStaffPreview}
+                  allowFreeSeek={isStaffPreview || progress?.accessMode === 'review_only'}
                   canDownload={Boolean(
                     currentItem.downloadPolicy === 'immediate' ||
                     (currentItem.downloadPolicy === 'after_item_completion' && currentItem.isCompleted) ||

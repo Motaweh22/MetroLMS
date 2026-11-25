@@ -1,6 +1,6 @@
-import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { apiClient, ApiError } from '@/core/api/apiClient';
 import {
   evaluatePasswordStrength,
   generateStrongPassword,
@@ -25,10 +25,15 @@ describe('Admin-managed Password UX & Policy', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(apiClient).mockResolvedValue({});
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: writeTextMock },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('generateStrongPassword creates valid strong passwords matching all complexity checks', () => {
@@ -145,5 +150,51 @@ describe('Admin-managed Password UX & Policy', () => {
       modifierCapsLock: false,
     });
     expect(screen.queryByTestId('caps-lock-warning')).not.toBeInTheDocument();
+  });
+
+  it('LoginForm shows remaining wait countdown on 429 rate limit and unlocks when timer ends', async () => {
+    vi.useFakeTimers();
+    vi.mocked(apiClient).mockImplementation(async (url: string) => {
+      if (url.includes('/api/auth/login')) {
+        throw new ApiError('تم تجاوز الحد المسموح.', 429, { retryAfterSeconds: 2 }, url);
+      }
+      return {};
+    });
+
+    render(
+      <ToastProvider>
+        <AuthProvider>
+          <LoginForm />
+        </AuthProvider>
+      </ToastProvider>
+    );
+
+    fireEvent.change(screen.getByLabelText(/رقم الموبايل/i), {
+      target: { value: '01012345678' },
+    });
+    fireEvent.change(screen.getByLabelText(/^كلمة المرور/, { selector: 'input' }), {
+      target: { value: 'WrongPass@123' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'تسجيل الدخول إلى المنظومة' }));
+    });
+
+    const countdownBox = screen.getByTestId('login-rate-limit-countdown');
+    expect(countdownBox).toHaveTextContent('00:02');
+    const submitBtn = screen.getByRole('button', { name: 'تسجيل الدخول إلى المنظومة' });
+    expect(submitBtn).toBeDisabled();
+    expect(submitBtn).toHaveTextContent('انتظر 00:02 للمحاولة مجدداً');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByTestId('login-rate-limit-countdown')).toHaveTextContent('00:01');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.queryByTestId('login-rate-limit-countdown')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'تسجيل الدخول إلى المنظومة' })).not.toBeDisabled();
   });
 });

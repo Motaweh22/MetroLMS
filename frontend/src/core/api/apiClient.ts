@@ -389,6 +389,21 @@ export async function apiClient<T>(
       throw new StaleEpochError(requestEpoch, getCurrentSessionEpoch(), url);
     }
 
+    const retryAfterHeader = response.headers.get('Retry-After');
+    if (retryAfterHeader && response.status === 429) {
+      const parsedRetry = Number.parseInt(retryAfterHeader, 10);
+      if (Number.isFinite(parsedRetry) && parsedRetry > 0) {
+        if (typeof errorData === 'object' && errorData !== null) {
+          const obj = errorData as Record<string, unknown>;
+          if (typeof obj.retryAfterSeconds !== 'number') {
+            obj.retryAfterSeconds = parsedRetry;
+          }
+        } else {
+          errorData = { retryAfterSeconds: parsedRetry };
+        }
+      }
+    }
+
     throw new ApiError(errorMessage, response.status, errorData, url);
   }
 

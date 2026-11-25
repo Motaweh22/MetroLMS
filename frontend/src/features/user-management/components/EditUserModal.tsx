@@ -182,9 +182,6 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           : ''
       );
       setMetroLineId(matchedLine ? String(matchedLine.id) : lList[0] ? String(lList[0].id) : '');
-      if (!user.department && dList[0]) {
-        setDepartment(dList[0].nameAr || dList[0].name || '');
-      }
     });
 
     return () => {
@@ -490,6 +487,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               value={department}
               onChange={(nextDept) => {
                 setDepartment(nextDept);
+                if (!nextDept) {
+                  setJobTitle('');
+                  setIsJobDropdownOpen(false);
+                  return;
+                }
                 const matched = departmentRecords.find((d) => (d.nameAr || d.name || '') === nextDept);
                 if (matched && jobTitleRecords.length > 0) {
                   const scoped = jobTitleRecords
@@ -503,12 +505,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   }
                 }
               }}
-              placeholder="اختر القطاع / الإدارة"
+              placeholder="— بدون قطاع (غير محدد) —"
               emptyMessage="لا توجد إدارات مسجلة"
-              options={departmentOptions.map((d) => ({
-                value: d,
-                label: d,
-              }))}
+              options={[
+                { value: '', label: '— بدون قطاع (غير محدد) —' },
+                ...departmentOptions.map((d) => ({
+                  value: d,
+                  label: d,
+                })),
+              ]}
             />
           </div>
 
@@ -532,15 +537,22 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
           <div className="flex flex-col gap-1.5 relative" ref={jobDropdownRef}>
             <label htmlFor="edit-user-job" className="text-xs font-semibold text-text">
-              المسمى الوظيفي
+              المسمى الوظيفي{' '}
+              {!department.trim() && (
+                <span className="text-text-muted font-normal">(غير متاح بدون قطاع)</span>
+              )}
             </label>
             <div className="relative">
               <input
                 id="edit-user-job"
                 type="text"
                 autoComplete="off"
-                disabled={isSubmitting}
-                placeholder="اختر أو اكتب المسمى الوظيفي"
+                disabled={isSubmitting || !department.trim()}
+                placeholder={
+                  department.trim()
+                    ? 'اختر أو اكتب المسمى الوظيفي'
+                    : 'اختر قطاعاً أولاً لتحديد المسمى الوظيفي'
+                }
                 value={jobTitle}
                 onFocus={() => setIsJobDropdownOpen(true)}
                 onKeyDown={(e) => {
@@ -555,7 +567,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               <button
                 type="button"
                 tabIndex={-1}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !department.trim()}
                 onClick={() => setIsJobDropdownOpen((prev) => !prev)}
                 aria-label="عرض المسميات الوظيفية"
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text p-0.5"

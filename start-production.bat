@@ -115,7 +115,7 @@ popd
 
 :after_build
 echo [4/4] Launching Waitress WSGI Backend on http://127.0.0.1:8000 ...
-start "MetroLMS Backend - Waitress" cmd /k "cd /d "%BACKEND_DIR%" && set "DJANGO_SETTINGS_MODULE=config.settings.development" && "%WAITRESS_EXE%" --host=127.0.0.1 --port=8000 --threads=8 config.wsgi:application"
+start "MetroLMS Backend - Waitress" cmd /k "cd /d "%BACKEND_DIR%" && set "DJANGO_SETTINGS_MODULE=config.settings.development" && "%WAITRESS_EXE%" --host=127.0.0.1 --port=8000 --threads=16 --max-request-body-size=2254857830 --channel-timeout=600 config.wsgi:application"
 
 echo [4/4] Launching Built Frontend Preview on http://localhost:4173 ...
 start "MetroLMS Frontend - Production Build" cmd /k "cd /d "%FRONTEND_DIR%" && npm run preview -- --host 0.0.0.0 --port 4173"

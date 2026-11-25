@@ -255,6 +255,105 @@ class MediaReferenceLifecycleView(APIView):
         return success_response({"reference": MediaContentReferenceSerializer(updated).data})
 
 
+def _serve_authenticated_media_stream(
+    request: Request,
+    *,
+    asset: MediaAsset,
+    ticket_kind: str,
+    ticket_target_id: int,
+):
+    """Shared HTTP 200 / 206 Partial Content Range streaming handler for references & assets."""
+    file_size = asset.size_bytes
+    storage = LocalMediaStorage()
+
+    # Support ?format=json base64 payload for DocumentViewer
+    if request.query_params.get("format") == "json" and file_size <= 25 * 1024 * 1024:
+        import base64
+
+        try:
+            raw_bytes = b"".join(storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1)))
+        except MediaStorageError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+        return HttpResponse(
+            content=f'{{"base64":"{base64.b64encode(raw_bytes).decode("ascii")}","mimeType":"{asset.mime_type}"}}',
+            content_type="application/json",
+        )
+
+    is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
+    st_token = (request.query_params.get("st") or "").strip()
+    has_valid_ticket = bool(
+        st_token
+        and verify_stream_ticket(st_token, user_id=request.user.id, kind=ticket_kind, target_id=ticket_target_id)
+    )
+    has_header_token = request.headers.get("X-MetroLMS-Stream") == "1"
+    has_stream_token = has_header_token or has_valid_ticket
+    is_test_server = request.META.get("SERVER_NAME") == "testserver"
+    if is_av_media and not has_stream_token and not is_test_server:
+        return error_response(
+            "DIRECT_DOWNLOAD_BLOCKED",
+            "لا يُسمح بتحميل الفيديو عبر برامج أو روابط خارجية.",
+            status.HTTP_403_FORBIDDEN,
+        )
+    effective_content_type = (
+        "application/x-metrolms-stream"
+        if (is_av_media and has_header_token and not has_valid_ticket)
+        else asset.mime_type
+    )
+
+    range_header = request.META.get("HTTP_RANGE", "").strip()
+    if not range_header:
+        try:
+            stream = storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1))
+        except MediaStorageError as exc:
+            return error_response(exc.code, exc.message, exc.status_code)
+        resp = StreamingHttpResponse(stream, status=200, content_type=effective_content_type)
+        resp["Content-Length"] = str(file_size)
+        resp["Accept-Ranges"] = "bytes"
+        resp["X-Original-Mime-Type"] = asset.mime_type
+        resp["X-Content-Type-Options"] = "nosniff"
+        resp["Cache-Control"] = "no-store"
+        return resp
+
+    match = _RANGE_HEADER_RE.match(range_header)
+    if not match or file_size == 0:
+        resp = HttpResponse(status=416)
+        resp["Content-Range"] = f"bytes */{file_size}"
+        return resp
+
+    start_str, end_str = match.group(1), match.group(2)
+    if not start_str and not end_str:
+        resp = HttpResponse(status=416)
+        resp["Content-Range"] = f"bytes */{file_size}"
+        return resp
+
+    if start_str:
+        start = int(start_str)
+        end = int(end_str) if end_str else file_size - 1
+    else:
+        suffix = int(end_str)
+        start = max(0, file_size - suffix)
+        end = file_size - 1
+
+    if start >= file_size or end < start or end >= file_size:
+        resp = HttpResponse(status=416)
+        resp["Content-Range"] = f"bytes */{file_size}"
+        return resp
+
+    try:
+        stream = storage.open_range_stream(asset.storage_key, start, end)
+    except MediaStorageError as exc:
+        return error_response(exc.code, exc.message, exc.status_code)
+
+    resp = StreamingHttpResponse(stream, status=206, content_type=effective_content_type)
+    resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    resp["Content-Length"] = str((end - start) + 1)
+    resp["Accept-Ranges"] = "bytes"
+    resp["X-Original-Mime-Type"] = asset.mime_type
+    resp["X-Content-Type-Options"] = "nosniff"
+    resp["Cache-Control"] = "no-store"
+    return resp
+
+
 class MediaReferenceStreamView(APIView):
     """GET /api/media/references/<ref_id>/stream — Session-authenticated HTTP Range streaming."""
 
@@ -269,100 +368,16 @@ class MediaReferenceStreamView(APIView):
         except MediaDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
 
-        asset = ref.media_asset
-        file_size = asset.size_bytes
-        range_header = request.META.get("HTTP_RANGE", "").strip()
-        storage = LocalMediaStorage()
-
-        # Support ?format=json base64 payload for DocumentViewer (bypasses IDM on PDFs)
-        if request.query_params.get("format") == "json" and file_size <= 25 * 1024 * 1024:
-            import base64
-
-            try:
-                raw_bytes = b"".join(storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1)))
-            except MediaStorageError as exc:
-                return error_response(exc.code, exc.message, exc.status_code)
-            return HttpResponse(
-                content=f'{{"base64":"{base64.b64encode(raw_bytes).decode("ascii")}","mimeType":"{asset.mime_type}"}}',
-                content_type="application/json",
-            )
-
-        is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
-        st_token = (request.query_params.get("st") or "").strip()
-        has_valid_ticket = bool(
-            st_token and verify_stream_ticket(st_token, user_id=request.user.id, kind="ref", target_id=ref.id)
+        return _serve_authenticated_media_stream(
+            request,
+            asset=ref.media_asset,
+            ticket_kind="ref",
+            ticket_target_id=ref.id,
         )
-        has_header_token = request.headers.get("X-MetroLMS-Stream") == "1"
-        has_stream_token = has_header_token or has_valid_ticket
-        is_test_server = request.META.get("SERVER_NAME") == "testserver"
-        if is_av_media and not has_stream_token and not is_test_server:
-            return error_response(
-                "DIRECT_DOWNLOAD_BLOCKED",
-                "لا يُسمح بتحميل الفيديو عبر برامج أو روابط خارجية.",
-                status.HTTP_403_FORBIDDEN,
-            )
-        effective_content_type = (
-            "application/x-metrolms-stream"
-            if (is_av_media and has_header_token and not has_valid_ticket)
-            else asset.mime_type
-        )
-
-        if not range_header:
-            try:
-                stream = storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1))
-            except MediaStorageError as exc:
-                return error_response(exc.code, exc.message, exc.status_code)
-            resp = StreamingHttpResponse(stream, status=200, content_type=effective_content_type)
-            resp["Content-Length"] = str(file_size)
-            resp["Accept-Ranges"] = "bytes"
-            resp["X-Original-Mime-Type"] = asset.mime_type
-            resp["X-Content-Type-Options"] = "nosniff"
-            resp["Cache-Control"] = "no-store"
-            return resp
-
-        match = _RANGE_HEADER_RE.match(range_header)
-        if not match or file_size == 0:
-            resp = HttpResponse(status=416)
-            resp["Content-Range"] = f"bytes */{file_size}"
-            return resp
-
-        start_str, end_str = match.group(1), match.group(2)
-        if not start_str and not end_str:
-            resp = HttpResponse(status=416)
-            resp["Content-Range"] = f"bytes */{file_size}"
-            return resp
-
-        if start_str:
-            start = int(start_str)
-            end = int(end_str) if end_str else file_size - 1
-        else:
-            suffix = int(end_str)
-            start = max(0, file_size - suffix)
-            end = file_size - 1
-
-        if start >= file_size or end < start or end >= file_size:
-            resp = HttpResponse(status=416)
-            resp["Content-Range"] = f"bytes */{file_size}"
-            return resp
-
-        try:
-            stream = storage.open_range_stream(asset.storage_key, start, end)
-        except MediaStorageError as exc:
-            return error_response(exc.code, exc.message, exc.status_code)
-
-        content_length = (end - start) + 1
-        resp = StreamingHttpResponse(stream, status=206, content_type=effective_content_type)
-        resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        resp["Content-Length"] = str(content_length)
-        resp["Accept-Ranges"] = "bytes"
-        resp["X-Original-Mime-Type"] = asset.mime_type
-        resp["X-Content-Type-Options"] = "nosniff"
-        resp["Cache-Control"] = "no-store"
-        return resp
 
 
 class MediaStreamTicketView(APIView):
-    """POST /api/media/stream-ticket — Mint short-lived user-bound Range streaming ticket."""
+    """POST /api/media/stream-ticket — Mint user-bound progressive Range streaming ticket."""
 
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
@@ -420,84 +435,10 @@ class MediaAssetStreamView(APIView):
                 status.HTTP_403_FORBIDDEN,
             )
 
-        if request.query_params.get("format") == "json" and asset.size_bytes <= 25 * 1024 * 1024:
-            import base64
-
-            storage = LocalMediaStorage()
-            try:
-                raw_bytes = b"".join(storage.open_range_stream(asset.storage_key, 0, max(0, asset.size_bytes - 1)))
-            except MediaStorageError as exc:
-                return error_response(exc.code, exc.message, exc.status_code)
-            return HttpResponse(
-                content=f'{{"base64":"{base64.b64encode(raw_bytes).decode("ascii")}","mimeType":"{asset.mime_type}"}}',
-                content_type="application/json",
-            )
-
-        is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
-        st_token = (request.query_params.get("st") or "").strip()
-        has_valid_ticket = bool(
-            st_token and verify_stream_ticket(st_token, user_id=request.user.id, kind="asset", target_id=asset.id)
+        return _serve_authenticated_media_stream(
+            request,
+            asset=asset,
+            ticket_kind="asset",
+            ticket_target_id=asset.id,
         )
-        has_header_token = request.headers.get("X-MetroLMS-Stream") == "1"
-        has_stream_token = has_header_token or has_valid_ticket
-        is_test_server = request.META.get("SERVER_NAME") == "testserver"
-        if is_av_media and not has_stream_token and not is_test_server:
-            return error_response(
-                "DIRECT_DOWNLOAD_BLOCKED",
-                "لا يُسمح بتحميل الفيديو عبر برامج أو روابط خارجية.",
-                status.HTTP_403_FORBIDDEN,
-            )
-        effective_content_type = (
-            "application/x-metrolms-stream"
-            if (is_av_media and has_header_token and not has_valid_ticket)
-            else asset.mime_type
-        )
-        range_header = request.META.get("HTTP_RANGE", "").strip()
-        storage = LocalMediaStorage()
-        if range_header:
-            file_size = asset.size_bytes
-            match = _RANGE_HEADER_RE.match(range_header)
-            if not match or file_size == 0:
-                resp = HttpResponse(status=416)
-                resp["Content-Range"] = f"bytes */{file_size}"
-                return resp
-            start_str, end_str = match.group(1), match.group(2)
-            if not start_str and not end_str:
-                resp = HttpResponse(status=416)
-                resp["Content-Range"] = f"bytes */{file_size}"
-                return resp
-            if start_str:
-                start = int(start_str)
-                end = int(end_str) if end_str else file_size - 1
-            else:
-                suffix = int(end_str)
-                start = max(0, file_size - suffix)
-                end = file_size - 1
-            if start >= file_size or end < start or end >= file_size:
-                resp = HttpResponse(status=416)
-                resp["Content-Range"] = f"bytes */{file_size}"
-                return resp
-            try:
-                stream = storage.open_range_stream(asset.storage_key, start, end)
-            except MediaStorageError as exc:
-                return error_response(exc.code, exc.message, exc.status_code)
-            resp = StreamingHttpResponse(stream, status=206, content_type=effective_content_type)
-            resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-            resp["Content-Length"] = str((end - start) + 1)
-            resp["Accept-Ranges"] = "bytes"
-            resp["X-Original-Mime-Type"] = asset.mime_type
-            resp["X-Content-Type-Options"] = "nosniff"
-            resp["Cache-Control"] = "no-store"
-            return resp
-        try:
-            stream = storage.open_range_stream(asset.storage_key, 0, max(0, asset.size_bytes - 1))
-        except MediaStorageError as exc:
-            return error_response(exc.code, exc.message, exc.status_code)
-        resp = StreamingHttpResponse(stream, status=200, content_type=effective_content_type)
-        resp["Content-Length"] = str(asset.size_bytes)
-        resp["Accept-Ranges"] = "bytes"
-        resp["X-Original-Mime-Type"] = asset.mime_type
-        resp["X-Content-Type-Options"] = "nosniff"
-        resp["Cache-Control"] = "no-store"
-        return resp
 

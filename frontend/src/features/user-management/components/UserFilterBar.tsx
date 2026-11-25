@@ -132,6 +132,7 @@ export const UserFilterBar: React.FC<UserFilterBarProps> = ({
             onChange={(val) => onDepartmentChange(val)}
             options={[
               { value: 'all', label: 'كافة الإدارات والقطاعات' },
+              { value: '__unassigned__', label: 'بدون قطاع (غير محدد)' },
               ...availableDepartments.map((dept) => ({ value: dept, label: dept })),
             ]}
           />

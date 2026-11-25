@@ -11,6 +11,7 @@ import {
   downloadMaterialFile,
   getMaterialBlob,
 } from '../utils/materialUtils';
+import { useAuthenticatedMediaPreview } from '@/core/storage/useAuthenticatedMediaPreview';
 
 interface GroupMaterialViewerModalProps {
   file: GroupMaterialFile | null;
@@ -42,10 +43,15 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
     };
   }, [file, isOpen]);
 
+  const { previewUrl: authenticatedPreviewUrl } = useAuthenticatedMediaPreview(
+    isOpen && file && !blobPreviewUrl ? file.url : undefined,
+    file?.fileType || 'other'
+  );
+
   if (!file) return null;
 
   const meta = getFileTypeMeta(file.fileType);
-  const previewUrl = blobPreviewUrl || file.url;
+  const previewUrl = blobPreviewUrl || authenticatedPreviewUrl || file.url;
 
   return (
     <Modal
@@ -99,6 +105,7 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
             <div className="w-full flex items-center justify-center p-4">
               <video
                 controls
+                preload="metadata"
                 src={previewUrl}
                 className="max-h-[62vh] w-full rounded-lg shadow"
                 data-testid="video-preview"

@@ -28,14 +28,20 @@ from apps.organization.models import (
 )
 from apps.organization.services.org_service import (
     OrganizationConflictError,
+    OrganizationPermissionError,
+    OrganizationValidationError,
     assign_user_department,
     assign_user_job_title,
     create_historical_training_record,
     delete_catalog_record,
+    get_catalog_usage_map,
+    inspect_catalog_dependencies,
+    link_department_job_title,
+    resolve_catalog_dependencies,
     upsert_department_track,
 )
 from shared.api import error_response, success_response
-from shared.permissions import get_visible_user_or_none, has_capability
+from shared.permissions import evaluate_permission, get_visible_user_or_none, has_capability
 
 
 def _serialize_dept_permission(code: str, name_ar: str, track: DepartmentTrack | None) -> dict:
@@ -169,23 +175,36 @@ class _BaseCatalogListView(APIView):
     model = None
     serializer_class = BilingualCatalogSerializer
     key_name = "items"
+    catalog_slug: str | None = None
 
     def get_permissions(self):
         if self.request.method == "GET":
             return [IsAuthenticated()]
         return [IsAuthenticated(), has_capability("permissions.configure_departments")()]
 
+    def _serialize_with_usage(self, request: Request, qs) -> list[dict]:
+        rows = list(qs)
+        serialized = self.serializer_class(rows, many=True).data
+        if self.catalog_slug and evaluate_permission(request.user, "permissions.configure_departments").granted:
+            usage_map = get_catalog_usage_map(self.catalog_slug, [r.id for r in rows], actor=request.user)
+            for item_dict in serialized:
+                iid = item_dict.get("id")
+                if isinstance(iid, int) and iid in usage_map:
+                    item_dict["usageSummary"] = usage_map[iid]
+        return serialized
+
     def get(self, request: Request):
         qs = self.model.objects.all().order_by("id")
-        return success_response({self.key_name: self.serializer_class(qs, many=True).data})
+        return success_response({self.key_name: self._serialize_with_usage(request, qs)})
 
     def post(self, request: Request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            obj = self.model.objects.create(**serializer.validated_data)
-            if isinstance(obj, JobTitle) and obj.department is not None:
-                link_department_job_title(obj.department, obj)
+            with transaction.atomic():
+                obj = self.model.objects.create(**serializer.validated_data)
+                if isinstance(obj, JobTitle) and obj.department is not None:
+                    link_department_job_title(obj.department, obj)
         except IntegrityError:
             return error_response(
                 "CONFLICT",
@@ -211,9 +230,10 @@ class _BaseCatalogDetailView(APIView):
         for attr, val in serializer.validated_data.items():
             setattr(obj, attr, val)
         try:
-            obj.save()
-            if isinstance(obj, JobTitle) and obj.department is not None:
-                link_department_job_title(obj.department, obj)
+            with transaction.atomic():
+                obj.save()
+                if isinstance(obj, JobTitle) and obj.department is not None:
+                    link_department_job_title(obj.department, obj)
         except IntegrityError:
             return error_response(
                 "CONFLICT",
@@ -242,6 +262,7 @@ class _BaseCatalogDetailView(APIView):
 class DepartmentListView(_BaseCatalogListView):
     model = OrganizationalDepartment
     key_name = "departments"
+    catalog_slug = "departments"
 
 
 class DepartmentDetailView(_BaseCatalogDetailView):
@@ -252,6 +273,7 @@ class JobTitleListView(_BaseCatalogListView):
     model = JobTitle
     serializer_class = JobTitleCatalogSerializer
     key_name = "jobTitles"
+    catalog_slug = "job-titles"
 
     def get(self, request: Request):
         qs = self.model.objects.select_related("department").all().order_by("id")
@@ -260,7 +282,9 @@ class JobTitleListView(_BaseCatalogListView):
             from django.db.models import Q
 
             qs = qs.filter(Q(department_id=int(dept_id)) | Q(department__isnull=True))
-        return success_response({self.key_name: self.serializer_class(qs, many=True).data})
+        elif dept_id == "global":
+            qs = qs.filter(department__isnull=True)
+        return success_response({self.key_name: self._serialize_with_usage(request, qs)})
 
 
 class JobTitleDetailView(_BaseCatalogDetailView):
@@ -271,6 +295,7 @@ class JobTitleDetailView(_BaseCatalogDetailView):
 class MetroLineListView(_BaseCatalogListView):
     model = MetroLine
     key_name = "metroLines"
+    catalog_slug = "metro-lines"
 
 
 class MetroLineDetailView(_BaseCatalogDetailView):
@@ -280,6 +305,7 @@ class MetroLineDetailView(_BaseCatalogDetailView):
 class LeadershipTitleListView(_BaseCatalogListView):
     model = LeadershipTitleCatalog
     key_name = "leadershipTitles"
+    catalog_slug = "leadership-titles"
 
 
 class LeadershipTitleDetailView(_BaseCatalogDetailView):
@@ -423,4 +449,46 @@ class UserHistoricalTrainingView(APIView):
             {"record": HistoricalServiceTrainingSerializer(record).data},
             status_code=status.HTTP_201_CREATED,
         )
+
+
+class CatalogDependenciesView(APIView):
+    """GET /api/admin/organization/<catalog>/<item_id>/dependencies."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), has_capability("permissions.configure_departments")()]
+
+    def get(self, request: Request, catalog: str, item_id: int):
+        data = inspect_catalog_dependencies(catalog, item_id, actor=request.user)
+        if data is None:
+            return error_response(
+                "RESOURCE_NOT_FOUND",
+                "المورد المطلوب غير موجود أو تم نقله.",
+                status.HTTP_404_NOT_FOUND,
+            )
+        return success_response(data)
+
+
+class CatalogResolveDependenciesView(APIView):
+    """POST /api/admin/organization/<catalog>/<item_id>/resolve-dependencies."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), has_capability("permissions.configure_departments")()]
+
+    def post(self, request: Request, catalog: str, item_id: int):
+        payload = request.data if isinstance(request.data, dict) else {}
+        try:
+            result = resolve_catalog_dependencies(catalog, item_id, actor=request.user, payload=payload)
+        except OrganizationValidationError as exc:
+            return error_response("VALIDATION_ERROR", str(exc), status.HTTP_400_BAD_REQUEST)
+        except OrganizationPermissionError as exc:
+            return error_response("PERMISSION_DENIED", str(exc), status.HTTP_403_FORBIDDEN)
+        except OrganizationConflictError as exc:
+            return error_response("CATALOG_IN_USE", str(exc), status.HTTP_409_CONFLICT)
+        if result is None:
+            return error_response(
+                "RESOURCE_NOT_FOUND",
+                "المورد المطلوب غير موجود أو تم نقله.",
+                status.HTTP_404_NOT_FOUND,
+            )
+        return success_response(result)
 

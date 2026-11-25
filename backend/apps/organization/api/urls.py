@@ -2,6 +2,8 @@
 from django.urls import path
 
 from apps.organization.api.views.org import (
+    CatalogDependenciesView,
+    CatalogResolveDependenciesView,
     DepartmentDetailView,
     DepartmentListView,
     DepartmentTrackDetailView,
@@ -39,6 +41,16 @@ urlpatterns = [
     ),
     path("admin/organization/marital-statuses", MaritalStatusListView.as_view(), name="org-marital-statuses"),
     path("admin/organization/military-statuses", MilitaryStatusListView.as_view(), name="org-military-statuses"),
+    path(
+        "admin/organization/<str:catalog>/<int:item_id>/dependencies",
+        CatalogDependenciesView.as_view(),
+        name="org-catalog-dependencies",
+    ),
+    path(
+        "admin/organization/<str:catalog>/<int:item_id>/resolve-dependencies",
+        CatalogResolveDependenciesView.as_view(),
+        name="org-catalog-resolve-dependencies",
+    ),
     path("admin/users/<int:user_id>/organization", UserOrganizationAssignmentView.as_view(), name="user-org-assign"),
     path(
         "admin/users/<int:user_id>/historical-training",

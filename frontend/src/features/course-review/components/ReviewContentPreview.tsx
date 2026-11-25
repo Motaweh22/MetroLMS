@@ -817,6 +817,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                       ) : resolvedActiveMediaUrl ? (
                         <video
                           controls
+                          preload="metadata"
                           controlsList="nodownload"
                           src={resolvedActiveMediaUrl}
                           onError={() => setVideoError(true)}

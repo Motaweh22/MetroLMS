@@ -1,15 +1,9 @@
 """MediaAsset & MediaContentReference domain services (INV-DOM21-05..21, TR-C2-06/07)."""
 from __future__ import annotations
 
-import json
-import logging
-import os
-from pathlib import Path
-import threading
-
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.db import connections, transaction
+from django.db import transaction
 from django.utils import timezone
 
 from apps.courses.models import CourseDraft, PublishedCourseVersion
@@ -18,12 +12,10 @@ from apps.governance.services.governance_service import record_audit_log
 from apps.groups.models import GroupAssistantAssignment, GroupRenewalCycle
 from apps.identity.models import User
 from apps.media.models import MediaAsset, MediaContentReference
-from infrastructure.media_processing import find_ffmpeg_binaries, transcode_to_mp4
 from infrastructure.storage import LocalMediaStorage, MediaStorageError
 from shared.permissions import evaluate_permission
 from shared.validators import normalize_mime_type, normalize_nfc_stripped, validate_mime_type, validate_non_empty_text
 
-logger = logging.getLogger(__name__)
 _STREAM_SIGNER = TimestampSigner(salt="metrolms-media-stream")
 
 
@@ -139,119 +131,11 @@ def upload_media_asset(
         details_snapshot={"mimeType": mime_type, "sizeBytes": size_bytes},
     )
 
-    if mime_type.startswith("video/") and find_ffmpeg_binaries()[0]:
-        try:
-            sync_limit_mb = int(os.environ.get("METROLMS_SYNC_TRANSCODE_MAX_MB", "100"))
-        except ValueError:
-            sync_limit_mb = 100
-        if size_bytes <= max(1, sync_limit_mb) * 1024 * 1024:
-            _transcode_video_asset_in_place(asset.id, store.root, scope_prefix=scope_prefix, raise_on_error=True)
-            asset.refresh_from_db()
-        else:
-            _write_transcode_status(store.root, asset.id, {"status": "processing"})
-            worker = threading.Thread(
-                target=_transcode_video_asset_worker,
-                args=(asset.id, store.root, scope_prefix),
-                daemon=True,
-            )
-            worker.start()
-
     return asset
 
 
-def _transcode_status_path(root: Path, asset_id: int) -> Path:
-    return root / "staging" / f"transcode_{asset_id}.json"
-
-
-def _write_transcode_status(root: Path, asset_id: int, payload: dict[str, object]) -> None:
-    try:
-        p = _transcode_status_path(root, asset_id)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def get_asset_transcode_status(asset: MediaAsset, storage: LocalMediaStorage | None = None) -> str:
-    """Return 'processing', 'failed', or 'ready' for a MediaAsset."""
-    store = storage or LocalMediaStorage()
-    status_file = _transcode_status_path(store.root, asset.id)
-    if status_file.is_file():
-        try:
-            data = json.loads(status_file.read_text(encoding="utf-8"))
-            st = str(data.get("status") or "")
-            if st in {"processing", "failed", "ready"}:
-                return st
-        except Exception:
-            pass
-    return "ready"
-
-
-def _transcode_video_asset_worker(asset_id: int, root_path: Path, scope_prefix: str | None) -> None:
-    try:
-        _transcode_video_asset_in_place(asset_id, root_path, scope_prefix=scope_prefix, raise_on_error=False)
-    finally:
-        connections.close_all()
-
-
-def _transcode_video_asset_in_place(
-    asset_id: int,
-    root_path: Path,
-    *,
-    scope_prefix: str | None,
-    raise_on_error: bool,
-) -> None:
-    asset = MediaAsset.objects.filter(pk=asset_id).first()
-    if asset is None:
-        return
-    store = LocalMediaStorage(root_path)
-    source_path = store.resolve_safe_path(asset.storage_key)
-    target_key = store.build_storage_key(".mp4", scope_prefix=scope_prefix)
-    target_path = store.resolve_safe_path(target_key)
-
-    _write_transcode_status(root_path, asset_id, {"status": "processing"})
-    try:
-        outcome = transcode_to_mp4(source_path, target_path)
-    except Exception as exc:
-        logger.warning("FFmpeg transcode failed for MediaAsset %s: %s", asset_id, exc)
-        if asset.mime_type == "video/mp4":
-            _write_transcode_status(root_path, asset_id, {"status": "ready", "strategy": "passthrough"})
-            return
-        _write_transcode_status(root_path, asset_id, {"status": "failed", "error": str(exc)})
-        if raise_on_error:
-            try:
-                source_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-            MediaAsset.objects.filter(pk=asset_id).delete()
-            raise MediaDomainError(
-                "VIDEO_TRANSCODE_FAILED",
-                "تعذر تحويل ملف الفيديو إلى صيغة MP4. يرجى التأكد من سلامة الملف.",
-                400,
-            ) from exc
-        return
-
-    new_name = f"{Path(asset.file_name).stem or 'video'}.mp4"[:255]
-    with transaction.atomic():
-        locked = MediaAsset.objects.select_for_update().filter(pk=asset_id).first()
-        if locked is not None:
-            locked.storage_key = target_key
-            locked.file_name = new_name
-            locked.mime_type = "video/mp4"
-            locked.size_bytes = outcome.size_bytes
-            locked.sha256_checksum = outcome.sha256_checksum
-            locked.save(update_fields=["storage_key", "file_name", "mime_type", "size_bytes", "sha256_checksum"])
-
-    try:
-        if source_path != target_path and source_path.exists():
-            source_path.unlink(missing_ok=True)
-    except Exception:
-        pass
-    _write_transcode_status(root_path, asset_id, {"status": "ready", "strategy": outcome.strategy})
-
-
 def mint_stream_ticket(*, user_id: int, kind: str, target_id: int) -> str:
-    """Create a short-lived HMAC-signed stream ticket bound to user_id and target resource."""
+    """Create a user-bound HMAC-signed stream ticket for progressive HTTP 206 Range playback."""
     return _STREAM_SIGNER.sign_object({"uid": int(user_id), "kind": str(kind), "tid": int(target_id)})
 
 
@@ -261,9 +145,9 @@ def verify_stream_ticket(
     user_id: int,
     kind: str,
     target_id: int,
-    max_age: int = 7200,
+    max_age: int = 43200,
 ) -> bool:
-    """Verify signed stream ticket against user_id, target kind/id, and TTL."""
+    """Verify signed stream ticket against user_id, target kind/id, and TTL (default 12h)."""
     if not token:
         return False
     try:

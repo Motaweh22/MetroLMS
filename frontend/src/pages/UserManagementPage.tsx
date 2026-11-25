@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ManagedUserDTO, UserRole, UserStatus } from '@/core/user-management/types';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
 import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
@@ -27,6 +27,7 @@ import { useToast } from '@/shared/ui/Toast';
  */
 export const UserManagementPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const toast = useToast();
   const [users, setUsers] = useState<ManagedUserDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -36,7 +37,9 @@ export const UserManagementPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedRole, setSelectedRole] = useState<UserRole | 'all'>('all');
   const [selectedStatus, setSelectedStatus] = useState<UserStatus | 'all'>('all');
-  const [selectedDepartment, setSelectedDepartment] = useState<string | 'all'>('all');
+  const [selectedDepartment, setSelectedDepartment] = useState<string | 'all'>(
+    () => searchParams.get('department') || 'all'
+  );
 
   // Modal & Mutation states
   const [statusModalUser, setStatusModalUser] = useState<ManagedUserDTO | null>(null);
@@ -90,7 +93,9 @@ export const UserManagementPage: React.FC = () => {
     }
 
     // Department filter
-    if (selectedDepartment !== 'all') {
+    if (selectedDepartment === '__unassigned__') {
+      result = result.filter((u) => !(u.department || '').trim());
+    } else if (selectedDepartment !== 'all') {
       result = result.filter((u) => u.department === selectedDepartment);
     }
 

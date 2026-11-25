@@ -397,12 +397,8 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
       errs.serviceEndDate = 'تاريخ انتهاء الخدمة لا يمكن أن يسبق تاريخ التعيين';
     }
 
-    if (!formData.jobTitle.trim()) {
+    if (formData.department.trim() && !formData.jobTitle.trim()) {
       errs.jobTitle = 'يرجى تحديد أو إدخال المسمى الوظيفي';
-    }
-
-    if (!formData.department.trim()) {
-      errs.department = 'يرجى اختيار القطاع أو الإدارة';
     }
 
     if (!formData.password) {
@@ -737,7 +733,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="add-user-dept" className="text-xs font-semibold text-text">
-              القطاع / الإدارة <span className="text-danger" aria-hidden="true">*</span>
+              القطاع / الإدارة
             </label>
             <StyledSelect
               id="add-user-dept"
@@ -745,10 +741,15 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               disabled={isSubmitting}
               hasError={Boolean(errors.department)}
               value={formData.department}
-              placeholder="اختر القطاع / الإدارة"
+              placeholder="— بدون قطاع (غير محدد) —"
               emptyMessage="لا توجد إدارات مسجلة"
               onChange={(nextDept) => {
                 updateField('department', nextDept);
+                if (!nextDept) {
+                  updateField('jobTitle', '');
+                  setIsJobDropdownOpen(false);
+                  return;
+                }
                 if (jobTitleRecords.length > 0) {
                   const matchedDept = departmentRecords.find(
                     (d) => (d.nameAr || d.name || '') === nextDept
@@ -769,7 +770,10 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
                   }
                 }
               }}
-              options={departmentOptions.map((dept) => ({ value: dept, label: dept }))}
+              options={[
+                { value: '', label: '— بدون قطاع (غير محدد) —' },
+                ...departmentOptions.map((dept) => ({ value: dept, label: dept })),
+              ]}
             />
             {errors.department && (
               <span className="text-[11px] text-danger">{errors.department}</span>
@@ -778,7 +782,12 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
 
           <div className="flex flex-col gap-1.5 relative" ref={jobDropdownRef}>
             <label htmlFor="add-user-job" className="text-xs font-semibold text-text">
-              المسمى الوظيفي <span className="text-danger" aria-hidden="true">*</span>
+              المسمى الوظيفي{' '}
+              {formData.department.trim() ? (
+                <span className="text-danger" aria-hidden="true">*</span>
+              ) : (
+                <span className="text-text-muted font-normal">(غير متاح بدون قطاع)</span>
+              )}
             </label>
             <div className="relative">
               <input
@@ -789,9 +798,13 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
                 aria-expanded={isJobDropdownOpen}
                 aria-controls="metro-job-titles-listbox"
                 autoComplete="off"
-                required
-                disabled={isSubmitting}
-                placeholder="اختر المسمى الوظيفي"
+                required={Boolean(formData.department.trim())}
+                disabled={isSubmitting || !formData.department.trim()}
+                placeholder={
+                  formData.department.trim()
+                    ? 'اختر المسمى الوظيفي'
+                    : 'اختر قطاعاً أولاً لتحديد المسمى الوظيفي'
+                }
                 value={formData.jobTitle}
                 onFocus={() => setIsJobDropdownOpen(true)}
                 onKeyDown={(e) => {
@@ -806,7 +819,7 @@ export const AddUserForm: React.FC<AddUserFormProps> = ({
               <button
                 type="button"
                 tabIndex={-1}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !formData.department.trim()}
                 onClick={() => setIsJobDropdownOpen((prev) => !prev)}
                 aria-label="عرض قائمة المسميات الوظيفية"
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text transition-colors p-0.5"

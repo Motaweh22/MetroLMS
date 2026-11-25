@@ -25,9 +25,9 @@ export function useAuthenticatedMediaPreview(
     typeof window !== 'undefined' && window.navigator?.userAgent?.includes('jsdom');
   const needsProtectedFetch = Boolean(
     rawUrl &&
-      !isJsdom &&
-      rawUrl.startsWith('/api/media/') &&
-      (contentType === 'video' || contentType === 'audio' || contentType === 'pdf')
+    !isJsdom &&
+    rawUrl.startsWith('/api/media/') &&
+    (contentType === 'video' || contentType === 'audio' || contentType === 'pdf')
   );
 
   useEffect(() => {
@@ -120,11 +120,19 @@ export function useAuthenticatedMediaPreview(
           const mime =
             streamRes.headers.get('X-Original-Mime-Type') ||
             (contentType === 'audio' ? 'audio/mpeg' : 'video/mp4');
-          const buffer = await streamRes.arrayBuffer();
-          if (!buffer || buffer.byteLength === 0) {
-            throw new Error('EMPTY_STREAM');
+          if (typeof streamRes.blob === 'function') {
+            const rawBlob = await streamRes.blob();
+            if (!rawBlob || rawBlob.size === 0) {
+              throw new Error('EMPTY_STREAM');
+            }
+            blob = rawBlob.type === mime ? rawBlob : rawBlob.slice(0, rawBlob.size, mime);
+          } else {
+            const buffer = await streamRes.arrayBuffer();
+            if (!buffer || buffer.byteLength === 0) {
+              throw new Error('EMPTY_STREAM');
+            }
+            blob = new Blob([buffer], { type: mime });
           }
-          blob = new Blob([buffer], { type: mime });
         }
 
         if (cancelled || !blob) return;

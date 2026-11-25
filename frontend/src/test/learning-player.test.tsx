@@ -336,6 +336,49 @@ describe('Increment 6: Learning Player & Progress Tracking Verification', () => 
 
       expect(screen.getByText(/تعذر تحميل ملف الفيديو/i)).toBeInTheDocument();
     });
+
+    it('allows unrestricted forward and backward seeking in preview / read-only mode', () => {
+      const onComplete = vi.fn();
+      render(
+        <VideoPlayer
+          title="معاينة المحاضرة"
+          src="/mock-video.mp4"
+          initialPosition={0}
+          furthestWatched={0}
+          isCompleted={false}
+          isReadOnly={true}
+          allowFreeSeek={true}
+          onComplete={onComplete}
+        />
+      );
+
+      const video = document.querySelector('video')!;
+      Object.defineProperty(video, 'duration', { value: 120, configurable: true });
+      fireEvent.loadedMetadata(video);
+
+      // Seek forward directly via scrubber click (e.g. 75% -> 90s)
+      const scrubber = screen.getByRole('slider', { name: /شريط التقدم الزمني/i });
+      vi.spyOn(scrubber, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 10,
+        right: 100,
+        bottom: 10,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+      fireEvent.click(scrubber, { clientX: 75 });
+      expect(video.currentTime).toBe(90);
+      expect(screen.queryByTestId('seeking-clamped-badge')).not.toBeInTheDocument();
+
+      // Seek backward via native seeking event
+      video.currentTime = 20;
+      fireEvent.seeking(video);
+      expect(video.currentTime).toBe(20);
+      expect(screen.queryByTestId('seeking-clamped-badge')).not.toBeInTheDocument();
+    });
   });
 
   describe('DocumentViewer (PDF) Component', () => {

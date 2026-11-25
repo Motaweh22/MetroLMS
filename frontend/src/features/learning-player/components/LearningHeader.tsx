@@ -18,7 +18,7 @@ export const LearningHeader: React.FC<LearningHeaderProps> = ({
   progressPercent,
   userRole,
 }) => {
-  const isPreview = userRole === 'admin' || userRole === 'lecturer';
+  const isPreview = Boolean(userRole && userRole !== 'user');
 
   return (
     <header className="learning-header-container" role="banner">

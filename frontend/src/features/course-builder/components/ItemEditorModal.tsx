@@ -54,7 +54,7 @@ const CONTENT_TYPE_CONFIG: Record<
       'video/mp4,video/quicktime,video/x-matroska,video/webm,video/ogg,video/x-msvideo,.mp4,.mov,.mkv,.webm,.ogv,.avi,.m4v',
     maxSizeMB: 2048,
     isInAppViewer: true,
-    badgeLabel: 'يفتح في مشغل التعلم (تحويل تلقائي إلى MP4)',
+    badgeLabel: 'يفتح في مشغل التعلم',
     badgeVariant: 'primary',
   },
   pdf: {
@@ -1077,6 +1077,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                                 <video
                                   src={effectivePreviewUrl}
                                   controls
+                                  preload="metadata"
                                   className="w-full h-full object-contain"
                                   data-testid="video-preview-player"
                                 />
@@ -1275,7 +1276,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 <span>
                   {uploadProgress < 100
                     ? 'جاري رفع الملف إلى الخادم...'
-                    : 'تم الرفع؛ جاري تجهيز وتحويل الفيديو إلى MP4...'}
+                    : 'تم الرفع؛ جاري الحفظ...'}
                 </span>
                 <span className="font-mono">{uploadProgress}%</span>
               </div>

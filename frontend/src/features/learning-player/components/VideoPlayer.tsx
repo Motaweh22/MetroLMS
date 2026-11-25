@@ -15,6 +15,7 @@ export interface VideoPlayerProps {
   furthestWatched?: number;
   isCompleted?: boolean;
   isReadOnly?: boolean;
+  allowFreeSeek?: boolean;
   canDownload?: boolean;
   onComplete: (itemId: string) => Promise<boolean> | void;
   onLocalProgressUpdate?: (itemId: string, activity: Partial<LessonProgress>) => void;
@@ -30,6 +31,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   furthestWatched = 0,
   isCompleted = false,
   isReadOnly = false,
+  allowFreeSeek = false,
   canDownload = false,
   onComplete,
   onLocalProgressUpdate,
@@ -37,6 +39,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   const hasCompletedRef = useRef<boolean>(isCompleted);
+  const canSeekFreely = Boolean(isCompleted || isReadOnly || allowFreeSeek);
+  const canSeekFreelyRef = useRef<boolean>(canSeekFreely);
   const furthestWatchedRef = useRef<number>(Math.max(initialPosition, furthestWatched));
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const seekingClampedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -61,13 +65,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [retryNonce, setRetryNonce] = useState<number>(0);
   const [resumedFromSeconds, setResumedFromSeconds] = useState<number | null>(null);
   const activeVideoBlobRef = useRef<string | null>(null);
+  const usedStreamTicketRef = useRef<boolean>(false);
+  const autoRetriedTicketRef = useRef<boolean>(false);
   const hasStartedPlaybackRef = useRef<boolean>(false);
   const resumeBannerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load backend video stream via authenticated fetch with obfuscated Content-Type
-  // so browser download manager extensions (IDM) cannot sniff or hook the video stream
+  useEffect(() => {
+    autoRetriedTicketRef.current = false;
+  }, [src]);
+
+  // Mint user-bound progressive Range streaming ticket (plays immediately without waiting for 100% download)
   useEffect(() => {
     let cancelled = false;
+    usedStreamTicketRef.current = false;
     if (activeVideoBlobRef.current) {
       URL.revokeObjectURL(activeVideoBlobRef.current);
       activeVideoBlobRef.current = null;
@@ -110,6 +120,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           const ticketJson = await ticketRes.json();
           const streamUrl = ticketJson?.data?.streamUrl;
           if (streamUrl && !cancelled) {
+            usedStreamTicketRef.current = true;
             setProtectedBlobUrl(streamUrl);
             setIsBuffering(false);
             return;
@@ -128,12 +139,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           throw new Error(`HTTP ${res.status}`);
         }
         const mime = res.headers.get('X-Original-Mime-Type') || 'video/mp4';
-        const buffer = await res.arrayBuffer();
-        if (cancelled) return;
-        if (!buffer || buffer.byteLength === 0) {
-          throw new Error('EMPTY_STREAM');
+        let blob: Blob;
+        if (typeof res.blob === 'function') {
+          const rawBlob = await res.blob();
+          if (cancelled) return;
+          if (!rawBlob || rawBlob.size === 0) {
+            throw new Error('EMPTY_STREAM');
+          }
+          blob = rawBlob.type === mime ? rawBlob : rawBlob.slice(0, rawBlob.size, mime);
+        } else {
+          const buffer = await res.arrayBuffer();
+          if (cancelled) return;
+          if (!buffer || buffer.byteLength === 0) {
+            throw new Error('EMPTY_STREAM');
+          }
+          blob = new Blob([buffer], { type: mime });
         }
-        const blob = new Blob([buffer], { type: mime });
         const url = URL.createObjectURL(blob);
         activeVideoBlobRef.current = url;
         setProtectedBlobUrl(url);
@@ -192,10 +213,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }, 5000);
   }, []);
 
-  // Sync completion and furthestWatched refs with props
+  // Sync completion and unrestricted-seek refs with props
   useEffect(() => {
     hasCompletedRef.current = isCompleted;
-  }, [isCompleted]);
+    canSeekFreelyRef.current = Boolean(isCompleted || isReadOnly || allowFreeSeek);
+  }, [isCompleted, isReadOnly, allowFreeSeek]);
 
   useEffect(() => {
     const safeMax = Math.max(initialPosition, furthestWatched);
@@ -362,8 +384,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const target = videoRef.current.currentTime;
     const safeFurthest = furthestWatchedRef.current;
 
-    // Forward-seeking restriction for incomplete lessons
-    if (!hasCompletedRef.current && target > safeFurthest + 0.05) {
+    // Forward-seeking restriction applies only to active incomplete trainees (never completed/preview/review-only)
+    if (!canSeekFreelyRef.current && target > safeFurthest + 0.05) {
       videoRef.current.currentTime = safeFurthest;
       setCurrentTime(safeFurthest);
       triggerSeekingClamped();
@@ -440,10 +462,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const clampedSeconds = clampSeekingPosition(
         targetSeconds,
         safeFurthest,
-        hasCompletedRef.current
+        canSeekFreelyRef.current
       );
 
-      if (clampedSeconds < targetSeconds && !hasCompletedRef.current) {
+      if (clampedSeconds < targetSeconds && !canSeekFreelyRef.current) {
         triggerSeekingClamped();
       }
 
@@ -557,11 +579,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
       ) : (
         <>
-          {/* HTML5 Native Video Engine (Default Controls Disabled & Download Manager Protected) */}
+          {/* HTML5 Native Video Engine with Progressive Range Streaming */}
           <video
             ref={videoRef}
             src={protectedBlobUrl || undefined}
             poster={poster}
+            preload="metadata"
             className="custom-video-element"
             controls={false}
             controlsList="nodownload noremoteplayback"
@@ -581,6 +604,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             }}
             onPause={() => setIsPlaying(false)}
             onError={() => {
+              if (usedStreamTicketRef.current && !autoRetriedTicketRef.current) {
+                autoRetriedTicketRef.current = true;
+                setRetryNonce((prev) => prev + 1);
+                return;
+              }
               setHasError(true);
               setIsBuffering(false);
             }}

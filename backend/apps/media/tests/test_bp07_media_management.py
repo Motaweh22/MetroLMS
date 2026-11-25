@@ -182,20 +182,11 @@ class Bp07MediaManagementTests(TestCase):
         self.assertEqual(lec_client.post(f"/api/media/references/{ref_id}/restore", data={}, content_type="application/json").status_code, 200)
         self.assertEqual(trainee_client.get(f"/api/media/references/{ref_id}/stream").status_code, 200)
 
-    def test_2gb_video_limit_ffmpeg_adaptive_mp4_conversion_and_stream_tickets(self) -> None:
-        from pathlib import Path
-        import subprocess
-
+    def test_2gb_video_limit_direct_upload_and_progressive_range_tickets(self) -> None:
         from apps.media.services.media_service import verify_stream_ticket
-        from infrastructure.media_processing import (
-            VideoProbeResult,
-            choose_transcode_strategy,
-            find_ffmpeg_binaries,
-            probe_video,
-        )
         from infrastructure.storage import ALLOWED_MEDIA_SPECS
 
-        # 1. Verify 2GB (2048 MB) limit & container formats
+        # 1. Verify 2GB (2048 MB) limit & allowed video formats remain intact
         for mime in (
             "video/mp4",
             "video/quicktime",
@@ -208,86 +199,21 @@ class Bp07MediaManagementTests(TestCase):
             self.assertIn(mime, ALLOWED_MEDIA_SPECS)
             self.assertEqual(ALLOWED_MEDIA_SPECS[mime]["default_mb"], 2048)
 
-        # 2. Verify adaptive strategy picks lossless copy vs smart transcode properly
-        self.assertEqual(
-            choose_transcode_strategy(
-                VideoProbeResult("h264", "yuv420p", 1280, 720, 2_000_000, "aac", True, "mp4"),
-                ".mp4",
-            ),
-            "faststart_copy",
-        )
-        self.assertEqual(
-            choose_transcode_strategy(
-                VideoProbeResult("h264", "yuv420p", 1920, 1080, 3_000_000, "opus", True, "matroska"),
-                ".mkv",
-            ),
-            "remux_video_copy",
-        )
-        self.assertEqual(
-            choose_transcode_strategy(
-                VideoProbeResult("vp9", "yuv420p", 1920, 1080, 1_500_000, "opus", True, "webm"),
-                ".webm",
-            ),
-            "smart_transcode",
-        )
-        self.assertEqual(
-            choose_transcode_strategy(
-                VideoProbeResult("h264", "yuv420p", 3840, 2160, 15_000_000, "aac", True, "mp4"),
-                ".mp4",
-            ),
-            "smart_transcode",
-        )
-
-        # 3. Real FFmpeg upload conversion: generate an AVI video, upload it, verify converted MP4 & Range ticket
-        ffmpeg_bin, _ = find_ffmpeg_binaries()
-        self.assertIsNotNone(ffmpeg_bin, "FFmpeg must be installed for transcode test")
-
-        avi_path = Path(self._tmp_dir.name) / "sample_source.avi"
-        subprocess.run(
-            [
-                ffmpeg_bin,
-                "-y",
-                "-f",
-                "lavfi",
-                "-i",
-                "testsrc=duration=1:size=320x240:rate=15",
-                "-f",
-                "lavfi",
-                "-i",
-                "sine=frequency=440:duration=1",
-                "-c:v",
-                "mpeg4",
-                "-c:a",
-                "mp3",
-                str(avi_path),
-            ],
-            check=True,
-            capture_output=True,
-            timeout=60,
-        )
-
+        # 2. Upload valid MP4 directly without FFmpeg compression/transcoding
+        mp4_payload = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"X" * 64
         lec_client = self._login(self.lecturer.phone_e164)
         trainee_client = self._login(self.trainee.phone_e164)
-        with avi_path.open("rb") as fh:
-            up_file = SimpleUploadedFile("  محاضرة_تجريبية.avi  ", fh.read(), content_type="video/x-msvideo")
+        up_file = SimpleUploadedFile("  محاضرة_تجريبية.mp4  ", mp4_payload, content_type="video/mp4")
         up_res = lec_client.post("/api/media/assets/upload", {"file": up_file, "courseId": str(self.course.id)})
         self.assertEqual(up_res.status_code, 201)
         asset_dto = up_res.json()["data"]["asset"]
         self.assertEqual(asset_dto["mimeType"], "video/mp4")
-        self.assertTrue(asset_dto["fileName"].endswith(".mp4"))
-        self.assertEqual(asset_dto["transcodeStatus"], "ready")
-
-        asset_obj = MediaAsset.objects.get(pk=asset_dto["id"])
-        stored_path = LocalMediaStorage(self._tmp_dir.name).resolve_safe_path(asset_obj.storage_key)
-        probed = probe_video(stored_path)
-        self.assertEqual(probed.video_codec, "h264")
-        self.assertEqual(probed.pix_fmt, "yuv420p")
-        self.assertEqual(probed.audio_codec, "aac")
+        self.assertEqual(asset_dto["sizeBytes"], len(mp4_payload))
 
         # Bind reference to draft and mint user-bound stream ticket
         ref_res = lec_client.post(
             "/api/media/references",
-            data={"mediaAssetId": asset_dto["id"], "courseDraftId": self.draft.id, "title": "درس الفيديو المحول"},
+            data={"mediaAssetId": asset_dto["id"], "courseDraftId": self.draft.id, "title": "درس الفيديو التدرجي"},
             content_type="application/json",
         )
         self.assertEqual(ref_res.status_code, 201)
@@ -303,7 +229,7 @@ class Bp07MediaManagementTests(TestCase):
         self.assertTrue(verify_stream_ticket(ticket, user_id=self.lecturer.id, kind="ref", target_id=ref_id))
         self.assertFalse(verify_stream_ticket(ticket, user_id=self.trainee.id, kind="ref", target_id=ref_id))
 
-        # Direct download without ticket/header on non-testserver (even with browser Accept: text/html) returns 403 JSON, never 500 TemplateDoesNotExist
+        # Direct download without ticket/header on non-testserver returns 403 JSON, never 500 TemplateDoesNotExist
         blocked_res = lec_client.get(
             f"/api/media/references/{ref_id}/stream",
             SERVER_NAME="localhost",
@@ -312,14 +238,14 @@ class Bp07MediaManagementTests(TestCase):
         self.assertEqual(blocked_res.status_code, 403)
         self.assertEqual(blocked_res.json()["code"], "DIRECT_DOWNLOAD_BLOCKED")
 
-        # Wrong user's ticket cannot bypass direct-download protection
+        # Another user's ticket is rejected
         stolen_res = trainee_client.get(
             f"/api/media/references/{ref_id}/stream?st={ticket}",
             SERVER_NAME="localhost",
         )
         self.assertEqual(stolen_res.status_code, 403)
 
-        # Valid ticket streams HTTP 206 Partial Content natively as video/mp4
+        # Valid ticket streams HTTP 206 Partial Content natively as video/mp4 (no waiting for 100% download)
         stream_206 = lec_client.get(
             f"/api/media/references/{ref_id}/stream?st={ticket}",
             HTTP_RANGE="bytes=0-15",
@@ -327,7 +253,7 @@ class Bp07MediaManagementTests(TestCase):
         )
         self.assertEqual(stream_206.status_code, 206)
         self.assertEqual(stream_206["Content-Type"], "video/mp4")
-        self.assertEqual(len(b"".join(stream_206.streaming_content)), 16)
+        self.assertEqual(b"".join(stream_206.streaming_content), mp4_payload[:16])
 
     def test_rbac_blocks_unrelated_lecturer_and_non_targeted_trainee_from_streaming(self) -> None:
         now = timezone.now()

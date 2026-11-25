@@ -532,7 +532,6 @@ describe('Course Description vs Lesson/Video Description Across Detail, Player &
                     department: 'التشغيل',
                     role: 'user',
                     status: 'active',
-                    joinedAt: '2024-01-01',
                     createdAt: '2024-01-01',
                   },
                 ]}
@@ -556,7 +555,6 @@ describe('Course Description vs Lesson/Video Description Across Detail, Player &
                   department: 'التشغيل',
                   role: 'user',
                   status: 'active',
-                  joinedAt: '2024-01-01',
                   createdAt: '2024-01-01',
                 }}
                 onClose={() => {}}

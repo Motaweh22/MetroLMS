@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import datetime
 
+from django.core.cache import cache
 from django.test import Client, TestCase
 from django.utils import timezone
 
 from apps.identity.models import RolePolicy, ServerSession, User
 from apps.identity.services.auth_service import invalidate_user_sessions
+from apps.identity.services.login_rate_limit import clear_login_failures
 from apps.organization.models import MaritalStatusCatalog, MetroLine, MilitaryServiceStatusCatalog
 
 
@@ -15,6 +17,7 @@ class Bp02AuthAndSessionTests(TestCase):
     """Verify D-AUTH-01 login, logout, /me, CSRF, and ServerSession lifecycle on SQL Server."""
 
     def setUp(self) -> None:
+        cache.clear()
         now = timezone.now()
         self.role_trainee = RolePolicy.objects.create(
             role_key="trainee",
@@ -203,3 +206,73 @@ class Bp02AuthAndSessionTests(TestCase):
         )
         self.assertEqual(u_default.role_id, "trainee")
         self.assertEqual(u_default.gender, "male")
+
+    def test_login_rate_limiting_and_lockout_headers_and_reset(self) -> None:
+        client = Client()
+        # 4 failed attempts return 401 with decrementing remainingAttempts
+        expected_remaining = [4, 3, 2, 1]
+        for rem in expected_remaining:
+            res = client.post(
+                "/api/auth/login",
+                data={"phone_e164": "+201012345678", "password": "WrongPassword!"},
+                content_type="application/json",
+            )
+            self.assertEqual(res.status_code, 401)
+            body = res.json()
+            self.assertEqual(body["code"], "INVALID_CREDENTIALS")
+            self.assertEqual(body["remainingAttempts"], rem)
+
+        # 5th failed attempt triggers 429 lockout with Retry-After and Arabic remaining time
+        res5 = client.post(
+            "/api/auth/login",
+            data={"phone_e164": "+201012345678", "password": "WrongPassword!"},
+            content_type="application/json",
+        )
+        self.assertEqual(res5.status_code, 429)
+        body5 = res5.json()
+        self.assertEqual(body5["code"], "LOGIN_RATE_LIMITED")
+        self.assertGreater(body5["retryAfterSeconds"], 0)
+        self.assertEqual(res5["Retry-After"], str(body5["retryAfterSeconds"]))
+        self.assertIn("يرجى الانتظار", body5["message"])
+
+        # Even valid password is blocked while phone is locked
+        res_locked = client.post(
+            "/api/auth/login",
+            data={"phone_e164": "+201012345678", "password": "StrongPassword@123"},
+            content_type="application/json",
+        )
+        self.assertEqual(res_locked.status_code, 429)
+        self.assertIn("Retry-After", res_locked)
+
+        # Another phone is not blocked by the first phone's lockout
+        other_user = User.objects.create_user(
+            phone_e164="+201555555555",
+            password="StrongPassword@123",
+            role=self.role_trainee,
+            status="Active",
+            full_name="متدرب آخر",
+            national_id="29901010109999",
+            marital_status=self.marital,
+            appointment_date=datetime.date(2020, 1, 1),
+            military_service_status=self.military,
+            educational_qualification="بكالوريوس",
+            address="القاهرة",
+            date_of_birth=datetime.date(1998, 1, 1),
+            metro_line=self.metro_line,
+        )
+        res_other = client.post(
+            "/api/auth/login",
+            data={"phone_e164": other_user.phone_e164, "password": "StrongPassword@123"},
+            content_type="application/json",
+        )
+        self.assertEqual(res_other.status_code, 200)
+
+        # Once lockout clears, original user can authenticate normally
+        clear_login_failures("+201012345678")
+        res_ok = client.post(
+            "/api/auth/login",
+            data={"phone_e164": "+201012345678", "password": "StrongPassword@123"},
+            content_type="application/json",
+        )
+        self.assertEqual(res_ok.status_code, 200)
+

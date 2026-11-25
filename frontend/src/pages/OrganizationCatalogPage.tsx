@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { apiClient } from '@/core/api/apiClient';
+import { apiClient, ApiError } from '@/core/api/apiClient';
 import { Card } from '@/shared/ui/Card';
 import { Button } from '@/shared/ui/Button';
 import { Alert } from '@/shared/ui/Alert';
@@ -9,8 +9,19 @@ import { Badge } from '@/shared/ui/Badge';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { useToast } from '@/shared/ui/Toast';
+import {
+  CatalogResolveDeleteModal,
+  type CatalogDependenciesResponse,
+} from '@/features/organization/components/CatalogResolveDeleteModal';
 
 type CatalogTabKey = 'departments' | 'job-titles' | 'leadership-titles' | 'metro-lines';
+
+interface UsageSummary {
+  usersCount: number;
+  jobTitlesCount: number;
+  coursesCount: number;
+  totalBlockers: number;
+}
 
 interface CatalogRecord {
   id: number;
@@ -18,6 +29,7 @@ interface CatalogRecord {
   nameEn?: string | null;
   departmentId?: number | null;
   departmentNameAr?: string | null;
+  usageSummary?: UsageSummary;
 }
 
 interface TabConfig {
@@ -85,13 +97,19 @@ export const OrganizationCatalogPage: React.FC = () => {
   // Departments list for linking Job Titles
   const [departmentsList, setDepartmentsList] = useState<CatalogRecord[]>([]);
 
-  // Inline edit state
+  // Inline edit & filters state
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editNameAr, setEditNameAr] = useState('');
   const [editNameEn, setEditNameEn] = useState('');
   const [editDepartmentId, setEditDepartmentId] = useState<string>('');
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [checkingDepsId, setCheckingDepsId] = useState<number | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [usageFilter, setUsageFilter] = useState<'all' | 'used' | 'unused'>('all');
+  const [allJobTitles, setAllJobTitles] = useState<CatalogRecord[]>([]);
 
   const currentTab = TABS.find((t) => t.key === activeTab) || TABS[0];
 
@@ -100,17 +118,28 @@ export const OrganizationCatalogPage: React.FC = () => {
     setError(null);
     setEditingId(null);
     try {
-      const [data, deptsData] = await Promise.all([
+      const [data, deptsData, jobsData] = await Promise.all([
         apiClient<Record<string, CatalogRecord[]>>(currentTab.endpoint),
-        currentTab.key === 'job-titles'
-          ? apiClient<{ departments?: CatalogRecord[] }>('/api/admin/organization/departments')
+        currentTab.key === 'job-titles' || currentTab.key === 'departments'
+          ? currentTab.key === 'departments'
+            ? Promise.resolve(null)
+            : apiClient<{ departments?: CatalogRecord[] }>('/api/admin/organization/departments')
+          : Promise.resolve(null),
+        currentTab.key === 'departments'
+          ? apiClient<{ jobTitles?: CatalogRecord[] }>('/api/admin/organization/job-titles')
           : Promise.resolve(null),
       ]);
-      setItems(data[currentTab.responseKey] || []);
+      const nextItems = data[currentTab.responseKey] || [];
+      setItems(nextItems);
       if (deptsData?.departments) {
         setDepartmentsList(deptsData.departments);
       } else if (currentTab.key === 'departments') {
-        setDepartmentsList(data[currentTab.responseKey] || []);
+        setDepartmentsList(nextItems);
+      }
+      if (jobsData?.jobTitles) {
+        setAllJobTitles(jobsData.jobTitles);
+      } else if (currentTab.key === 'job-titles') {
+        setAllJobTitles(nextItems);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'تعذر تحميل البيانات الوظيفية.');
@@ -120,8 +149,41 @@ export const OrganizationCatalogPage: React.FC = () => {
   }, [currentTab]);
 
   useEffect(() => {
+    setSearchQuery('');
+    setDeptFilter('all');
+    setUsageFilter('all');
     fetchItems();
   }, [fetchItems]);
+
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return items.filter((item) => {
+      if (q) {
+        const matchesName =
+          item.nameAr.toLowerCase().includes(q) ||
+          (item.nameEn || '').toLowerCase().includes(q) ||
+          (item.departmentNameAr || '').toLowerCase().includes(q);
+        if (!matchesName) return false;
+      }
+      if (currentTab.key === 'job-titles' && deptFilter !== 'all') {
+        if (deptFilter === 'global') {
+          if (item.departmentId != null) return false;
+        } else if (String(item.departmentId ?? '') !== deptFilter) {
+          return false;
+        }
+      }
+      if (usageFilter !== 'all' && item.usageSummary) {
+        if (usageFilter === 'used' && item.usageSummary.totalBlockers === 0) return false;
+        if (usageFilter === 'unused' && item.usageSummary.totalBlockers > 0) return false;
+      }
+      return true;
+    });
+  }, [items, searchQuery, currentTab.key, deptFilter, usageFilter]);
+
+  const hasActiveFilters =
+    searchQuery.trim() !== '' ||
+    (currentTab.key === 'job-titles' && deptFilter !== 'all') ||
+    usageFilter !== 'all';
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,9 +251,40 @@ export const OrganizationCatalogPage: React.FC = () => {
   };
 
   const [pendingDeleteItem, setPendingDeleteItem] = useState<CatalogRecord | null>(null);
+  const [resolveModalDeps, setResolveModalDeps] = useState<CatalogDependenciesResponse | null>(null);
 
-  const handleDelete = (item: CatalogRecord) => {
-    setPendingDeleteItem(item);
+  const openDependencyInspector = async (item: CatalogRecord): Promise<CatalogDependenciesResponse | null> => {
+    try {
+      const deps = await apiClient<CatalogDependenciesResponse>(
+        `/api/admin/organization/${currentTab.key}/${item.id}/dependencies`
+      );
+      if (
+        deps &&
+        (deps.canDeleteDirectly === false ||
+          (deps.users && deps.users.length > 0) ||
+          (deps.jobTitles && deps.jobTitles.length > 0) ||
+          (deps.courses && deps.courses.length > 0))
+      ) {
+        return deps;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleDelete = async (item: CatalogRecord) => {
+    setCheckingDepsId(item.id);
+    try {
+      const blockingDeps = await openDependencyInspector(item);
+      if (blockingDeps) {
+        setResolveModalDeps(blockingDeps);
+      } else {
+        setPendingDeleteItem(item);
+      }
+    } finally {
+      setCheckingDepsId(null);
+    }
   };
 
   const confirmDelete = async () => {
@@ -206,6 +299,14 @@ export const OrganizationCatalogPage: React.FC = () => {
       setItems((prev) => prev.filter((x) => x.id !== item.id));
       setPendingDeleteItem(null);
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 409) {
+        const blockingDeps = await openDependencyInspector(item);
+        if (blockingDeps) {
+          setPendingDeleteItem(null);
+          setResolveModalDeps(blockingDeps);
+          return;
+        }
+      }
       toast.error(
         err instanceof Error
           ? err.message
@@ -374,6 +475,90 @@ export const OrganizationCatalogPage: React.FC = () => {
         </form>
       </Card>
 
+      {/* Search & Filters */}
+      <Card className="p-4 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+          <div className={`${currentTab.key === 'job-titles' ? 'sm:col-span-5' : 'sm:col-span-7'} flex flex-col gap-1`}>
+            <label htmlFor="org-search-input" className="text-xs font-semibold text-text-muted">
+              بحث في {currentTab.label}
+            </label>
+            <input
+              id="org-search-input"
+              data-testid="org-search-input"
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="ابحث بالاسم العربي أو الإنجليزي..."
+              className="w-full bg-bg text-text text-sm rounded-lg border border-border focus:border-primary py-1.5 px-3 outline-none"
+            />
+          </div>
+
+          {currentTab.key === 'job-titles' && (
+            <div className="sm:col-span-3 flex flex-col gap-1">
+              <label htmlFor="org-filter-dept" className="text-xs font-semibold text-text-muted">
+                تصفية حسب القطاع
+              </label>
+              <StyledSelect
+                id="org-filter-dept"
+                dataTestId="org-filter-dept-select"
+                size="sm"
+                value={deptFilter}
+                onChange={(val) => setDeptFilter(val)}
+                options={[
+                  { value: 'all', label: 'كافة القطاعات (الكل)' },
+                  { value: 'global', label: 'عام (لكل الإدارات)' },
+                  ...departmentsList.map((dept) => ({
+                    value: String(dept.id),
+                    label: dept.nameAr,
+                  })),
+                ]}
+              />
+            </div>
+          )}
+
+          <div className={`${currentTab.key === 'job-titles' ? 'sm:col-span-2' : 'sm:col-span-3'} flex flex-col gap-1`}>
+            <label htmlFor="org-filter-usage" className="text-xs font-semibold text-text-muted">
+              حالة الارتباط
+            </label>
+            <StyledSelect
+              id="org-filter-usage"
+              dataTestId="org-filter-usage-select"
+              size="sm"
+              value={usageFilter}
+              onChange={(val) => setUsageFilter(val as 'all' | 'used' | 'unused')}
+              options={[
+                { value: 'all', label: 'الكل' },
+                { value: 'used', label: 'مرتبط بمستخدمين/دورات' },
+                { value: 'unused', label: 'غير مرتبط (جاهز للحذف)' },
+              ]}
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!hasActiveFilters}
+              data-testid="org-reset-filters-btn"
+              onClick={() => {
+                setSearchQuery('');
+                setDeptFilter('all');
+                setUsageFilter('all');
+              }}
+              className="w-full justify-center text-xs text-text-muted border border-dashed border-border"
+            >
+              مسح الفلاتر
+            </Button>
+          </div>
+        </div>
+        {hasActiveFilters && (
+          <p className="text-xs text-text-muted">
+            عرض {filteredItems.length} من أصل {items.length} عنصر
+          </p>
+        )}
+      </Card>
+
       {/* Catalog List */}
       <Card className="overflow-hidden">
         {isLoading ? (
@@ -382,9 +567,13 @@ export const OrganizationCatalogPage: React.FC = () => {
           <div className="p-8 text-center text-sm text-text-muted">
             لا توجد عناصر مسجلة حالياً في {currentTab.label}.
           </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="p-8 text-center text-sm text-text-muted">
+            لا توجد عناصر مطابقة لمعايير البحث والتصفية الحالية.
+          </div>
         ) : (
           <div className="divide-y divide-border">
-            {items.map((item) => {
+            {filteredItems.map((item) => {
               const isEditing = editingId === item.id;
               return (
                 <div
@@ -437,6 +626,41 @@ export const OrganizationCatalogPage: React.FC = () => {
                             {item.departmentNameAr || 'عام (لكل الإدارات)'}
                           </Badge>
                         )}
+                        {item.usageSummary && (
+                          item.usageSummary.totalBlockers === 0 ? (
+                            <Badge variant="success" size="sm">
+                              غير مرتبط (قابل للحذف)
+                            </Badge>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {item.usageSummary.usersCount > 0 && (
+                                currentTab.key === 'departments' ? (
+                                  <Link
+                                    to={`/admin/users?department=${encodeURIComponent(item.nameAr)}`}
+                                    title="عرض المستخدمين في الدليل"
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-warning/15 text-warning hover:bg-warning/25 transition-colors"
+                                  >
+                                    {item.usageSummary.usersCount} مستخدم
+                                  </Link>
+                                ) : (
+                                  <Badge variant="warning" size="sm">
+                                    {item.usageSummary.usersCount} مستخدم
+                                  </Badge>
+                                )
+                              )}
+                              {item.usageSummary.jobTitlesCount > 0 && (
+                                <Badge variant="neutral" size="sm">
+                                  {item.usageSummary.jobTitlesCount} مسمى
+                                </Badge>
+                              )}
+                              {item.usageSummary.coursesCount > 0 && (
+                                <Badge variant="neutral" size="sm">
+                                  {item.usageSummary.coursesCount} دورة
+                                </Badge>
+                              )}
+                            </div>
+                          )
+                        )}
                       </div>
                       {item.nameEn && (
                         <p className="text-xs text-text-muted" dir="ltr">
@@ -477,7 +701,7 @@ export const OrganizationCatalogPage: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => startEdit(item)}
-                          disabled={deletingId === item.id}
+                          disabled={deletingId === item.id || checkingDepsId === item.id}
                         >
                           <Icon name="edit" size="sm" className="ml-1" />
                           تعديل
@@ -486,9 +710,10 @@ export const OrganizationCatalogPage: React.FC = () => {
                           type="button"
                           variant="outline"
                           size="sm"
-                          isLoading={deletingId === item.id}
-                          disabled={deletingId === item.id}
+                          isLoading={deletingId === item.id || checkingDepsId === item.id}
+                          disabled={deletingId === item.id || checkingDepsId === item.id}
                           onClick={() => handleDelete(item)}
+                          data-testid={`org-delete-btn-${item.id}`}
                           className="text-danger border-danger/30 hover:bg-danger/10"
                         >
                           <Icon name="trash" size="sm" className="ml-1" />
@@ -520,6 +745,20 @@ export const OrganizationCatalogPage: React.FC = () => {
           if (deletingId === null) setPendingDeleteItem(null);
         }}
         onConfirm={confirmDelete}
+      />
+
+      <CatalogResolveDeleteModal
+        isOpen={Boolean(resolveModalDeps)}
+        catalog={currentTab.key}
+        singularLabel={currentTab.singularLabel}
+        dependencies={resolveModalDeps}
+        alternativeItems={items}
+        allJobTitles={allJobTitles}
+        allDepartments={departmentsList}
+        onClose={() => setResolveModalDeps(null)}
+        onResolved={async () => {
+          await fetchItems();
+        }}
       />
     </div>
   );

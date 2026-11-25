@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { DemoAccountPicker, type RoleTestCardAccount } from './DemoAccountPicker';
 import { Modal } from '@/shared/ui/Modal';
@@ -48,6 +48,24 @@ function normalizeEgyptPhone(raw: string): string {
   return local;
 }
 
+function formatWaitCountdownMMSS(totalSeconds: number): string {
+  const safe = Math.max(0, Math.ceil(totalSeconds));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function formatArabicRemainingWait(totalSeconds: number): string {
+  const safe = Math.max(1, Math.ceil(totalSeconds));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  if (mins === 0) {
+    return `${secs} ثانية`;
+  }
+  const minPart = mins === 1 ? 'دقيقة واحدة' : mins === 2 ? 'دقيقتين' : mins <= 10 ? `${mins} دقائق` : `${mins} دقيقة`;
+  return secs > 0 ? `${minPart} و${secs} ثانية` : minPart;
+}
+
 export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const { login, error, clearError, logoutStatus, retryLogout } = useAuth();
 
@@ -57,9 +75,28 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [isCapsLockOn, setIsCapsLockOn] = useState(false);
+  const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
+  const wasRateLimitedRef = useRef(false);
   const [fieldErrors, setFieldErrors] = useState<{ phone?: string; password?: string }>({});
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [showSignupModal, setShowSignupModal] = useState(false);
+
+  const isRateLimited = rateLimitSeconds > 0;
+
+  useEffect(() => {
+    if (!isRateLimited) {
+      if (wasRateLimitedRef.current) {
+        wasRateLimitedRef.current = false;
+        clearError();
+      }
+      return;
+    }
+    wasRateLimitedRef.current = true;
+    const timer = window.setInterval(() => {
+      setRateLimitSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [isRateLimited, clearError]);
 
   // Contextual WhatsApp support contacts dynamically resolved per scenario
   const {
@@ -100,15 +137,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
     e.preventDefault();
     clearError();
 
-    if (!validate() || isSubmitting) return;
+    if (!validate() || isSubmitting || rateLimitSeconds > 0) return;
 
     setIsSubmitting(true);
     try {
       const normalizedPhone = normalizeEgyptPhone(phone);
       await login({ phone_e164: normalizedPhone, password });
+      setRateLimitSeconds(0);
       onSuccess?.();
-    } catch {
-      // Error is captured in AuthContext and rendered in .login-error
+    } catch (err: unknown) {
+      // Error is captured in AuthContext and rendered in .login-error; capture 429 cooldown seconds if present
+      if (typeof err === 'object' && err !== null && 'status' in err && Number((err as { status?: number }).status) === 429) {
+        const data = (err as { data?: { retryAfterSeconds?: unknown } }).data;
+        const rawSec = Number(data?.retryAfterSeconds);
+        setRateLimitSeconds(Number.isFinite(rawSec) && rawSec > 0 ? Math.ceil(rawSec) : 300);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -175,11 +218,32 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
           </div>
 
           {/* Error Message Box matching legacy .login-error */}
-          {error && (
+          {(error || rateLimitSeconds > 0) && (
             <div className="login-error visible" id="login-error" role="alert">
               <Icon name="alert" size="md" className="shrink-0 text-[#9F1239]" aria-hidden="true" />
               <div className="login-error-content" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span>{error}</span>
+                <span>
+                  {rateLimitSeconds > 0
+                    ? `تم إيقاف محاولات تسجيل الدخول مؤقتاً. المدة المتبقية: ${formatArabicRemainingWait(rateLimitSeconds)}`
+                    : error}
+                </span>
+                {rateLimitSeconds > 0 && (
+                  <div
+                    className="flex flex-wrap items-center gap-2 text-xs font-semibold mt-0.5"
+                    data-testid="login-rate-limit-countdown"
+                  >
+                    <span className="font-mono bg-white/70 px-2 py-0.5 rounded border border-[#9F1239]/25" dir="ltr">
+                      {formatWaitCountdownMMSS(rateLimitSeconds)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(true)}
+                      className="underline font-bold cursor-pointer bg-transparent border-0 p-0 text-inherit"
+                    >
+                      نسيت كلمة المرور؟ تواصل مع الدعم
+                    </button>
+                  </div>
+                )}
                 {logoutStatus === 'LOGOUT_UNCONFIRMED' && retryLogout && (
                   <button
                     type="button"
@@ -230,6 +294,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
                   onChange={(e) => {
                     const nextPhone = sanitizeEgyptMobile11(e.target.value);
                     setPhone(nextPhone);
+                    if (rateLimitSeconds > 0 && nextPhone !== phone) {
+                      setRateLimitSeconds(0);
+                    }
                     setFieldErrors((prev) => ({
                       ...prev,
                       phone: getEgyptMobileLiveError(nextPhone, phoneTouched),
@@ -371,19 +438,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
               )}
             </div>
 
-            {/* Submit button with loading state */}
+            {/* Submit button with loading and rate-limit cooldown state */}
             <button
               type="submit"
               className={`login-btn ${isSubmitting ? 'loading' : ''}`}
               id="login-btn"
               aria-label="تسجيل الدخول إلى المنظومة"
-              disabled={isSubmitting}
+              disabled={isSubmitting || rateLimitSeconds > 0}
             >
               {isSubmitting ? (
                 <>
                   جارِ تسجيل الدخول
                   <span className="spinner" aria-hidden="true" />
                 </>
+              ) : rateLimitSeconds > 0 ? (
+                `انتظر ${formatWaitCountdownMMSS(rateLimitSeconds)} للمحاولة مجدداً`
               ) : (
                 'تسجيل الدخول'
               )}

@@ -81,6 +81,10 @@ def _assign_user_department_and_job(
 ) -> None:
     """Link User to department and job title while respecting SQL Server composite FKs."""
     if not dept_name:
+        if replace_existing:
+            # Remove dependent UserJobTitle rows first (fk_userjobtitle_user_dept) before clearing UserOrganizationalDepartment
+            UserJobTitle.objects.filter(user=user).delete()
+            UserOrganizationalDepartment.objects.filter(user=user).delete()
         return
     dept_obj, _ = OrganizationalDepartment.objects.get_or_create(name_ar=dept_name)
     if replace_existing:
@@ -683,8 +687,26 @@ class AdminUserDeleteView(APIView):
             invalidate_user_sessions(target.id)
 
         if "department" in data or "jobTitle" in data:
-            dept_name = str(data.get("department") or "").strip()
-            job_name = str(data.get("jobTitle") or "").strip()
+            if "department" in data:
+                dept_name = str(data.get("department") or "").strip()
+            else:
+                existing_dept = (
+                    UserOrganizationalDepartment.objects.filter(user=target)
+                    .select_related("department")
+                    .order_by("id")
+                    .first()
+                )
+                dept_name = existing_dept.department.name_ar if existing_dept and existing_dept.department else ""
+            if "jobTitle" in data:
+                job_name = str(data.get("jobTitle") or "").strip()
+            else:
+                existing_job = (
+                    UserJobTitle.objects.filter(user=target)
+                    .select_related("job_title")
+                    .order_by("id")
+                    .first()
+                )
+                job_name = existing_job.job_title.name_ar if existing_job and existing_job.job_title else ""
             _assign_user_department_and_job(
                 user=target,
                 dept_name=dept_name,
