@@ -183,6 +183,33 @@ function resolveDemoMswPlugin(): Plugin {
   };
 }
 
+function excludeDemoMocksInBuildPlugin(): Plugin {
+  const VIRTUAL_ID = '\0virtual:noop-msw-browser';
+  let isDemoBuild = false;
+  return {
+    name: 'exclude-demo-mocks-in-build',
+    apply: 'build',
+    enforce: 'pre',
+    configResolved(config) {
+      isDemoBuild = config.mode === 'demo' || process.env.VITE_DEMO_MODE === 'true';
+    },
+    resolveId(source) {
+      if (isDemoBuild) return null;
+      const normalized = source.replace(/\\/g, '/');
+      if (normalized === '@/mocks/browser' || normalized.endsWith('/Demo/mocks/browser')) {
+        return VIRTUAL_ID;
+      }
+      return null;
+    },
+    load(id) {
+      if (id === VIRTUAL_ID) {
+        return 'export const worker = { start: async () => undefined };';
+      }
+      return null;
+    },
+  };
+}
+
 function excludeTestCardsInProductionPlugin(): Plugin {
   const VIRTUAL_ID = '\0virtual:empty-test-cards-picker';
   let shouldExclude = false;
@@ -217,6 +244,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    excludeDemoMocksInBuildPlugin(),
     resolveDemoMswPlugin(),
     devTestMediaPlugin(),
     excludeMswWorkerInBuildPlugin(),
