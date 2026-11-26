@@ -23,17 +23,37 @@ from apps.courses.models import (
 from apps.courses.services.course_service import parse_stored_report_reason
 
 
+def _can_serializer_use_draft(obj: Course, context: dict | None) -> bool:
+    """Enforce BUG-005: only authorized course authors/admins (when not published_only) may view CourseDraft."""
+    ctx = context or {}
+    if ctx.get("published_only") is True:
+        return False
+    request = ctx.get("request")
+    user = getattr(request, "user", None) if request is not None else None
+    if user is None or not getattr(user, "is_authenticated", False):
+        return True
+    if user.role_id in {"developer", "super_admin", "admin"}:
+        return True
+    if user.role_id == "assistant_admin" and obj.lifecycle_status != "Published":
+        return True
+    if obj.primary_lecturer_id == user.id:
+        return True
+    if CourseAssistantLecturer.objects.filter(course=obj, user=user).exists():
+        return True
+    return False
+
+
 class CourseListSerializer(serializers.ListSerializer):
     """Bulk-prefetch course relations once per list response to eliminate N+1 queries."""
 
     def to_representation(self, data):
         courses = list(data.all() if isinstance(data, models.Manager) else data)
         if courses:
-            self._prefetch_courses(courses)
+            self._prefetch_courses(courses, context=self.context)
         return [self.child.to_representation(item) for item in courses]
 
     @staticmethod
-    def _prefetch_courses(courses: list[Course]) -> None:
+    def _prefetch_courses(courses: list[Course], context: dict | None = None) -> None:
         from apps.learning.models import Enrollment
         from apps.media.models import MediaContentReference
 
@@ -147,8 +167,10 @@ class CourseListSerializer(serializers.ListSerializer):
 
         # Attach prefetched caches onto each Course instance
         for c in courses:
-            draft = draft_by_course.get(c.id)
+            raw_draft = draft_by_course.get(c.id)
             pub = pub_by_course.get(c.id)
+            use_draft = _can_serializer_use_draft(c, context)
+            draft = raw_draft if use_draft else None
             c._ser_draft = draft
             c._ser_pub = pub
             if draft is not None:
@@ -191,6 +213,7 @@ class CourseSerializer(serializers.ModelSerializer):
     level = serializers.SerializerMethodField()
     lecturer = serializers.SerializerMethodField()
     lecturerName = serializers.SerializerMethodField()
+    lecturerPhone = serializers.SerializerMethodField()
     duration = serializers.SerializerMethodField()
     thumbnail = serializers.SerializerMethodField()
     coverType = serializers.SerializerMethodField()
@@ -231,6 +254,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "level",
             "lecturer",
             "lecturerName",
+            "lecturerPhone",
             "duration",
             "thumbnail",
             "coverType",
@@ -275,9 +299,17 @@ class CourseSerializer(serializers.ModelSerializer):
     def get_lecturerName(self, obj: Course) -> str:
         return obj.primary_lecturer.full_name if obj.primary_lecturer else "محاضر معتمد"
 
+    def get_lecturerPhone(self, obj: Course) -> str | None:
+        if obj.primary_lecturer and getattr(obj.primary_lecturer, "role_id", None) != "developer":
+            return getattr(obj.primary_lecturer, "phone_e164", None)
+        return None
+
     def _get_draft(self, obj: Course):
         if not hasattr(obj, "_ser_draft"):
-            obj._ser_draft = CourseDraft.objects.filter(course=obj).first()
+            if _can_serializer_use_draft(obj, self.context):
+                obj._ser_draft = CourseDraft.objects.filter(course=obj).first()
+            else:
+                obj._ser_draft = None
         return obj._ser_draft
 
     def _get_latest_pub(self, obj: Course):

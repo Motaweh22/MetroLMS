@@ -12,6 +12,7 @@ import {
   getMaterialBlob,
 } from '../utils/materialUtils';
 import { useAuthenticatedMediaPreview } from '@/core/storage/useAuthenticatedMediaPreview';
+import { isSafePreviewFrameUrl, sanitizeSafeUrl } from '@/core/utils/safeUrl';
 
 interface GroupMaterialViewerModalProps {
   file: GroupMaterialFile | null;
@@ -85,12 +86,19 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
         <div className="min-h-[350px] max-h-[72vh] flex items-center justify-center bg-bg-alt/40 rounded-xl border border-border p-2 overflow-auto">
           {file.fileType === 'pdf' ? (
             <div className="w-full h-[65vh] flex flex-col items-center justify-center">
-              <iframe
-                src={`${previewUrl}#toolbar=0`}
-                title={file.title}
-                className="w-full h-full rounded-lg border border-border shadow-inner"
-                data-testid="pdf-preview-frame"
-              />
+              {isSafePreviewFrameUrl(previewUrl) ? (
+                <iframe
+                  src={`${sanitizeSafeUrl(previewUrl, 'about:blank')}#toolbar=0`}
+                  title={file.title}
+                  className="w-full h-full rounded-lg border border-border shadow-inner"
+                  sandbox="allow-same-origin"
+                  data-testid="pdf-preview-frame"
+                />
+              ) : (
+                <div className="p-6 text-center text-xs text-danger">
+                  تم حظر رابط المعاينة غير الموثوق.
+                </div>
+              )}
             </div>
           ) : file.fileType === 'image' ? (
             <div className="flex flex-col items-center justify-center p-4">

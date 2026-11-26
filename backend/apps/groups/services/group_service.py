@@ -287,6 +287,7 @@ def decide_join_request(*, actor: User, join_request: GroupJoinRequest, decision
                     source_type="group",
                     training_group=locked.training_group,
                     group_renewal_cycle=active_cycle,
+                    allow_privileged_source=True,
                 )
             except LearningDomainError:
                 pass

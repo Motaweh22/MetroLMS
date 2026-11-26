@@ -44,11 +44,6 @@ export const MyCoursesPage: React.FC = () => {
     }
   }, [loadEnrolledCourses, previewRole]);
 
-  // Assistant Lecturer Scope Guard: Trainee personal enrolled courses out of scope
-  if (previewRole === 'assistant_lecturer') {
-    return <Navigate to="/my-groups" replace />;
-  }
-
   const filteredCourses = useMemo(() => {
     return courses.filter((c) => {
       // Tab filtering
@@ -67,6 +62,11 @@ export const MyCoursesPage: React.FC = () => {
       return true;
     });
   }, [courses, filterTab, searchQuery]);
+
+  // Assistant Lecturer Scope Guard: Trainee personal enrolled courses out of scope
+  if (previewRole === 'assistant_lecturer') {
+    return <Navigate to="/my-groups" replace />;
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto" data-testid="my-courses-page">

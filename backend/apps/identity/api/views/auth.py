@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -49,10 +49,11 @@ def _rate_limited_login_response(retry_after_seconds: int):
 
 
 class LoginView(APIView):
-    """POST /api/auth/login — Server-side HttpOnly session login via phone_e164."""
+    """POST /api/auth/login — Server-side HttpOnly session login via phone_e164 (CSRF-protected)."""
 
     permission_classes = [AllowAny]
 
+    @method_decorator(csrf_protect)
     def post(self, request: Request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -95,6 +96,7 @@ class LogoutView(APIView):
 
     permission_classes = [AllowAny]
 
+    @method_decorator(csrf_protect)
     def post(self, request: Request):
         logout_user_session(request._request)
         response = success_response({"success": True, "message": "تم تسجيل الخروج بنجاح."})

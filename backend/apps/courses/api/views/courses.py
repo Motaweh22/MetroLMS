@@ -130,7 +130,11 @@ class CourseCatalogListView(APIView):
         else:
             published = base_qs.filter(lifecycle_status="Published")
             courses = [c for c in published if is_course_visible_to_trainee(request.user, c)]
-        return success_response({"courses": CourseSerializer(courses, many=True).data})
+        ser_ctx = {"request": request}
+        if request.user.role_id not in {"developer", "super_admin", "admin"}:
+            # Catalog views serve immutable PublishedCourseVersion content for trainees/non-editors (BUG-005)
+            ser_ctx["published_only"] = True
+        return success_response({"courses": CourseSerializer(courses, many=True, context=ser_ctx).data})
 
 
 class CourseCatalogDetailView(APIView):
@@ -152,7 +156,7 @@ class CourseCatalogDetailView(APIView):
                         "هذا المقرر مخفي أو مخصص لمجموعات محددة ولا تملك صلاحية الوصول إليه.",
                         status.HTTP_403_FORBIDDEN,
                     )
-        return success_response({"course": CourseSerializer(course).data})
+        return success_response({"course": CourseSerializer(course, context={"request": request}).data})
 
 
 class LecturerCourseListView(APIView):
@@ -175,7 +179,7 @@ class LecturerCourseListView(APIView):
                     Q(primary_lecturer=request.user) | Q(assistant_lecturers__user=request.user)
                 ).distinct()
             )
-        return success_response({"courses": CourseSerializer(courses, many=True).data})
+        return success_response({"courses": CourseSerializer(courses, many=True, context={"request": request}).data})
 
     def post(self, request: Request):
         title = str(request.data.get("title", ""))
@@ -228,7 +232,7 @@ class LecturerCourseDetailView(APIView):
         )
         if not is_allowed:
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية تعديل هذه الدورة.", status.HTTP_403_FORBIDDEN)
-        return success_response({"course": CourseSerializer(course).data})
+        return success_response({"course": CourseSerializer(course, context={"request": request}).data})
 
     def delete(self, request: Request, course_id: int):
         course = Course.objects.filter(pk=course_id).first()
@@ -1269,6 +1273,7 @@ class CourseQrJoinView(APIView):
                 user=request.user,
                 course=course,
                 source_type="qr_code",
+                allow_privileged_source=True,
             )
             enrolled = True
 

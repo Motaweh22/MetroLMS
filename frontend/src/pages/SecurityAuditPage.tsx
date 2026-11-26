@@ -16,9 +16,14 @@ import type {
 import { ROLE_CANONICAL_LABELS_AR } from '@/core/permissions/types';
 import { auditApi } from '@/features/permissions/services/auditApi';
 
+export const AUDIT_VIEW_ALLOWED_ROLES = ['developer', 'super_admin', 'admin', 'assistant_admin'] as const;
+
 export const SecurityAuditPage: React.FC = () => {
   const { user } = useAuth();
   const toast = useToast();
+  const isAuditAuthorized = Boolean(
+    user && (AUDIT_VIEW_ALLOWED_ROLES as readonly string[]).includes(user.role)
+  );
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,19 +49,24 @@ export const SecurityAuditPage: React.FC = () => {
   // Expanded inline row IDs
   const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
 
-  const toggleRowExpanded = (id: string) => {
+  const toggleRowExpanded = (id: string | number) => {
+    const key = String(id);
     setExpandedRowIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(id);
+        next.add(key);
       }
       return next;
     });
   };
 
   const loadAuditLogs = useCallback(async () => {
+    if (!isAuditAuthorized) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -75,8 +85,8 @@ export const SecurityAuditPage: React.FC = () => {
       }
 
       const res = await auditApi.getAuditLogs(filterParams);
-      setEntries(res.entries);
-      setTotal(res.total);
+      setEntries(Array.isArray(res.entries) ? res.entries : []);
+      setTotal(res.total ?? 0);
       setTotalPages(res.totalPages || 1);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'فشل تحميل سجل الرقابة الأمنية';
@@ -85,11 +95,15 @@ export const SecurityAuditPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, searchTerm, selectedOutcome, selectedSeverity, selectedActionCategory, startDate, endDate, toast]);
+  }, [isAuditAuthorized, page, pageSize, searchTerm, selectedOutcome, selectedSeverity, selectedActionCategory, startDate, endDate, toast]);
 
   useEffect(() => {
+    if (!isAuditAuthorized) {
+      setIsLoading(false);
+      return;
+    }
     loadAuditLogs();
-  }, [loadAuditLogs]);
+  }, [isAuditAuthorized, loadAuditLogs]);
 
   // Reset page to 1 when filters change
   const handleSearchChange = (val: string) => {
@@ -153,14 +167,14 @@ export const SecurityAuditPage: React.FC = () => {
     }
   };
 
-  // Sovereign Administrator Authorization Check
-  if (!user || user.role !== 'admin') {
+  // Administrative Audit Authorization Check (developer, super_admin, admin, assistant_admin under D-14)
+  if (!isAuditAuthorized) {
     return (
       <div className="container mx-auto p-6 max-w-4xl text-right" data-testid="unauthorized-audit-view">
         <Alert
           variant="danger"
           title="غير مصرح: سياسة السيادة الإدارية"
-          message="استعراض سجل الرقابة والأمان مخصص لمدير النظام الرئيسي فقط. لا يمكن للمساعدين الإداريين أو المحاضرين أو المتدربين الوصول إلى هذه البيانات بموجب محددات الحوكمة الأساسية."
+          message="استعراض سجل الرقابة والأمان مخصص لأدوار الإدارة المخوّلة فقط. لا يمكن للمحاضرين أو المتدربين الوصول إلى هذه البيانات بموجب محددات الحوكمة الأساسية."
         />
       </div>
     );
@@ -498,7 +512,7 @@ export const SecurityAuditPage: React.FC = () => {
                 </tr>
               ) : (
                 entries.map((entry) => {
-                  const isExpanded = expandedRowIds.has(entry.id);
+                  const isExpanded = expandedRowIds.has(String(entry.id));
                   const formattedDate = new Date(entry.timestamp).toLocaleString('ar-EG', {
                     year: 'numeric',
                     month: 'short',

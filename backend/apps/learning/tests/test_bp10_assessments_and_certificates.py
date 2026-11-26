@@ -67,6 +67,7 @@ class Bp10AssessmentsAndCertificatesTests(TestCase):
             course_type="main",
             primary_lecturer=self.lecturer,
             lifecycle_status="Published",
+            access_mode="all_trainees",
             created_by_user=self.lecturer,
             created_at=now,
             updated_at=now,

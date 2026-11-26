@@ -162,6 +162,47 @@ def verify_stream_ticket(
     )
 
 
+def is_actor_authorized_for_media_asset(
+    actor: User,
+    asset: MediaAsset,
+    *,
+    course_draft: CourseDraft | None = None,
+    group_renewal_cycle: GroupRenewalCycle | None = None,
+    training_group_id: int | None = None,
+) -> bool:
+    """Enforce asset-level ownership/scope authorization before attaching or referencing a MediaAsset (BUG-004)."""
+    if actor.role_id in {"developer", "super_admin", "admin", "assistant_admin"}:
+        return True
+    if asset.uploaded_by_user_id == actor.id:
+        return True
+
+    if course_draft is not None:
+        course = course_draft.course
+        if can_edit_course_draft(actor, course) and (
+            MediaContentReference.objects.filter(
+                media_asset=asset,
+                course_draft__course=course,
+            ).exists()
+            or MediaContentReference.objects.filter(
+                media_asset=asset,
+                published_version__course=course,
+            ).exists()
+        ):
+            return True
+
+    gid = training_group_id or (group_renewal_cycle.training_group_id if group_renewal_cycle is not None else None)
+    if gid is not None:
+        if (asset.storage_key or "").startswith(f"groups/group_{int(gid)}/"):
+            return True
+        if MediaContentReference.objects.filter(
+            media_asset=asset,
+            group_renewal_cycle__training_group_id=int(gid),
+        ).exists():
+            return True
+
+    return False
+
+
 def _assert_context_mutable_and_authorized(
     actor: User,
     *,
@@ -222,6 +263,17 @@ def attach_media_reference(
         published_version=published_version,
         group_renewal_cycle=group_renewal_cycle,
     )
+    if not is_actor_authorized_for_media_asset(
+        actor,
+        media_asset,
+        course_draft=course_draft,
+        group_renewal_cycle=group_renewal_cycle,
+    ):
+        raise MediaDomainError(
+            "PERMISSION_DENIED",
+            "غير مصرح لك بإرفاق ملف وسائط لا تملكه أو لا يتبع هذا السياق.",
+            403,
+        )
     norm_title = normalize_nfc_stripped(title)
     try:
         validate_non_empty_text(norm_title)
@@ -254,6 +306,17 @@ def repoint_media_reference(*, actor: User, ref: MediaContentReference, new_asse
         published_version=ref.published_version,
         group_renewal_cycle=ref.group_renewal_cycle,
     )
+    if not is_actor_authorized_for_media_asset(
+        actor,
+        new_asset,
+        course_draft=ref.course_draft,
+        group_renewal_cycle=ref.group_renewal_cycle,
+    ):
+        raise MediaDomainError(
+            "PERMISSION_DENIED",
+            "غير مصرح لك باستبدال المرجع بملف وسائط لا تملكه.",
+            403,
+        )
     old_id = ref.media_asset_id
     ref.media_asset = new_asset
     ref.save(update_fields=["media_asset"])

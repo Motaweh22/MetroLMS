@@ -60,7 +60,10 @@ class MyEnrollmentsView(APIView):
         )
         items = []
         for enr in enrollments:
-            course_data = CourseSerializer(enr.course).data
+            course_data = CourseSerializer(
+                enr.course,
+                context={"request": request, "published_only": True},
+            ).data
             enr_data = EnrollmentSerializer(enr).data
             latest_attempt = enr.attempts.order_by("-id").first()
             prog = compute_course_progress(latest_attempt) if latest_attempt else None
@@ -122,25 +125,48 @@ class CourseEnrollmentsView(APIView):
         if course is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
 
+        is_course_staff = (
+            request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
+            or course.primary_lecturer_id == request.user.id
+            or course.assistant_lecturers.filter(user=request.user).exists()
+        )
         raw_user_id = request.data.get("userId")
         parsed_user_id = _parse_pos_int(raw_user_id)
         if raw_user_id is not None and parsed_user_id is None:
             return error_response("VALIDATION_ERROR", "معرّف المستخدم غير صالح.", status.HTTP_400_BAD_REQUEST)
         target_user_id = parsed_user_id if parsed_user_id is not None else request.user.id
+        decision = evaluate_permission(request.user, "users.manage_enrollments")
+        can_manage_enrollments = decision.granted or is_course_staff
         if target_user_id != request.user.id:
-            decision = evaluate_permission(request.user, "users.manage_enrollments")
-            is_course_staff = (
-                request.user.role_id in {"developer", "super_admin", "admin", "assistant_admin"}
-                or course.primary_lecturer_id == request.user.id
-                or course.assistant_lecturers.filter(user=request.user).exists()
-            )
-            if not decision.granted and not is_course_staff:
+            if not can_manage_enrollments:
                 return error_response("PERMISSION_DENIED", decision.reason_ar, status.HTTP_403_FORBIDDEN)
         target_user = get_visible_user_or_none(request.user, target_user_id)
         if target_user is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
 
-        source_type = str(request.data.get("sourceType", "direct"))
+        source_type = str(request.data.get("sourceType", "direct")).strip()
+        if not can_manage_enrollments:
+            from apps.courses.services.course_service import is_course_visible_to_trainee
+
+            if source_type not in {"direct", "self:continued"}:
+                return error_response(
+                    "PERMISSION_DENIED",
+                    "غير مصرح لك بالتسجيل عبر هذا المصدر مباشرة.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+            if course.lifecycle_status != "Published":
+                return error_response(
+                    "COURSE_NOT_PUBLISHED",
+                    "لا يمكن التسجيل في دورة غير منشورة.",
+                    status.HTTP_409_CONFLICT,
+                )
+            if course.access_mode == "hidden" or not is_course_visible_to_trainee(target_user, course):
+                return error_response(
+                    "COURSE_ACCESS_DENIED",
+                    "هذا المقرر مخصص أو مخفي ولا تملك صلاحية التسجيل الذاتي فيه.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+
         raw_group_id = request.data.get("trainingGroupId")
         group_id = _parse_pos_int(raw_group_id)
         group = TrainingGroup.objects.filter(pk=group_id).first() if group_id is not None else None
@@ -158,6 +184,7 @@ class CourseEnrollmentsView(APIView):
                 source_type=source_type,
                 training_group=group,
                 group_renewal_cycle=cycle,
+                allow_privileged_source=can_manage_enrollments,
             )
         except LearningDomainError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
@@ -207,6 +234,7 @@ class CourseEnrollmentsBulkAddView(APIView):
                 user=target_user,
                 course=course,
                 source_type="direct",
+                allow_privileged_source=True,
             )
             added_count += 1
 

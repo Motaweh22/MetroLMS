@@ -24,6 +24,12 @@ class Bp05GovernanceAndAuditTests(TestCase):
             updated_at=now,
             updated_by="system",
         )
+        self.role_super_admin = RolePolicy.objects.create(
+            role_key="super_admin",
+            default_capabilities_json=sorted(ROLE_DEFAULT_CAPABILITIES["super_admin"]),
+            updated_at=now,
+            updated_by="system",
+        )
         self.role_admin = RolePolicy.objects.create(
             role_key="admin",
             default_capabilities_json=sorted(ROLE_DEFAULT_CAPABILITIES["admin"]),
@@ -153,4 +159,36 @@ class Bp05GovernanceAndAuditTests(TestCase):
         dev_entry_for_dev = next(l for l in dev_logs if l["action"] == "system.bootstrap")
         self.assertEqual(dev_entry_for_dev["actorUserId"], str(self.developer.id))
         self.assertEqual(dev_entry_for_dev["actorRoleSnapshot"], "developer")
+
+    def test_super_admin_can_fetch_audit_trail_with_d14_masking(self) -> None:
+        super_admin = User.objects.create_user(
+            phone_e164="+201099990001",
+            password="TestPassword@123",
+            role=self.role_super_admin,
+            status="Active",
+            full_name="مدير أعلى اختبار",
+            national_id="29501010109991",
+            marital_status=self.marital,
+            appointment_date=datetime.date(2020, 1, 1),
+            military_service_status=self.military,
+            educational_qualification="بكالوريوس",
+            address="القاهرة",
+            date_of_birth=datetime.date(1995, 1, 1),
+            metro_line=self.metro_line,
+        )
+        record_audit_log(
+            action="system.bootstrap",
+            actor=self.developer,
+            target_entity_type="RolePolicy",
+            target_entity_id="developer",
+        )
+        super_admin_client = self._login(super_admin.phone_e164)
+        res = super_admin_client.get("/api/admin/audit")
+        self.assertEqual(res.status_code, 200)
+        payload = res.json()["data"]
+        self.assertIn("entries", payload)
+        self.assertIn("logs", payload)
+        dev_entry = next(l for l in payload["entries"] if l["action"] == "system.bootstrap")
+        self.assertEqual(dev_entry["actorUserId"], "SYSTEM")
+        self.assertEqual(dev_entry["actorName"], "النظام")
 

@@ -885,6 +885,7 @@ class AdminGroupCoursesView(APIView):
                                 source_type="group",
                                 training_group=group,
                                 group_renewal_cycle=cycle,
+                                allow_privileged_source=True,
                             )
                         except LearningDomainError:
                             pass
@@ -983,6 +984,7 @@ class AdminGroupMembersView(APIView):
                                 source_type="group",
                                 training_group=group,
                                 group_renewal_cycle=active_cycle,
+                                allow_privileged_source=True,
                             )
                         except LearningDomainError:
                             pass
@@ -1082,7 +1084,7 @@ def _resolve_material_file_type(mime_type: str, file_name: str) -> str:
     return "other"
 
 
-def _repair_material_file_record(f: dict) -> bool:
+def _repair_material_file_record(f: dict, *, group_id: int | None = None) -> bool:
     from apps.media.models import MediaAsset
 
     changed = False
@@ -1094,20 +1096,14 @@ def _repair_material_file_record(f: dict) -> bool:
     media_id = f.get("mediaId") or f.get("mediaAssetId")
     size_val = _safe_int(f.get("fileSizeBytes") or f.get("sizeBytes"), 0)
     if (size_val <= 0 or not f.get("url")) and media_id and str(media_id).isdigit():
-        asset = MediaAsset.objects.filter(pk=int(media_id)).first()
+        qs = MediaAsset.objects.filter(pk=int(media_id))
+        if group_id is not None:
+            qs = qs.filter(storage_key__startswith=f"groups/group_{int(group_id)}/")
+        asset = qs.first()
         if asset is not None:
             size_val = asset.size_bytes
             f["fileSizeBytes"] = size_val
             f["sizeBytes"] = size_val
-            f["url"] = f"/api/media/assets/{asset.id}/stream"
-            changed = True
-    elif size_val <= 0 and not media_id:
-        asset = MediaAsset.objects.filter(mime_type=mime).order_by("-id").first()
-        if asset is not None:
-            f["mediaId"] = str(asset.id)
-            f["mediaAssetId"] = str(asset.id)
-            f["fileSizeBytes"] = asset.size_bytes
-            f["sizeBytes"] = asset.size_bytes
             f["url"] = f"/api/media/assets/{asset.id}/stream"
             changed = True
     return changed
@@ -1128,11 +1124,11 @@ def _load_materials_manifest(group_id: int) -> dict:
             data.setdefault("rootFiles", [])
             dirty = False
             for f in data["rootFiles"]:
-                if isinstance(f, dict) and _repair_material_file_record(f):
+                if isinstance(f, dict) and _repair_material_file_record(f, group_id=group_id):
                     dirty = True
             for fld in data["folders"]:
                 for f in fld.get("files", []):
-                    if isinstance(f, dict) and _repair_material_file_record(f):
+                    if isinstance(f, dict) and _repair_material_file_record(f, group_id=group_id):
                         dirty = True
             if dirty:
                 _save_materials_manifest(group_id, data)
@@ -1291,15 +1287,27 @@ class AdminGroupMaterialFilesView(APIView):
         mime_type = str(request.data.get("mimeType") or "application/octet-stream")
 
         if media_id and str(media_id).isdigit():
-            url = f"/api/media/assets/{int(str(media_id))}/stream"
-            if size_bytes <= 0:
-                from apps.media.models import MediaAsset
+            from apps.media.models import MediaAsset
+            from apps.media.services.media_service import is_actor_authorized_for_media_asset
 
-                asset = MediaAsset.objects.filter(pk=int(media_id)).first()
-                if asset is not None:
-                    size_bytes = asset.size_bytes
-                    if not mime_type or mime_type == "application/octet-stream":
-                        mime_type = asset.mime_type
+            asset = MediaAsset.objects.filter(pk=int(media_id)).first()
+            if asset is None:
+                return error_response(
+                    "RESOURCE_NOT_FOUND",
+                    "ملف الوسائط المطلوب غير موجود.",
+                    status.HTTP_404_NOT_FOUND,
+                )
+            if not is_actor_authorized_for_media_asset(request.user, asset, training_group_id=group_id):
+                return error_response(
+                    "PERMISSION_DENIED",
+                    "غير مصرح لك بإرفاق ملف وسائط لا تملكه أو لا يتبع هذه المجموعة.",
+                    status.HTTP_403_FORBIDDEN,
+                )
+            url = f"/api/media/assets/{asset.id}/stream"
+            if size_bytes <= 0:
+                size_bytes = asset.size_bytes
+            if not mime_type or mime_type == "application/octet-stream":
+                mime_type = asset.mime_type
         elif url:
             raw_url = str(url).strip()
             if not raw_url.startswith("/api/media/"):

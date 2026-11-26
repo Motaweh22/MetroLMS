@@ -2,7 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import type { UserTranscriptDTO, ManagedUserDTO, UserStatus } from '@/core/user-management/types';
-import { USER_ROLE_LABELS_AR, USER_STATUS_LABELS_AR } from '@/core/user-management/types';
+import {
+  USER_ROLE_LABELS_AR,
+  USER_STATUS_LABELS_AR,
+  getUserInitials,
+  mergeManagedUserUpdate,
+} from '@/core/user-management/types';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
 import { profileApi, type UserOverviewData } from '@/features/profile/services/profileApi';
 import { UserCoursesAndGroupsPanel } from '@/features/user-management/components/UserCoursesAndGroupsPanel';
@@ -31,12 +36,6 @@ function getRoleBadgeVariant(role: string): BadgeVariant {
 
 function getStatusBadgeVariant(status: UserStatus): BadgeVariant {
   return status === 'active' ? 'success' : 'danger';
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2);
-  return `${parts[0][0] || ''}.${parts[1][0] || ''}`;
 }
 
 function formatDate(dateStr?: string | null): string {
@@ -120,7 +119,7 @@ export const UserDetailsPage: React.FC = () => {
       if (!prev) return null;
       return {
         ...prev,
-        user: updatedUser,
+        user: mergeManagedUserUpdate(prev.user, updatedUser),
       };
     });
   };
@@ -221,7 +220,7 @@ export const UserDetailsPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start sm:items-center gap-4">
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-primary/10 text-primary font-bold text-base sm:text-lg flex items-center justify-center shrink-0 border border-primary/20">
-              {getInitials(user.name)}
+              {getUserInitials(user.name)}
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">

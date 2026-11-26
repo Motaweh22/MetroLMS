@@ -44,6 +44,37 @@ export function detectGenderFromNationalId(nationalId: string): UserGender | nul
   return digit13 % 2 === 0 ? 'female' : 'male';
 }
 
+export function getUserInitials(name?: string | null): string {
+  const clean = (name || '').trim();
+  if (!clean) return 'م';
+  const parts = clean.split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2);
+  return `${parts[0][0] || ''}.${parts[1][0] || ''}`;
+}
+
+export function mergeManagedUserUpdate(
+  existing: ManagedUserDTO,
+  incoming?: Partial<ManagedUserDTO> | null
+): ManagedUserDTO {
+  if (!incoming) return existing;
+  const rawStatus = typeof incoming.status === 'string' ? incoming.status.trim().toLowerCase() : '';
+  const normalizedStatus: UserStatus =
+    rawStatus === 'suspended' ? 'suspended' : rawStatus === 'active' ? 'active' : existing.status;
+
+  return {
+    ...existing,
+    ...incoming,
+    name: incoming.name ?? existing.name,
+    username: incoming.username ?? existing.username,
+    email: incoming.email ?? existing.email,
+    jobTitle: incoming.jobTitle ?? existing.jobTitle,
+    department: incoming.department ?? existing.department,
+    role: incoming.role ?? existing.role,
+    status: normalizedStatus,
+    initials: incoming.initials ?? existing.initials,
+  };
+}
+
 /**
  * Centrally Managed User Directory DTO
  * 

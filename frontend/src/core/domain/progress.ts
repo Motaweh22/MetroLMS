@@ -41,19 +41,23 @@ export function calculateTraineeProgress(totalItems: number, completedCount: num
  * - Any subsequent lesson (index N > 0) is unlocked if and only if the immediately
  *   preceding lesson (index N - 1) is in completedItemIds.
  */
+export function isStaffLearningRole(userRole?: UserRole | string | null): boolean {
+  return (
+    userRole === 'admin' ||
+    userRole === 'super_admin' ||
+    userRole === 'developer' ||
+    userRole === 'assistant_admin' ||
+    userRole === 'lecturer'
+  );
+}
+
 export function isLessonLocked(
   itemIndex: number,
   flatItems: ChapterItem[],
   completedItemIds: string[],
   userRole?: UserRole
 ): boolean {
-  if (
-    userRole === 'admin' ||
-    userRole === 'super_admin' ||
-    userRole === 'developer' ||
-    userRole === 'assistant_admin' ||
-    userRole === 'lecturer'
-  ) {
+  if (isStaffLearningRole(userRole)) {
     return false;
   }
 

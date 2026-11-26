@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import datetime
+import os
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -41,6 +43,12 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options) -> None:
+        settings_mod = os.environ.get("DJANGO_SETTINGS_MODULE", "")
+        db_name = str((settings.DATABASES.get("default") or {}).get("NAME") or "").strip().lower()
+        if not options["delete"] and settings_mod == "config.settings.production":
+            raise CommandError(
+                "Refusing to seed test accounts (+201000000001..006 / MetroTest@2026) under config.settings.production."
+            )
         if options["delete"]:
             phones = [p for _, p, _, _ in TEST_ACCOUNTS]
             UserWhatsAppVisibility.objects.filter(user__phone_e164__in=phones).delete()

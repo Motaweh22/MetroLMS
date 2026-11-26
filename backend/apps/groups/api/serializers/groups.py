@@ -292,6 +292,7 @@ class TrainingGroupSerializer(serializers.ModelSerializer):
             {
                 "userId": str(r.user_id),
                 "name": r.user.full_name,
+                "phone": r.user.phone_e164 if getattr(r.user, "role_id", None) != "developer" else None,
                 "instructorRole": "primary" if r.assignment_role == "primary" else "assistant",
             }
             for r in rows

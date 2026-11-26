@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Icon } from '@/shared/ui/Icon/Icon';
 import { Button } from '@/shared/ui/Button/Button';
+import { isSafePreviewFrameUrl, sanitizeSafeUrl } from '@/core/utils/safeUrl';
 import type { EnrichedChapterItem } from '../types';
 
 export interface DocumentViewerProps {
@@ -78,6 +79,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
         try {
           const jsonRes = await fetch(jsonUrl, {
+            credentials: 'same-origin',
             headers: { Accept: 'application/json' },
           });
 
@@ -101,14 +103,30 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
 
         // Strategy 2: If JSON wasn't available, fetch raw binary stream directly
         if (!blob) {
-          const res = await fetch(docUrl);
+          const res = await fetch(docUrl, { credentials: 'same-origin' });
           // Check for download manager interception (status 204 or empty response)
           if (res.status === 204 || !res.ok) {
             throw new Error(`تعذر استلام بيانات المستند (رمز الحالة: ${res.status})`);
           }
+          const respMime = (res.headers.get('content-type') || '').toLowerCase();
+          if (
+            respMime.includes('text/html') ||
+            respMime.includes('application/xhtml+xml') ||
+            respMime.includes('image/svg+xml')
+          ) {
+            throw new Error('نوع المحتوى المستلم غير مسموح به للعرض المباشر.');
+          }
           const rawBlob = await res.blob();
           if (rawBlob.size === 0) {
             throw new Error('ملف المستند فارغ أو تم اعتراضه');
+          }
+          const blobType = (rawBlob.type || '').toLowerCase();
+          if (
+            blobType.includes('text/html') ||
+            blobType.includes('application/xhtml+xml') ||
+            blobType.includes('image/svg+xml')
+          ) {
+            throw new Error('نوع الملف المستلم غير مسموح به للعرض المباشر.');
           }
           blob = rawBlob;
         }
@@ -122,10 +140,15 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
         setHasError(false);
       } catch (err) {
         if (isCancelled) return;
-        console.warn('DocumentViewer blob loading failed, falling back to direct URL:', err);
-        // Fallback: attempt direct item.url
-        setDocumentBlobUrl(docUrl);
-        setIsLoading(false);
+        console.warn('DocumentViewer blob loading failed:', err);
+        if (isSafePreviewFrameUrl(docUrl)) {
+          setDocumentBlobUrl(docUrl);
+          setIsLoading(false);
+        } else {
+          setDocumentBlobUrl(null);
+          setHasError(true);
+          setIsLoading(false);
+        }
       }
     };
 
@@ -226,9 +249,14 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
         </div>
       ) : (
         <iframe
-          src={documentBlobUrl || item.url}
+          src={
+            documentBlobUrl && isSafePreviewFrameUrl(documentBlobUrl)
+              ? sanitizeSafeUrl(documentBlobUrl, 'about:blank')
+              : 'about:blank'
+          }
           title={item.title}
           className="document-frame"
+          sandbox="allow-same-origin"
           onError={() => setHasError(true)}
         />
       )}

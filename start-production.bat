@@ -20,6 +20,7 @@ set "NO_BROWSER=0"
 set "SKIP_BUILD=0"
 set "CHECK_ONLY=0"
 set "NO_PAUSE=0"
+set "SHOW_TEST_CARDS=1"
 set "EXIT_CODE=0"
 
 :parse_args
@@ -30,6 +31,8 @@ if /I "%~1"=="/CHECKONLY" set "CHECK_ONLY=1"
 if /I "%~1"=="/NOBROWSER" set "NO_BROWSER=1"
 if /I "%~1"=="/SKIPBUILD" set "SKIP_BUILD=1"
 if /I "%~1"=="/NOPAUSE" set "NO_PAUSE=1"
+if /I "%~1"=="/STAGING" set "SHOW_TEST_CARDS=1"
+if /I "%~1"=="/TESTCARDS" set "SHOW_TEST_CARDS=1"
 shift
 goto parse_args
 
@@ -103,8 +106,15 @@ if "%SKIP_BUILD%"=="1" if exist "%FRONTEND_DIR%\dist\index.html" goto after_buil
 echo [3/4] Building minified production frontend ^(no source maps^)...
 pushd "%FRONTEND_DIR%" || (set "EXIT_CODE=1" & goto finish)
 if not exist "%FRONTEND_DIR%\node_modules" call npm install
-set "VITE_SHOW_TEST_CARDS=true"
-call npx vite build
+if "%SHOW_TEST_CARDS%"=="1" (
+    echo [INFO] Staging mode requested: Test Cards enabled ^(VITE_SHOW_TEST_CARDS=true^).
+    set "VITE_SHOW_TEST_CARDS=true"
+    call npx vite build --mode staging
+) else (
+    echo [INFO] Production build mode: Test Cards disabled ^(VITE_SHOW_TEST_CARDS=false^).
+    set "VITE_SHOW_TEST_CARDS=false"
+    call npx vite build
+)
 if errorlevel 1 (
     popd
     echo [ERROR] Frontend build failed.

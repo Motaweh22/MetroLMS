@@ -35,7 +35,19 @@ export const PermissionsMatrixPage: React.FC = () => {
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   const [delegations, setDelegations] = useState<Record<string, boolean>>({});
 
+  const isAuthorized = Boolean(
+    user &&
+      (user.role === 'developer' ||
+        user.role === 'super_admin' ||
+        user.role === 'admin' ||
+        user.role === 'assistant_admin')
+  );
+
   const loadData = useCallback(async () => {
+    if (!isAuthorized) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -70,19 +82,16 @@ export const PermissionsMatrixPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [isAuthorized, toast]);
 
   useEffect(() => {
+    if (!isAuthorized) {
+      setIsLoading(false);
+      return;
+    }
     loadData();
-  }, [loadData]);
+  }, [isAuthorized, loadData]);
 
-  // Authorization check
-  const isAuthorized =
-    user &&
-    (user.role === 'developer' ||
-      user.role === 'super_admin' ||
-      user.role === 'admin' ||
-      user.role === 'assistant_admin');
   if (!user || !isAuthorized) {
     return (
       <div className="container mx-auto p-6 max-w-4xl text-right" data-testid="unauthorized-permissions-view">

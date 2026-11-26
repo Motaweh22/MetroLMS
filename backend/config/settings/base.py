@@ -117,6 +117,10 @@ CSRF_COOKIE_PATH = "/"
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
 ]
+# Trusted reverse-proxy IPs/CIDRs permitted to supply X-Forwarded-For (BUG-016: fail-closed default)
+METROLMS_TRUSTED_PROXY_IPS = [
+    ip.strip() for ip in os.environ.get("METROLMS_TRUSTED_PROXY_IPS", "").split(",") if ip.strip()
+]
 
 # Media Storage (D-MEDIA-01 / INV-DOM21-06)
 MEDIA_ROOT = Path(os.environ.get("METROLMS_MEDIA_ROOT", r"D:\MetroLMSMedia"))

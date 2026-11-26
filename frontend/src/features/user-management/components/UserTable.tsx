@@ -1,7 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import type { ManagedUserDTO, UserRole, UserStatus } from '@/core/user-management/types';
-import { USER_STATUS_LABELS_AR, USER_ROLE_LABELS_AR } from '@/core/user-management/types';
+import {
+  USER_STATUS_LABELS_AR,
+  USER_ROLE_LABELS_AR,
+  getUserInitials,
+} from '@/core/user-management/types';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { canActorManageTargetAccount } from '@/core/permissions/policy';
 import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
@@ -39,12 +43,6 @@ function formatLastLogin(dateStr?: string | null): string {
   } catch {
     return dateStr;
   }
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2);
-  return `${parts[0][0] || ''}.${parts[1][0] || ''}`;
 }
 
 export const UserTable: React.FC<UserTableProps> = ({
@@ -132,7 +130,7 @@ export const UserTable: React.FC<UserTableProps> = ({
           <tbody className="divide-y divide-border/60">
             {users.map((u) => {
               const statusVariant = getStatusBadgeVariant(u.status);
-              const initials = getInitials(u.name);
+              const initials = getUserInitials(u.name);
               const isUpdating = updatingUserId === u.id;
               const isSelf = Boolean(
                 currentUser &&

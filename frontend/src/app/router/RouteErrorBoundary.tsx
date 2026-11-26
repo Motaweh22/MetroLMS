@@ -44,7 +44,13 @@ export const RouteErrorBoundary: React.FC = () => {
     );
   }
 
-  return <UnexpectedErrorPage error={error} />;
+  return (
+    <UnexpectedErrorPage
+      status={0}
+      title="حدث خطأ غير متوقع في الواجهة"
+      error={error}
+    />
+  );
 };
 
 export default RouteErrorBoundary;

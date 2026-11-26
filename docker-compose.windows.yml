@@ -11,6 +11,7 @@ services:
       dockerfile: Dockerfile.windows
       args:
         WINDOWS_BASE_TAG: ltsc2022
+        VITE_SHOW_TEST_CARDS: "${VITE_SHOW_TEST_CARDS:-false}"
     container_name: metrolms-app
     ports:
       # Set METROLMS_DOCKER_BIND=127.0.0.1:8000 when placing behind IIS Reverse Proxy on the same host

@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/features/auth';
-import { inMemoryStore } from '@/mocks/store/inMemoryStore';
 import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import { usePublicSupportContacts } from './usePublicSupportContacts';
 import {
@@ -9,6 +8,25 @@ import {
   buildWhatsAppUrl,
 } from '../utils/whatsappUtils';
 import type { WhatsAppContact, WhatsAppContextConfig } from '../types';
+
+interface TestContactLookupUser {
+  id: string;
+  name: string;
+  phone?: string;
+  role?: string;
+  jobTitle?: string;
+}
+
+type TestUserLookupFn = (id: string) => TestContactLookupUser | undefined;
+
+function getTestUserLookup(): TestUserLookupFn | undefined {
+  if (!import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+    return undefined;
+  }
+  return (globalThis as Record<string, unknown>).__METROLMS_TEST_USER_LOOKUP__ as
+    | TestUserLookupFn
+    | undefined;
+}
 
 export interface UseWhatsAppContactsResult {
   contacts: WhatsAppContact[];
@@ -94,23 +112,41 @@ export function useWhatsAppContacts(config: WhatsAppContextConfig): UseWhatsAppC
           });
         }
 
-        // Priority B: If no configured contacts, resolve assigned course lecturer(s)
+        // Priority B: If no configured contacts, resolve from real course lecturerPhone (or Vitest lookup)
         if (resolved.length === 0 && course.lecturerId) {
-          const lecturerIds = [course.lecturerId, ...(course.coLecturers || [])];
-          for (const lid of lecturerIds) {
-            const lectUser = inMemoryStore.getManagedUserById(lid);
-            if (lectUser && lectUser.phone && lectUser.role !== 'developer') {
-              const clean = cleanPhoneNumber(lectUser.phone);
-              if (clean) {
-                resolved.push({
-                  id: lectUser.id,
-                  name: lectUser.name,
-                  role: lectUser.jobTitle || 'محاضر المقرر',
-                  number: clean,
-                  displayNumber: lectUser.phone,
-                  avatarInitial: lectUser.name ? lectUser.name.trim()[0] : 'م',
-                  isAvailable: true,
-                });
+          const directLecturerPhone = (course as { lecturerPhone?: string | null }).lecturerPhone;
+          if (directLecturerPhone) {
+            const clean = cleanPhoneNumber(directLecturerPhone);
+            if (clean) {
+              resolved.push({
+                id: course.lecturerId,
+                name: course.lecturerName || 'محاضر المقرر',
+                role: 'محاضر المقرر',
+                number: clean,
+                displayNumber: directLecturerPhone,
+                avatarInitial: (course.lecturerName || 'م').trim()[0] || 'م',
+                isAvailable: true,
+              });
+            }
+          }
+          const testLookup = getTestUserLookup();
+          if (resolved.length === 0 && testLookup) {
+            const lecturerIds = [course.lecturerId, ...(course.coLecturers || [])];
+            for (const lid of lecturerIds) {
+              const lectUser = testLookup(lid);
+              if (lectUser && lectUser.phone && lectUser.role !== 'developer') {
+                const clean = cleanPhoneNumber(lectUser.phone);
+                if (clean) {
+                  resolved.push({
+                    id: lectUser.id,
+                    name: lectUser.name,
+                    role: lectUser.jobTitle || 'محاضر المقرر',
+                    number: clean,
+                    displayNumber: lectUser.phone,
+                    avatarInitial: lectUser.name ? lectUser.name.trim()[0] : 'م',
+                    isAvailable: true,
+                  });
+                }
               }
             }
           }
@@ -168,83 +204,55 @@ export function useWhatsAppContacts(config: WhatsAppContextConfig): UseWhatsAppC
           });
         }
 
-        // Resolve assigned instructors (Primary Instructor & Assistant Lecturers) from saved group assignments
-        const primaryId = group.primaryInstructorId;
-        if (primaryId) {
-          const primaryUser = inMemoryStore.getManagedUserById(primaryId);
-          if (primaryUser && primaryUser.phone && primaryUser.role !== 'developer') {
-            const clean = cleanPhoneNumber(primaryUser.phone);
-            if (clean && !resolved.some((r) => r.id === primaryUser.id)) {
-              resolved.push({
-                id: primaryUser.id,
-                name: primaryUser.name,
-                role: 'المحاضر الأساسي',
-                number: clean,
-                displayNumber: primaryUser.phone,
-                avatarInitial: primaryUser.name ? primaryUser.name.trim()[0] : 'م',
-                isAvailable: true,
-              });
+        // Priority B: Resolve assigned instructors from real group.instructors API payload
+        const groupInstructors = (group as {
+          instructors?: Array<{ userId: string; name: string; phone?: string | null; instructorRole?: string }>;
+        }).instructors;
+        if (Array.isArray(groupInstructors)) {
+          for (const inst of groupInstructors) {
+            if (inst?.phone) {
+              const clean = cleanPhoneNumber(inst.phone);
+              if (clean && !resolved.some((r) => r.id === inst.userId)) {
+                resolved.push({
+                  id: inst.userId,
+                  name: inst.name,
+                  role: inst.instructorRole === 'primary' ? 'المحاضر الأساسي' : 'المحاضر المساعد',
+                  number: clean,
+                  displayNumber: inst.phone,
+                  avatarInitial: inst.name ? inst.name.trim()[0] : 'م',
+                  isAvailable: true,
+                });
+              }
             }
           }
         }
 
-        const assistantLecturerIds = group.assistantLecturerIds || [];
-        for (const aid of assistantLecturerIds) {
-          const asstUser = inMemoryStore.getManagedUserById(aid);
-          if (asstUser && asstUser.phone && asstUser.role !== 'developer') {
-            const clean = cleanPhoneNumber(asstUser.phone);
-            if (clean && !resolved.some((r) => r.id === asstUser.id)) {
-              resolved.push({
-                id: asstUser.id,
-                name: asstUser.name,
-                role: 'المحاضر المساعد',
-                number: clean,
-                displayNumber: asstUser.phone,
-                avatarInitial: asstUser.name ? asstUser.name.trim()[0] : 'م',
-                isAvailable: true,
-              });
+        // Test-only lookup fallback when group DTO uses mock user IDs in Vitest
+        const testLookup = getTestUserLookup();
+        if (resolved.length === 0 && testLookup) {
+          const resolveTestRoleGroup = (ids: string[], roleLabel: string) => {
+            for (const uid of ids) {
+              const u = testLookup(uid);
+              if (u && u.phone && u.role !== 'developer') {
+                const clean = cleanPhoneNumber(u.phone);
+                if (clean && !resolved.some((r) => r.id === u.id)) {
+                  resolved.push({
+                    id: u.id,
+                    name: u.name,
+                    role: u.jobTitle || roleLabel,
+                    number: clean,
+                    displayNumber: u.phone,
+                    avatarInitial: u.name ? u.name.trim()[0] : 'م',
+                    isAvailable: true,
+                  });
+                }
+              }
             }
-          }
-        }
-
-        // Resolve assigned supervisors from saved group assignments
-        const supervisorIds = group.supervisorIds || [];
-        for (const sid of supervisorIds) {
-          const supUser = inMemoryStore.getManagedUserById(sid);
-          if (supUser && supUser.phone && supUser.role !== 'developer') {
-            const clean = cleanPhoneNumber(supUser.phone);
-            if (clean && !resolved.some((r) => r.id === supUser.id)) {
-              resolved.push({
-                id: supUser.id,
-                name: supUser.name,
-                role: supUser.jobTitle || 'مشرف المجموعة',
-                number: clean,
-                displayNumber: supUser.phone,
-                avatarInitial: supUser.name ? supUser.name.trim()[0] : 'م',
-                isAvailable: true,
-              });
-            }
-          }
-        }
-
-        // Include assigned group assistants where available
-        const assistantIds = group.assistantIds || [];
-        for (const aid of assistantIds) {
-          const astUser = inMemoryStore.getManagedUserById(aid);
-          if (astUser && astUser.phone && astUser.role !== 'developer') {
-            const clean = cleanPhoneNumber(astUser.phone);
-            if (clean && !resolved.some((r) => r.id === astUser.id)) {
-              resolved.push({
-                id: astUser.id,
-                name: astUser.name,
-                role: astUser.jobTitle || 'مساعد إشراف التدريب',
-                number: clean,
-                displayNumber: astUser.phone,
-                avatarInitial: astUser.name ? astUser.name.trim()[0] : 'م',
-                isAvailable: true,
-              });
-            }
-          }
+          };
+          if (group.primaryInstructorId) resolveTestRoleGroup([group.primaryInstructorId], 'المحاضر الأساسي');
+          resolveTestRoleGroup(group.assistantLecturerIds || [], 'المحاضر المساعد');
+          resolveTestRoleGroup(group.supervisorIds || [], 'مشرف المجموعة');
+          resolveTestRoleGroup(group.assistantIds || [], 'مساعد إشراف التدريب');
         }
 
         return {

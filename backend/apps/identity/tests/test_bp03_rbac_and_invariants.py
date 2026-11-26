@@ -247,4 +247,61 @@ class Bp03RbacAndInvariantsTests(TestCase):
         self.assertEqual(profile_res.json()["data"]["user"]["employeeNumber"], "EMP-7002")
         self.assertEqual(profile_res.json()["data"]["user"]["nameEn"], "Tarek Mohamed Ali")
 
+    def test_admin_suspend_and_reactivate_user_returns_full_dto_and_invalidates_sessions(self) -> None:
+        from apps.governance.models import AuditLogEntry
+        from apps.identity.models import ServerSession
+
+        lecturer_client = self._login_client(self.lecturer.phone_e164)
+        self.assertGreaterEqual(ServerSession.objects.filter(user_id=self.lecturer.id).count(), 1)
+        _ = lecturer_client
+
+        admin_client = self._login_client(self.admin.phone_e164)
+        csrf_res = admin_client.get("/api/auth/csrf")
+        csrf_token = csrf_res.cookies["csrftoken"].value
+
+        suspend_res = admin_client.patch(
+            f"/api/admin/users/{self.lecturer.id}/status",
+            data={"status": "suspended", "reason": "إيقاف مؤقت للاختبار"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(suspend_res.status_code, 200)
+        suspend_data = suspend_res.json()["data"]
+        self.assertEqual(suspend_data["id"], str(self.lecturer.id))
+        self.assertEqual(suspend_data["name"], self.lecturer.full_name)
+        self.assertEqual(suspend_data["status"], "suspended")
+        self.assertEqual(suspend_data["role"], "lecturer")
+        self.assertEqual(ServerSession.objects.filter(user_id=self.lecturer.id).count(), 0)
+        self.assertTrue(
+            AuditLogEntry.objects.filter(
+                action="user.status_changed",
+                target_entity_id=str(self.lecturer.id),
+            ).exists()
+        )
+
+        reactivate_res = admin_client.patch(
+            f"/api/admin/users/{self.lecturer.id}/status",
+            data={"status": "active", "reason": "إعادة تفعيل للاختبار"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(reactivate_res.status_code, 200)
+        reactivate_data = reactivate_res.json()["data"]
+        self.assertEqual(reactivate_data["id"], str(self.lecturer.id))
+        self.assertEqual(reactivate_data["name"], self.lecturer.full_name)
+        self.assertEqual(reactivate_data["status"], "active")
+
+        role_res = admin_client.patch(
+            f"/api/admin/users/{self.trainee.id}/role",
+            data={"role": "lecturer"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(role_res.status_code, 200)
+        role_data = role_res.json()["data"]
+        self.assertEqual(role_data["id"], str(self.trainee.id))
+        self.assertEqual(role_data["name"], self.trainee.full_name)
+        self.assertEqual(role_data["role"], "lecturer")
+        self.assertEqual(role_data["status"], "active")
+
 

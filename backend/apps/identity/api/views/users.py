@@ -142,6 +142,70 @@ def _format_marital_status_for_gender(marital_obj, gender: str | None) -> str:
     return _MARITAL_LABELS_BY_GENDER.get(g, {}).get(code) or marital_obj.name_ar
 
 
+def _resolve_user_org_labels(user: User) -> tuple[str, str]:
+    """Resolve display Arabic department and job title names for a single user."""
+    dept_link = (
+        UserOrganizationalDepartment.objects.filter(user=user)
+        .select_related("department")
+        .order_by("id")
+        .first()
+    )
+    job_link = (
+        UserJobTitle.objects.filter(user=user)
+        .select_related("job_title", "department")
+        .order_by("id")
+        .first()
+    )
+    dept_name = (
+        job_link.department.name_ar
+        if job_link and job_link.department
+        else (dept_link.department.name_ar if dept_link and dept_link.department else "")
+    )
+    job_name = job_link.job_title.name_ar if job_link and job_link.job_title else ""
+    return dept_name, job_name
+
+
+def _serialize_managed_user(
+    user: User,
+    *,
+    department: str,
+    job_title: str,
+) -> dict[str, object]:
+    """Serialize a User instance into the canonical ManagedUserDTO shape."""
+    return {
+        "id": str(user.id),
+        "name": user.full_name,
+        "nameEn": user.full_name_en or "",
+        "username": user.phone_e164,
+        "phoneE164": user.phone_e164,
+        "phone": user.phone_e164,
+        "email": user.email or user.phone_e164,
+        "role": "user" if user.role_id == "trainee" else user.role_id,
+        "status": (user.status or "Active").lower(),
+        "department": department,
+        "jobTitle": job_title,
+        "leadershipTitle": user.leadership_title or "",
+        "employeeNumber": user.employee_number or "",
+        "nationalId": user.national_id,
+        "gender": user.gender or "male",
+        "genderLabel": _gender_label_ar(user.gender),
+        "dateOfBirth": user.date_of_birth.isoformat() if user.date_of_birth else None,
+        "appointmentDate": user.appointment_date.isoformat() if user.appointment_date else None,
+        "serviceEndDate": user.service_end_date.isoformat() if user.service_end_date else None,
+        "address": user.address or "",
+        "educationalQualification": user.educational_qualification or "",
+        "maritalStatusId": user.marital_status_id,
+        "maritalStatus": _format_marital_status_for_gender(user.marital_status, user.gender),
+        "militaryServiceStatusId": user.military_service_status_id,
+        "militaryServiceStatus": (
+            user.military_service_status.name_ar if user.military_service_status else ""
+        ),
+        "metroLine": user.metro_line.name_ar if user.metro_line else "",
+        "createdAt": user.created_at.isoformat() if user.created_at else None,
+        "initials": user.full_name[:2] if user.full_name else "م",
+    }
+
+
 class ProfileView(APIView):
     """GET /api/profile — Authenticated user profile & learning summary."""
 
@@ -261,38 +325,11 @@ class AdminUserListView(APIView):
                 dept_map[jlink.user_id] = jlink.department.name_ar
 
         users = [
-            {
-                "id": str(u.id),
-                "name": u.full_name,
-                "nameEn": u.full_name_en or "",
-                "username": u.phone_e164,
-                "phoneE164": u.phone_e164,
-                "phone": u.phone_e164,
-                "email": u.email or u.phone_e164,
-                "role": "user" if u.role_id == "trainee" else u.role_id,
-                "status": u.status.lower(),
-                "department": dept_map.get(u.id, ""),
-                "jobTitle": job_map.get(u.id, ""),
-                "leadershipTitle": u.leadership_title or "",
-                "employeeNumber": u.employee_number or "",
-                "nationalId": u.national_id,
-                "gender": u.gender or "male",
-                "genderLabel": _gender_label_ar(u.gender),
-                "dateOfBirth": u.date_of_birth.isoformat() if u.date_of_birth else None,
-                "appointmentDate": u.appointment_date.isoformat() if u.appointment_date else None,
-                "serviceEndDate": u.service_end_date.isoformat() if u.service_end_date else None,
-                "address": u.address or "",
-                "educationalQualification": u.educational_qualification or "",
-                "maritalStatusId": u.marital_status_id,
-                "maritalStatus": _format_marital_status_for_gender(u.marital_status, u.gender),
-                "militaryServiceStatusId": u.military_service_status_id,
-                "militaryServiceStatus": (
-                    u.military_service_status.name_ar if u.military_service_status else ""
-                ),
-                "metroLine": u.metro_line.name_ar if u.metro_line else "",
-                "createdAt": u.created_at.isoformat() if u.created_at else None,
-                "initials": u.full_name[:2] if u.full_name else "م",
-            }
+            _serialize_managed_user(
+                u,
+                department=dept_map.get(u.id, ""),
+                job_title=job_map.get(u.id, ""),
+            )
             for u in user_list
         ]
         return success_response(users)
@@ -844,12 +881,9 @@ class AdminUserRoleView(APIView):
             target_entity_id=str(target.id),
             details_snapshot={"oldRole": old_role, "newRole": mapped_role},
         )
+        dept_name, job_name = _resolve_user_org_labels(target)
         return success_response(
-            {
-                "id": str(target.id),
-                "role": "user" if target.role_id == "trainee" else target.role_id,
-                "status": target.status,
-            }
+            _serialize_managed_user(target, department=dept_name, job_title=job_name)
         )
 
     def put(self, request: Request, user_id: int):
@@ -899,7 +933,10 @@ class AdminUserStatusView(APIView):
             target_entity_id=str(target.id),
             details_snapshot={"oldStatus": old_status, "newStatus": mapped_status},
         )
-        return success_response({"id": str(target.id), "status": target.status})
+        dept_name, job_name = _resolve_user_org_labels(target)
+        return success_response(
+            _serialize_managed_user(target, department=dept_name, job_title=job_name)
+        )
 
     def put(self, request: Request, user_id: int):
         return self._update_status(request, user_id)

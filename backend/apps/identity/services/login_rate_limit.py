@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import math
 import threading
 import time
@@ -33,14 +34,57 @@ def _hash_key(prefix: str, value: str) -> str:
     return f"metrolms:auth:{prefix}:{digest}"
 
 
+def _parse_ip(raw_ip: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    cleaned = str(raw_ip or "").strip()
+    if not cleaned:
+        return None
+    if cleaned.startswith("[") and "]" in cleaned:
+        cleaned = cleaned[1 : cleaned.index("]")]
+    elif cleaned.count(":") == 1 and "." in cleaned:
+        # Handle IPv4:port format if supplied by a proxy
+        cleaned = cleaned.split(":", 1)[0]
+    try:
+        return ipaddress.ip_address(cleaned)
+    except ValueError:
+        return None
+
+
+def _is_trusted_proxy_ip(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address, trusted_entries: list[str] | tuple[str, ...]) -> bool:
+    for entry in trusted_entries:
+        raw = str(entry or "").strip()
+        if not raw:
+            continue
+        try:
+            net = ipaddress.ip_network(raw, strict=False)
+        except ValueError:
+            continue
+        if ip_obj in net:
+            return True
+    return False
+
+
 def get_client_ip(request: HttpRequest) -> str:
-    """Extract client IP address safely, honoring X-Forwarded-For behind reverse proxies."""
-    xff = str(request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
-    if xff:
-        first = xff.split(",")[0].strip()
-        if first:
-            return first[:64]
-    return str(request.META.get("REMOTE_ADDR") or "unknown").strip()[:64]
+    """Derive canonical client IP without trusting arbitrary X-Forwarded-For headers (BUG-016)."""
+    remote_raw = str(request.META.get("REMOTE_ADDR") or "").strip()
+    remote_ip = _parse_ip(remote_raw)
+    trusted_proxies = getattr(settings, "METROLMS_TRUSTED_PROXY_IPS", []) or []
+
+    # Fail-closed: only inspect X-Forwarded-For when immediate socket peer is a configured trusted proxy.
+    if remote_ip is not None and trusted_proxies and _is_trusted_proxy_ip(remote_ip, trusted_proxies):
+        xff = str(request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
+        if xff:
+            parts = [p.strip() for p in xff.split(",") if p.strip()]
+            # Walk right-to-left skipping trusted proxies; the first untrusted valid IP is the real client.
+            for candidate in reversed(parts):
+                parsed = _parse_ip(candidate)
+                if parsed is None:
+                    break
+                if not _is_trusted_proxy_ip(parsed, trusted_proxies):
+                    return str(parsed)[:64]
+
+    if remote_ip is not None:
+        return str(remote_ip)[:64]
+    return (remote_raw or "unknown")[:64]
 
 
 def format_arabic_wait_duration(seconds: int) -> str:

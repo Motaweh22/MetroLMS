@@ -30,9 +30,12 @@ describe('Increment 11 — Phase 5D: Context-Aware WhatsApp Contact System & Leg
     vi.clearAllMocks();
     authStorage.clearSession();
     inMemoryStore.reset({ seedGroupDemo: true });
+    (globalThis as Record<string, unknown>).__METROLMS_TEST_USER_LOOKUP__ = (id: string) =>
+      inMemoryStore.getManagedUserById(id);
   });
 
   afterEach(() => {
+    delete (globalThis as Record<string, unknown>).__METROLMS_TEST_USER_LOOKUP__;
     server.resetHandlers();
     authStorage.clearSession();
   });

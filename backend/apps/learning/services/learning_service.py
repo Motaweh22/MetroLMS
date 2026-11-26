@@ -128,10 +128,22 @@ def enroll_user_in_course(
     source_type: str = "direct",
     training_group: TrainingGroup | None = None,
     group_renewal_cycle: GroupRenewalCycle | None = None,
+    allow_privileged_source: bool = False,
 ) -> tuple[Enrollment, EnrollmentSourceGrant, CourseAttempt]:
     """Create or extend multi-source Enrollment + SourceGrant + active CourseAttempt."""
     if source_type not in {"direct", "group", "self:continued", "qr_code"}:
         raise LearningDomainError("INVALID_SOURCE_TYPE", "مصدر التسجيل غير صالح.")
+    if (
+        source_type in {"group", "qr_code"}
+        and not allow_privileged_source
+        and actor.id == user.id
+        and actor.role_id not in {"developer", "super_admin", "admin", "assistant_admin"}
+    ):
+        raise LearningDomainError(
+            "PERMISSION_DENIED",
+            "مصدر التسجيل يتطلب تصريحاً إدارياً أو رمزاً معتمداً.",
+            403,
+        )
     if source_type == "group" and training_group is None:
         raise LearningDomainError("GROUP_REQUIRED", "يجب تحديد المجموعة التدريبية لمصدر التسجيل الجماعي.")
     if source_type != "group" and training_group is not None:

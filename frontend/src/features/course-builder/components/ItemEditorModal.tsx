@@ -10,6 +10,7 @@ import type {
 } from '@/core/courses/types';
 import { parseDurationToSeconds } from '@/core/domain/progress';
 import { sanitizeDurationInput } from '@/core/utils/numericInput';
+import { isSafePreviewFrameUrl, sanitizeSafeUrl } from '@/core/utils/safeUrl';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
@@ -1104,15 +1105,16 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                         <div className="rounded-xl overflow-hidden border border-border bg-slate-900 h-64 flex items-center justify-center">
                           {isPreviewLoading ? (
                             <span className="text-xs text-white/80">جاري تحميل معاينة المستند...</span>
-                          ) : previewLoadError || !effectivePreviewUrl ? (
+                          ) : previewLoadError || !effectivePreviewUrl || !isSafePreviewFrameUrl(effectivePreviewUrl) ? (
                             <span className="text-xs text-red-300 px-3 text-center">
                               {previewLoadError || 'تعذر تحميل معاينة مستند PDF.'}
                             </span>
                           ) : (
                             <iframe
-                              src={effectivePreviewUrl}
+                              src={sanitizeSafeUrl(effectivePreviewUrl, 'about:blank')}
                               title="معاينة المستند الرقمي"
                               className="w-full h-full border-0"
+                              sandbox="allow-same-origin"
                               data-testid="pdf-preview-frame"
                             />
                           )}

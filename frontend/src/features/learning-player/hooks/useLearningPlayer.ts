@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { Course, ChapterItem } from '@/core/courses/types';
 import type { UserRole } from '@/core/auth/types';
 import type { CourseProgress, EnrichedChapterItem } from '../types';
-import { isLessonLocked, resolveResumeLesson } from '@/core/domain/progress';
+import { isLessonLocked, isStaffLearningRole, resolveResumeLesson } from '@/core/domain/progress';
 
 interface UseLearningPlayerProps {
   course: Course | null;
@@ -93,7 +93,7 @@ export function useLearningPlayer({
     } else {
       // Verify currently selected item exists in course and is not locked for trainees
       const currentSelected = flatItems.find((it) => it.id === selectedItemId);
-      if (!currentSelected || (currentSelected.isLocked && userRole !== 'admin' && userRole !== 'lecturer')) {
+      if (!currentSelected || (currentSelected.isLocked && !isStaffLearningRole(userRole))) {
         const resume = resolveResumeLesson(
           flatItems,
           progress?.completedItemIds || [],
@@ -115,7 +115,7 @@ export function useLearningPlayer({
     if (initialItemId && initialItemId !== selectedItemId && flatItems.length > 0) {
       const target = flatItems.find((it) => it.id === initialItemId);
       if (target) {
-        if (!target.isLocked || userRole === 'admin' || userRole === 'lecturer') {
+        if (!target.isLocked || isStaffLearningRole(userRole)) {
           setSelectedItemId(initialItemId);
         } else {
           setLockedWarning('عليك إكمال الدرس السابق أولاً لتتمكن من الوصول إلى هذا المحتوى');

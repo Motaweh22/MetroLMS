@@ -13,7 +13,13 @@ import { Badge } from '@/shared/ui/Badge';
 import { Icon } from '@/shared/ui/Icon';
 import { StyledSelect } from '@/shared/ui/StyledSelect';
 import { ExternalResourcesEditor } from '@/features/courses/components/ExternalResourcesEditor';
-import { sanitizeSafeUrl } from '@/core/utils/safeUrl';
+import {
+  sanitizeSafeUrl,
+  getSafeYouTubeEmbedUrl,
+  getSafeGoogleDrivePreviewUrl,
+  getSafeOfficeEmbedUrl,
+  isSafePreviewFrameUrl,
+} from '@/core/utils/safeUrl';
 import { blockInvalidNumberKeys, sanitizeDurationInput } from '@/core/utils/numericInput';
 import { useAuthenticatedMediaPreview } from '@/core/storage/useAuthenticatedMediaPreview';
 
@@ -101,10 +107,9 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
 
   const rawActiveItemUrl = activeItem ? (activeItem.url || activeItem.externalUrl || undefined) : undefined;
   const isExternalEmbedUrl = Boolean(
-    rawActiveItemUrl &&
-    (rawActiveItemUrl.includes('youtube.com') ||
-      rawActiveItemUrl.includes('youtu.be') ||
-      rawActiveItemUrl.includes('drive.google.com'))
+    getSafeYouTubeEmbedUrl(rawActiveItemUrl) ||
+      getSafeGoogleDrivePreviewUrl(rawActiveItemUrl) ||
+      getSafeOfficeEmbedUrl(rawActiveItemUrl)
   );
   const {
     previewUrl: resolvedActiveMediaUrl,
@@ -787,25 +792,28 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
               /* Real Side-Effect-Free Lesson Preview */
               <div className="space-y-4" data-testid="real-lesson-preview">
                 {/* 1. Video Lesson Preview */}
-                {activeItem.type === 'video' && (
+                {activeItem.type === 'video' && (() => {
+                  const candidateVideoUrl = activeItem.url || activeItem.externalUrl || '';
+                  const safeYtUrl = getSafeYouTubeEmbedUrl(candidateVideoUrl);
+                  const safeDriveVideoUrl = getSafeGoogleDrivePreviewUrl(candidateVideoUrl);
+                  return (
                   <div
                     className="rounded-xl overflow-hidden bg-black/90 aspect-video flex items-center justify-center relative border border-border"
                     data-testid="preview-video-container"
                   >
-                    {(activeItem.url || activeItem.externalUrl) && !videoError ? (
-                      (activeItem.url || activeItem.externalUrl || '').includes('youtube.com') ||
-                        (activeItem.url || activeItem.externalUrl || '').includes('youtu.be') ? (
+                    {candidateVideoUrl && !videoError ? (
+                      safeYtUrl ? (
                         <iframe
                           title={activeItem.title}
-                          src={(activeItem.url || activeItem.externalUrl || '').replace('watch?v=', 'embed/')}
+                          src={safeYtUrl}
                           className="w-full h-full border-0"
                           sandbox="allow-scripts allow-same-origin allow-presentation"
                           data-testid="preview-video-player"
                         />
-                      ) : (activeItem.url || activeItem.externalUrl || '').includes('drive.google.com') ? (
+                      ) : safeDriveVideoUrl ? (
                         <iframe
                           title={activeItem.title}
-                          src={(activeItem.url || activeItem.externalUrl || '').replace('/view', '/preview')}
+                          src={safeDriveVideoUrl}
                           className="w-full h-full border-0"
                           sandbox="allow-scripts allow-same-origin"
                           data-testid="preview-video-player"
@@ -848,7 +856,8 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* 2. PDF In-Workspace Document Preview */}
                 {activeItem.type === 'pdf' && (
@@ -877,15 +886,19 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                             <div className="p-4 rounded-xl border border-border bg-surface text-xs text-danger">
                               {activeMediaPreviewError}
                             </div>
-                          ) : resolvedActiveMediaUrl ? (
+                          ) : resolvedActiveMediaUrl && isSafePreviewFrameUrl(resolvedActiveMediaUrl) ? (
                             <iframe
                               src={resolvedActiveMediaUrl}
                               title={activeItem.title}
                               className="w-full h-[600px] rounded-xl border border-border bg-surface"
-                              sandbox="allow-scripts allow-same-origin allow-forms"
+                              sandbox="allow-same-origin"
                               data-testid="preview-pdf-frame"
                               onError={() => setDocumentError(true)}
                             />
+                          ) : resolvedActiveMediaUrl ? (
+                            <div className="p-4 rounded-xl border border-border bg-surface text-xs text-danger">
+                              تم حظر رابط معاينة غير موثوق.
+                            </div>
                           ) : (
                             <div className="p-8 text-center text-xs text-text-muted border border-border rounded-xl bg-surface">
                               جاري تحميل معاينة المستند...
@@ -920,10 +933,14 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                 )}
 
                 {/* 3. PowerPoint & Word In-Workspace Document Preview */}
-                {(activeItem.type === 'powerpoint' || activeItem.type === 'docx') && (
+                {(activeItem.type === 'powerpoint' || activeItem.type === 'docx') && (() => {
+                  const docCandidateUrl = activeItem.url || activeItem.externalUrl || '';
+                  const safeDriveDocUrl = getSafeGoogleDrivePreviewUrl(docCandidateUrl);
+                  const safeOfficeUrl = getSafeOfficeEmbedUrl(docCandidateUrl);
+                  return (
                   <div className="space-y-3" data-testid="preview-document-viewer">
-                    {activeItem.url || activeItem.externalUrl ? (
-                      (activeItem.url || activeItem.externalUrl || '').includes('drive.google.com') ? (
+                    {docCandidateUrl ? (
+                      safeDriveDocUrl ? (
                         <div className="space-y-3">
                           <div className="flex items-center justify-between p-3 bg-surface border border-border rounded-lg">
                             <div className="flex items-center gap-2">
@@ -934,7 +951,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                               </Badge>
                             </div>
                             <a
-                              href={sanitizeSafeUrl(activeItem.url || activeItem.externalUrl)}
+                              href={sanitizeSafeUrl(docCandidateUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted hover:bg-neutral-light border border-border text-text rounded-md text-xs font-medium transition-colors"
@@ -945,16 +962,14 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                           </div>
 
                           <iframe
-                            src={(activeItem.url || activeItem.externalUrl || '').replace('/view', '/preview')}
+                            src={safeDriveDocUrl}
                             title={activeItem.title}
                             className="w-full h-[600px] rounded-xl border border-border bg-surface"
                             sandbox="allow-scripts allow-same-origin"
                             data-testid="preview-office-frame"
                           />
                         </div>
-                      ) : (activeItem.url || activeItem.externalUrl || '').includes('officeapps.live.com') ||
-                        (activeItem.url || activeItem.externalUrl || '').includes('onedrive') ||
-                        (activeItem.url || activeItem.externalUrl || '').includes('sharepoint') ? (
+                      ) : safeOfficeUrl ? (
                         <div className="space-y-3">
                           <div className="flex items-center justify-between p-3 bg-surface border border-border rounded-lg">
                             <div className="flex items-center gap-2">
@@ -965,7 +980,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                               </Badge>
                             </div>
                             <a
-                              href={sanitizeSafeUrl(activeItem.url || activeItem.externalUrl)}
+                              href={sanitizeSafeUrl(safeOfficeUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted hover:bg-neutral-light border border-border text-text rounded-md text-xs font-medium transition-colors"
@@ -976,10 +991,10 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                           </div>
 
                           <iframe
-                            src={activeItem.url || activeItem.externalUrl}
+                            src={safeOfficeUrl}
                             title={activeItem.title}
                             className="w-full h-[600px] rounded-xl border border-border bg-surface"
-                            sandbox="allow-scripts allow-same-origin"
+                            sandbox="allow-scripts allow-popups"
                             data-testid="preview-office-frame"
                           />
                         </div>
@@ -1018,7 +1033,8 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* 3. Image Lesson Preview */}
                 {activeItem.type === 'image' && (

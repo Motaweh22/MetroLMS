@@ -177,10 +177,23 @@ def save_course_draft(
 
     # Clear existing draft modules -> quizzes -> lessons -> modules & draft media refs (ON DELETE NO ACTION)
     from apps.media.models import MediaAsset, MediaContentReference
+    from apps.media.services.media_service import is_actor_authorized_for_media_asset
+
+    def _get_authorized_asset_or_raise(asset_id: int) -> MediaAsset | None:
+        candidate = MediaAsset.objects.filter(pk=asset_id).first()
+        if candidate is None:
+            return None
+        if not is_actor_authorized_for_media_asset(actor, candidate, course_draft=draft):
+            raise CourseDomainError(
+                "PERMISSION_DENIED",
+                "غير مصرح لك بإرفاق ملف وسائط لا تملكه أو لا يتبع هذا المقرر.",
+                status_code=403,
+            )
+        return candidate
 
     MediaContentReference.objects.filter(course_draft=draft).delete()
     if thumbnail_asset_id is not None:
-        cover_asset = MediaAsset.objects.filter(pk=thumbnail_asset_id).first()
+        cover_asset = _get_authorized_asset_or_raise(int(thumbnail_asset_id))
         if cover_asset is not None:
             MediaContentReference.objects.create(
                 media_asset=cover_asset,
@@ -289,18 +302,35 @@ def save_course_draft(
             raw_media_id = l_data.get("mediaId") or l_data.get("mediaAssetId")
             asset = None
             if raw_media_id is not None and str(raw_media_id).isdigit():
-                asset = MediaAsset.objects.filter(pk=int(raw_media_id)).first()
+                asset = _get_authorized_asset_or_raise(int(raw_media_id))
             if asset is None and isinstance(l_data.get("url"), str):
                 import re as _re
 
                 m_asset = _re.search(r"/api/media/assets/(\d+)/stream", l_data["url"])
                 if m_asset:
-                    asset = MediaAsset.objects.filter(pk=int(m_asset.group(1))).first()
+                    asset = _get_authorized_asset_or_raise(int(m_asset.group(1)))
                 elif l_data.get("mediaReferenceId") and str(l_data["mediaReferenceId"]).isdigit():
-                    prev_ref = MediaContentReference.objects.filter(
-                        pk=int(l_data["mediaReferenceId"])
-                    ).select_related("media_asset").first()
+                    prev_ref = (
+                        MediaContentReference.objects.filter(pk=int(l_data["mediaReferenceId"]))
+                        .select_related("media_asset", "course_draft", "published_version")
+                        .first()
+                    )
                     if prev_ref is not None:
+                        belongs_to_course = (
+                            (prev_ref.course_draft is not None and prev_ref.course_draft.course_id == course.id)
+                            or (
+                                prev_ref.published_version is not None
+                                and prev_ref.published_version.course_id == course.id
+                            )
+                        )
+                        if not belongs_to_course and not is_actor_authorized_for_media_asset(
+                            actor, prev_ref.media_asset, course_draft=draft
+                        ):
+                            raise CourseDomainError(
+                                "PERMISSION_DENIED",
+                                "غير مصرح لك بإرفاق مرجع وسائط لا يتبع هذا المقرر.",
+                                status_code=403,
+                            )
                         asset = prev_ref.media_asset
             if asset is not None:
                 MediaContentReference.objects.create(
@@ -345,7 +375,7 @@ def save_course_draft(
         raw_media_id = r_item.get("mediaId") or r_item.get("mediaAssetId")
         r_item_id = str(r_item.get("id") or "").strip()
         if raw_media_id is not None and str(raw_media_id).isdigit() and r_item_id:
-            asset = MediaAsset.objects.filter(pk=int(raw_media_id)).first()
+            asset = _get_authorized_asset_or_raise(int(raw_media_id))
             if asset is not None:
                 MediaContentReference.objects.create(
                     media_asset=asset,

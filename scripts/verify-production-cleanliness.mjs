@@ -47,6 +47,11 @@ export const PROHIBITED_FINGERPRINTS = [
   { pattern: /ياسين رضوان/u, name: 'Super Admin Fixture Persona Name (م. ياسين رضوان)' },
   { pattern: /(?<!\d)01000000001(?!\d)/, name: 'Super Admin Fixture Phone Number (01000000001)' },
   { pattern: /المسؤول الأعلى للأنظمة/u, name: 'Super Admin Fixture Job Title (المسؤول الأعلى للأنظمة)' },
+
+  // ── Test-Card Credentials & Mock Store Leakage (BUG-002) ──────────────────
+  { pattern: /MetroTest@2026/, name: 'Hardcoded Test-Card Password (MetroTest@2026)' },
+  { pattern: /ROLE_TEST_ACCOUNTS/, name: 'Test-Card Account Registry (ROLE_TEST_ACCOUNTS)' },
+  { pattern: /inMemoryStore/, name: 'Deprecated MSW In-Memory Store (inMemoryStore)' },
 ];
 
 /**

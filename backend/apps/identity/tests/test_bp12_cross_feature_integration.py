@@ -101,6 +101,7 @@ class Bp12CrossFeatureIntegrationTests(TestCase):
             course_type="main",
             primary_lecturer=self.lecturer,
             lifecycle_status="Published",
+            access_mode="all_trainees",
             created_by_user=self.lecturer,
             created_at=now,
             updated_at=now,
@@ -242,14 +243,22 @@ class Bp12CrossFeatureIntegrationTests(TestCase):
             cycle_status="Active",
         )
 
-        # Enroll trainee in v1 + cyc1, complete lesson_v1
+        # Admin enrolls trainee in v1 + rem_group cyc1, trainee completes lesson_v1
+        a_client2 = Client()
+        a_client2.force_login(self.admin)
         t_client = Client()
         t_client.force_login(self.trainee)
-        enr1 = t_client.post(
+        enr1 = a_client2.post(
             f"/api/courses/{self.course.id}/enrollments",
-            data={"sourceType": "group", "trainingGroupId": rem_group.id, "groupRenewalCycleId": cyc1.id},
+            data={
+                "userId": self.trainee.id,
+                "sourceType": "group",
+                "trainingGroupId": rem_group.id,
+                "groupRenewalCycleId": cyc1.id,
+            },
             content_type="application/json",
         )
+        self.assertEqual(enr1.status_code, 201)
         att1_id = enr1.json()["data"]["attempt"]["id"]
         t_client.post(f"/api/courses/{self.course.id}/lessons/{self.lesson_v1.id}/complete")
 

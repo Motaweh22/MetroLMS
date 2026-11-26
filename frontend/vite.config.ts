@@ -183,6 +183,36 @@ function resolveDemoMswPlugin(): Plugin {
   };
 }
 
+function excludeTestCardsInProductionPlugin(): Plugin {
+  const VIRTUAL_ID = '\0virtual:empty-test-cards-picker';
+  let shouldExclude = false;
+  return {
+    name: 'exclude-test-cards-in-production',
+    apply: 'build',
+    configResolved(config) {
+      const flagValue = process.env.VITE_SHOW_TEST_CARDS ?? config.env?.VITE_SHOW_TEST_CARDS;
+      shouldExclude = Boolean(config.isProduction) && flagValue !== 'true';
+    },
+    resolveId(source, importer) {
+      if (!shouldExclude) return null;
+      if (
+        (source === './DemoAccountPicker' || source.endsWith('/DemoAccountPicker')) &&
+        importer &&
+        importer.replace(/\\/g, '/').includes('/features/auth/')
+      ) {
+        return VIRTUAL_ID;
+      }
+      return null;
+    },
+    load(id) {
+      if (id === VIRTUAL_ID) {
+        return 'export const ROLE_TEST_ACCOUNTS = []; export const DemoAccountPicker = () => null;';
+      }
+      return null;
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -190,6 +220,7 @@ export default defineConfig({
     resolveDemoMswPlugin(),
     devTestMediaPlugin(),
     excludeMswWorkerInBuildPlugin(),
+    excludeTestCardsInProductionPlugin(),
   ],
   resolve: {
     alias: {

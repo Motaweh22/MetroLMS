@@ -91,7 +91,8 @@ export const CourseCommentsSection: React.FC<CourseCommentsSectionProps> = ({
   // Participant permission derivation
   const isTrainee = user?.role === 'user';
   const isLecturer = user?.role === 'lecturer';
-  const isAdmin = user?.role === 'admin';
+  const isAdmin =
+    user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'developer';
   const isAssistantAdmin = user?.role === 'assistant_admin';
 
   const isAssignedInstructor =

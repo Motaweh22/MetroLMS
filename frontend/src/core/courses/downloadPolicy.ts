@@ -1,4 +1,5 @@
 import type { Course, ChapterItem } from './types';
+import { isStaffLearningRole } from '@/core/domain/progress';
 
 export interface DownloadPermissionResult {
   allowed: boolean;
@@ -24,8 +25,8 @@ export function canDownloadItem(
     };
   }
 
-  // Instructors and Admins have full preview & administrative download privileges
-  if (userRole === 'admin' || userRole === 'lecturer') {
+  // Instructors and Staff Admins have full preview & administrative download privileges
+  if (isStaffLearningRole(userRole)) {
     return { allowed: true };
   }
 
@@ -62,8 +63,8 @@ export function canDownloadCourseZip(
   isEnrolled: boolean,
   userRole?: string
 ): DownloadPermissionResult {
-  // Instructors and Admins have full access
-  if (userRole === 'admin' || userRole === 'lecturer') {
+  // Instructors and Staff Admins have full access
+  if (isStaffLearningRole(userRole)) {
     return { allowed: true };
   }
 

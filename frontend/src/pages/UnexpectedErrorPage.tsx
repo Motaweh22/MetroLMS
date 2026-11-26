@@ -7,8 +7,10 @@ import { sanitizeErrorMessage } from '@/core/api/apiClient';
 export interface UnexpectedErrorPageProps {
   /** Internal or caught error object */
   error?: unknown;
-  /** Custom error code/status if known (e.g. 500, 502, 503) */
+  /** Custom error code/status if known (e.g. 500, 502, 503; 0 for client runtime errors) */
   status?: number;
+  /** Optional custom heading override */
+  title?: string;
   /** Optional retry callback */
   onRetry?: () => void;
   /** Error identifier for support */
@@ -24,6 +26,7 @@ export interface UnexpectedErrorPageProps {
 export const UnexpectedErrorPage: React.FC<UnexpectedErrorPageProps> = ({
   error,
   status = 500,
+  title,
   onRetry,
   errorId: customErrorId,
 }) => {
@@ -36,9 +39,11 @@ export const UnexpectedErrorPage: React.FC<UnexpectedErrorPageProps> = ({
   const rawMessage = error instanceof Error ? error.message : typeof error === 'string' ? error : null;
   const isServerHttpError = status >= 500 && status < 600;
 
-  const displayTitle = isServerHttpError
-    ? `خطأ في استجابة الخادم (${status})`
-    : 'حدث خطأ غير متوقع في المنظومة';
+  const displayTitle =
+    title ||
+    (isServerHttpError
+      ? `خطأ في استجابة الخادم (${status})`
+      : 'حدث خطأ غير متوقع في المنظومة');
 
   const defaultDescription = isServerHttpError
     ? 'تعذر على خادم التدريب معالجة الطلب في الوقت الحالي. تم تسجيل الخلل ويمكنك محاولة إعادة التحميل بعد قليل.'

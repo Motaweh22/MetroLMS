@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { ManagedUserDTO, UserRole, UserStatus } from '@/core/user-management/types';
+import { mergeManagedUserUpdate } from '@/core/user-management/types';
 import { userManagementApi } from '@/features/user-management/services/userManagementApi';
 import { resolveCanonicalUserId } from '@/core/auth/canonicalIdentity';
 import { UserFilterBar } from '@/features/user-management/components/UserFilterBar';
@@ -163,7 +164,7 @@ export const UserManagementPage: React.FC = () => {
         );
       } else {
         setUsers((prev) =>
-          prev.map((u) => (u.id === user.id ? updated : u))
+          prev.map((u) => (u.id === user.id ? mergeManagedUserUpdate(u, updated) : u))
         );
         toast.success(`تم تغيير دور "${user.name}" بنجاح.`);
       }
@@ -186,7 +187,7 @@ export const UserManagementPage: React.FC = () => {
 
   const handleStatusSuccess = (updatedUser: ManagedUserDTO) => {
     setUsers((prev) =>
-      prev.map((u) => (u.id === updatedUser.id ? updatedUser : u))
+      prev.map((u) => (u.id === updatedUser.id ? mergeManagedUserUpdate(u, updatedUser) : u))
     );
   };
 
