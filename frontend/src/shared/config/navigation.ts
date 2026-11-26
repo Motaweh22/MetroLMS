@@ -23,7 +23,15 @@ export interface NavSection {
   id: string;
   titleAr: string;
   titleEn: string;
+  collapsible?: boolean;
   items: NavItem[];
+}
+
+export interface NavVisibilityContext {
+  role?: UserRole | string | null;
+  actualUserRole?: UserRole | string | null;
+  isPreviewing?: boolean;
+  previewRole?: string | null;
 }
 
 /**
@@ -40,30 +48,26 @@ export interface NavSection {
 export const NAVIGATION_SECTIONS: NavSection[] = [
   {
     id: 'primary',
-    titleAr: 'الرئيسية والاستكشاف',
-    titleEn: 'Overview & Foundation',
+    titleAr: 'الرئيسية',
+    titleEn: 'Overview',
     items: [
       {
         id: 'dashboard',
-        titleAr: 'لوحة المتابعة الرئيسية',
-        titleEn: 'Dashboard Overview',
+        titleAr: 'لوحة المتابعة',
+        titleEn: 'Dashboard',
         path: '/dashboard',
         icon: 'dashboard',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
-        descriptionAr: 'الواجهة الرئيسية لهيكل التطبيق وحالة التطوير المستمرة',
+        descriptionAr: 'الواجهة الرئيسية ومتابعة الإحصائيات',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
       {
         id: 'design-system',
-        titleAr: 'معمل نظام التصميم',
+        titleAr: 'نظام التصميم',
         titleEn: 'Design System Lab',
         path: '/design-system',
         icon: 'palette',
         status: 'implemented',
-        badge: 'معتمد',
-        badgeVariant: 'info',
         descriptionAr: 'مكتبة ومختبر المكونات والرموز الدلالية الموحدة',
         allowedRoles: ['developer'],
       },
@@ -71,42 +75,37 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
   },
   {
     id: 'learning',
-    titleAr: 'التدريب والمسارات',
+    titleAr: 'التعلم',
     titleEn: 'Training & Learning',
+    collapsible: true,
     items: [
       {
         id: 'courses',
-        titleAr: 'دليل الدورات التدريبية',
+        titleAr: 'دليل الدورات',
         titleEn: 'Course Catalog',
         path: '/courses',
         icon: 'courses',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'استعراض البرامج التدريبية المتاحة وتصفية المسارات',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
       {
         id: 'my-courses',
-        titleAr: 'دوراتي ومسار التعلم',
+        titleAr: 'دوراتي',
         titleEn: 'My Courses',
         path: '/my-courses',
         icon: 'myCourses',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'متابعة المحتوى التدريبي الملتحق به ونسب التقدم',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
       {
         id: 'my-groups',
-        titleAr: 'مجموعاتي التدريبية',
+        titleAr: 'مجموعاتي',
         titleEn: 'My Groups',
         path: '/my-groups',
         icon: 'trainingGroups',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'المجموعات والدفعات الميدانية المخصصة ومتابعة المهل',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer', 'user'],
       },
@@ -114,79 +113,38 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
   },
   {
     id: 'management',
-    titleAr: 'الإدارة والرقابة (قيد التطوير)',
-    titleEn: 'Operations & Management (Planned)',
+    titleAr: 'المحتوى والتشغيل',
+    titleEn: 'Content & Operations',
+    collapsible: true,
     items: [
       {
         id: 'training-groups',
-        titleAr: 'المجموعات ومواعيد الاستحقاق',
+        titleAr: 'إدارة المجموعات',
         titleEn: 'Training Groups',
         path: '/admin/groups',
         icon: 'trainingGroups',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'متابعة الدفعات ومؤشرات الانتباه والمواعيد النهائية',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'course-builder',
-        titleAr: 'منشئ المحتوى للمحاضرين',
+        titleAr: 'منشئ المحتوى',
         titleEn: 'Course Builder',
         path: '/lecturer/courses',
         icon: 'edit',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'إعداد الدروس والاختبارات وحقائب التدريب',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin', 'lecturer'],
       },
       {
         id: 'quality-audit',
-        titleAr: 'التدقيق واعتماد الجودة',
+        titleAr: 'الاعتمادات والجودة',
         titleEn: 'Quality Audit',
         path: '/approvals',
         icon: 'shield',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'مراجعة واعتماد المقررات ومتابعة جودة المحتوى',
-        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
-      },
-      {
-        id: 'user-management',
-        titleAr: 'إدارة المستخدمين',
-        titleEn: 'User Management',
-        path: '/admin/users',
-        icon: 'users',
-        status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
-        descriptionAr: 'دليل المستخدمين الموحد والتحقق من الهويات والصلاحيات',
-        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
-      },
-      {
-        id: 'permissions-matrix',
-        titleAr: 'مصفوفة الصلاحيات والحوكمة',
-        titleEn: 'Permissions Matrix',
-        path: '/admin/permissions',
-        icon: 'shield',
-        status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
-        descriptionAr: 'مرجع سياسات الأدوار، سقوف الصلاحيات، وحوكمة التفويض',
-        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
-      },
-      {
-        id: 'system-security-audit',
-        titleAr: 'سجل الرقابة والأمان',
-        titleEn: 'Security Audit Trail',
-        path: '/admin/audit',
-        icon: 'lock',
-        status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
-        descriptionAr: 'السجل المركزي لعمليات الرقابة الأمنية والقرارات الإدارية الحساسة',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
@@ -196,35 +154,69 @@ export const NAVIGATION_SECTIONS: NavSection[] = [
         path: '/admin/department-tracks',
         icon: 'grid',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'تخصيص مسارات التدريب المسموحة لكل إدارة تشغيلية',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
+      },
+    ],
+  },
+  {
+    id: 'governance',
+    titleAr: 'الإدارة والحوكمة',
+    titleEn: 'Administration & Governance',
+    collapsible: true,
+    items: [
+      {
+        id: 'user-management',
+        titleAr: 'إدارة المستخدمين',
+        titleEn: 'User Management',
+        path: '/admin/users',
+        icon: 'users',
+        status: 'implemented',
+        descriptionAr: 'دليل المستخدمين الموحد والتحقق من الهويات والصلاحيات',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
+      },
+      {
+        id: 'permissions-matrix',
+        titleAr: 'الصلاحيات',
+        titleEn: 'Permissions Matrix',
+        path: '/admin/permissions',
+        icon: 'shield',
+        status: 'implemented',
+        descriptionAr: 'مرجع سياسات الأدوار، سقوف الصلاحيات، وحوكمة التفويض',
+        allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
+      },
+      {
+        id: 'system-security-audit',
+        titleAr: 'سجل الرقابة',
+        titleEn: 'Security Audit Trail',
+        path: '/admin/audit',
+        icon: 'lock',
+        status: 'implemented',
+        descriptionAr: 'السجل المركزي لعمليات الرقابة الأمنية والقرارات الإدارية الحساسة',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'comment-moderation',
-        titleAr: 'إدارة ومراقبة التعليقات',
+        titleAr: 'إدارة التعليقات',
         titleEn: 'Comment Moderation',
         path: '/admin/comment-moderation',
         icon: 'messageSquare',
         status: 'implemented',
-        badge: 'مفعل',
-        badgeVariant: 'primary',
         descriptionAr: 'متابعة طابور البلاغات ومراجعة نقاشات المقررات والتحكم بالسياسات',
         allowedRoles: ['developer', 'super_admin', 'admin', 'assistant_admin'],
       },
       {
         id: 'administration',
-        titleAr: 'إدارة النظام والتكامل',
+        titleAr: 'إعدادات النظام',
         titleEn: 'System Administration',
         path: '/admin',
         icon: 'settings',
         status: 'planned',
         plannedIncrement: 'Increment 12',
-        badge: 'مجدول (12)',
+        badge: 'قريباً',
         badgeVariant: 'neutral',
         descriptionAr: 'لوحات الإدارة الشاملة والتحليلات والإعدادات العامة',
-        allowedRoles: ['developer', 'super_admin', 'admin'],
+        allowedRoles: ['developer'],
       },
     ],
   },
@@ -244,6 +236,19 @@ export function isNavItemVisibleForRole(item: NavItem, role?: UserRole | string 
   if (!role) return false;
   if (!item.allowedRoles || item.allowedRoles.length === 0) return true;
   return item.allowedRoles.includes(role as UserRole);
+}
+
+/**
+ * Evaluates full navigation visibility including developer exclusivity and preview scopes
+ */
+export function resolveNavItemVisibility(item: NavItem, ctx: NavVisibilityContext): boolean {
+  if (item.id === 'design-system') {
+    return ctx.actualUserRole === 'developer' && !ctx.isPreviewing;
+  }
+  if (ctx.previewRole === 'assistant_lecturer' && (item.id === 'course-builder' || item.id === 'my-courses')) {
+    return false;
+  }
+  return isNavItemVisibleForRole(item, ctx.role);
 }
 
 /**

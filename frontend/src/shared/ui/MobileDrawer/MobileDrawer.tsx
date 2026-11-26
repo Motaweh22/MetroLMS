@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { SidebarItem } from '@/shared/ui/Sidebar/SidebarItem';
-import { NAVIGATION_SECTIONS, type NavItem, isNavItemVisibleForRole } from '@/shared/config/navigation';
+import { NAVIGATION_SECTIONS, type NavItem, resolveNavItemVisibility } from '@/shared/config/navigation';
 import { useLockBodyScroll } from '@/shared/hooks/useLockBodyScroll';
 import { useAuthContext } from '@/core/auth/useAuthContext';
 import { useRolePreview } from '@/core/auth/useRolePreview';
@@ -55,17 +55,13 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const isItemVisible = (item: NavItem) => {
-    // Surface 11 & MFR-25: Design System link depends EXCLUSIVELY on actual authenticated Developer identity
-    if (item.id === 'design-system') {
-      return authUser?.role === 'developer' && !isPreviewing;
-    }
-    // Group-scoped Assistant Lecturer: scoped strictly to assigned group, does not expose full course-builder or trainee personal courses
-    if (previewRole === 'assistant_lecturer' && (item.id === 'course-builder' || item.id === 'my-courses')) {
-      return false;
-    }
-    return isNavItemVisibleForRole(item, user?.role);
-  };
+  const isItemVisible = (item: NavItem) =>
+    resolveNavItemVisibility(item, {
+      role: user?.role,
+      actualUserRole: authUser?.role,
+      isPreviewing,
+      previewRole,
+    });
 
   return (
     <div
@@ -100,17 +96,17 @@ export const MobileDrawer: React.FC<MobileDrawerProps> = ({
         </div>
 
         {/* Navigation Sections */}
-        <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+        <nav className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
           {NAVIGATION_SECTIONS.map((section) => {
             const visibleItems = section.items.filter(isItemVisible);
             if (visibleItems.length === 0) return null;
 
             return (
               <div key={section.id} className="space-y-1">
-                <h3 className="px-3 text-xs font-bold text-text-muted/80 uppercase tracking-wider mb-2">
+                <h3 className="px-2.5 text-xs font-bold text-text-muted/80 uppercase tracking-wider mb-1">
                   {section.titleAr}
                 </h3>
-                <div className="space-y-1">
+                <div className="space-y-0.5">
                   {visibleItems.map((item) => (
                     <SidebarItem
                       key={item.id}

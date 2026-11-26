@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/shared/ui/Button';
+import { Icon } from '@/shared/ui/Icon';
 import { SidebarItem } from './SidebarItem';
-import { NAVIGATION_SECTIONS, type NavItem, isNavItemVisibleForRole } from '@/shared/config/navigation';
+import {
+  NAVIGATION_SECTIONS,
+  type NavItem,
+  resolveNavItemVisibility,
+} from '@/shared/config/navigation';
 import { useAuthContext } from '@/core/auth/useAuthContext';
 import { useRolePreview } from '@/core/auth/useRolePreview';
 
@@ -24,55 +30,97 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { user } = useAuthContext();
   const { isPreviewing, previewRole } = useRolePreview();
+  const location = useLocation();
   const effectiveRole = userRole ?? user?.role;
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
-  const isItemVisible = (item: NavItem) => {
-    // Surface 11 & MFR-25: Design System link depends EXCLUSIVELY on actual authenticated Developer identity
-    // During active visual preview, suppress developer link to make preview authentic
-    if (item.id === 'design-system') {
-      return user?.role === 'developer' && !isPreviewing;
+  useEffect(() => {
+    const activeSection = NAVIGATION_SECTIONS.find((sec) =>
+      sec.items.some((it) => location.pathname === it.path || location.pathname.startsWith(`${it.path}/`))
+    );
+    if (activeSection) {
+      setCollapsedSections((prev) =>
+        prev[activeSection.id] ? { ...prev, [activeSection.id]: false } : prev
+      );
     }
-    // Group-scoped Assistant Lecturer: scoped strictly to assigned group, does not expose full course-builder or trainee personal courses
-    if (previewRole === 'assistant_lecturer' && (item.id === 'course-builder' || item.id === 'my-courses')) {
-      return false;
-    }
-    return isNavItemVisibleForRole(item, effectiveRole);
+  }, [location.pathname]);
+
+  const toggleSection = (sectionId: string) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
   };
 
   return (
     <aside
       aria-label="شريط التنقل الجانبي"
-      className={`hidden lg:flex flex-col shrink-0 bg-surface border-l border-border transition-all duration-300 ease-in-out ${isCollapsed ? 'w-20' : 'w-64'
-        }`}
+      className={`hidden lg:flex flex-col shrink-0 bg-surface border-l border-border transition-all duration-300 ease-in-out ${
+        isCollapsed ? 'w-20' : 'w-64'
+      }`}
     >
       {/* Navigation Sections */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
         {NAVIGATION_SECTIONS.map((section, sectionIndex) => {
-          const visibleItems = section.items.filter(isItemVisible);
+          const visibleItems = section.items.filter((item) =>
+            resolveNavItemVisibility(item, {
+              role: effectiveRole,
+              actualUserRole: user?.role,
+              isPreviewing,
+              previewRole,
+            })
+          );
           if (visibleItems.length === 0) return null;
+
+          const isSectionCollapsed = Boolean(section.collapsible && collapsedSections[section.id]);
 
           return (
             <div key={section.id} className="space-y-1">
               {/* Section Header */}
               {!isCollapsed ? (
-                <h3 className="px-3 text-[11px] font-bold text-text-muted/80 uppercase tracking-wider mb-2">
-                  {section.titleAr}
-                </h3>
+                section.collapsible ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.id)}
+                    aria-expanded={!isSectionCollapsed}
+                    data-testid={`sidebar-section-toggle-${section.id}`}
+                    className="w-full flex items-center justify-between px-2.5 py-1 rounded-md text-[11px] font-bold text-text-muted/85 hover:text-text hover:bg-neutral-light/60 transition-colors cursor-pointer"
+                  >
+                    <span>{section.titleAr}</span>
+                    <span className="flex items-center gap-1.5 text-text-muted/70">
+                      {isSectionCollapsed && (
+                        <span className="text-[10px] font-mono bg-neutral-light px-1.5 rounded">
+                          {visibleItems.length}
+                        </span>
+                      )}
+                      <Icon
+                        name={isSectionCollapsed ? 'chevronLeft' : 'chevronDown'}
+                        size="sm"
+                      />
+                    </span>
+                  </button>
+                ) : (
+                  <h3 className="px-2.5 text-[11px] font-bold text-text-muted/80 uppercase tracking-wider mb-1">
+                    {section.titleAr}
+                  </h3>
+                )
               ) : (
                 sectionIndex > 0 && <div className="my-2 border-t border-border/60" aria-hidden="true" />
               )}
 
               {/* Section Items */}
-              <div className="space-y-1">
-                {visibleItems.map((item) => (
-                  <SidebarItem
-                    key={item.id}
-                    item={item}
-                    isCollapsed={isCollapsed}
-                    onItemClick={onItemSelect}
-                  />
-                ))}
-              </div>
+              {(!isSectionCollapsed || isCollapsed) && (
+                <div className="space-y-0.5">
+                  {visibleItems.map((item) => (
+                    <SidebarItem
+                      key={item.id}
+                      item={item}
+                      isCollapsed={isCollapsed}
+                      onItemClick={onItemSelect}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

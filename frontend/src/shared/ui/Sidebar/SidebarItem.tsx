@@ -21,40 +21,40 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
   if (isPlanned) {
     return (
       <div
-        className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-muted/60 cursor-not-allowed select-none transition-colors ${
+        className={`group relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-text-muted/60 cursor-not-allowed select-none transition-colors ${
           isCollapsed ? 'justify-center' : 'justify-between'
         }`}
-        title={`${item.titleAr} (${item.plannedIncrement || 'قيد التطوير'})`}
+        title={`${item.titleAr} (${item.plannedIncrement || 'قريباً'})`}
         aria-disabled="true"
         role="presentation"
         onClick={() => onItemClick?.(item)}
       >
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <Icon
             name={item.icon}
             size="md"
             className="text-text-muted/50 shrink-0"
           />
           {!isCollapsed && (
-            <span className="text-sm font-medium truncate text-text-muted/70">
+            <span className="text-[13px] font-medium truncate text-text-muted/70">
               {item.titleAr}
             </span>
           )}
         </div>
 
-        {!isCollapsed && (
+        {!isCollapsed && item.badge && (
           <Badge
             variant={item.badgeVariant || 'neutral'}
             className="text-[10px] px-1.5 py-0 font-normal shrink-0 opacity-80"
           >
-            {item.badge || 'قريباً'}
+            {item.badge}
           </Badge>
         )}
 
         {/* Hover tooltip for collapsed state */}
         {isCollapsed && (
           <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 hidden group-hover:flex items-center z-50 whitespace-nowrap rounded-md bg-neutral-900 px-2.5 py-1 text-xs text-white shadow-lg pointer-events-none">
-            <span>{item.titleAr} — {item.plannedIncrement || 'قيد التطوير'}</span>
+            <span>{item.titleAr} — {item.plannedIncrement || 'قريباً'}</span>
           </div>
         )}
       </div>
@@ -67,7 +67,7 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
       to={item.path}
       onClick={() => onItemClick?.(item)}
       className={({ isActive }) =>
-        `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+        `group relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
           isCollapsed ? 'justify-center' : 'justify-between'
         } ${
           isActive
@@ -75,11 +75,11 @@ export const SidebarItem: React.FC<SidebarItemProps> = ({
             : 'text-text-muted hover:text-text hover:bg-neutral-light'
         }`
       }
-      title={isCollapsed ? item.titleAr : undefined}
+      title={isCollapsed ? item.titleAr : item.descriptionAr || item.titleAr}
     >
       {({ isActive }) => (
         <>
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <Icon
               name={item.icon}
               size="md"
