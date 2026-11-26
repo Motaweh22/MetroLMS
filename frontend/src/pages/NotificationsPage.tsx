@@ -7,8 +7,17 @@ import { Button } from '@/shared/ui/Button';
 import { Badge, type BadgeVariant } from '@/shared/ui/Badge';
 import { Icon, type SemanticIconName } from '@/shared/ui/Icon';
 import { Alert } from '@/shared/ui/Alert';
+import { useToast } from '@/shared/ui/Toast';
 import type { NotificationItem, NotificationType } from '@/core/notifications/types';
 import type { UserRole } from '@/core/auth/types';
+
+function isResolvedPendingReviewNotification(notif: NotificationItem): boolean {
+  if (notif.type !== 'content_pending_review') return false;
+  if (notif.metadata?.reviewResolved === true || notif.metadata?.resolved === true) {
+    return true;
+  }
+  return notif.actionRequired === false && !notif.targetUrl;
+}
 
 export type NotificationCategory =
   | 'all'
@@ -189,6 +198,8 @@ export const NotificationsPage: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const toast = useToast();
 
   // Role-Aware Category Visibility
   const currentRole = user?.role || 'user';
@@ -352,6 +363,9 @@ export const NotificationsPage: React.FC = () => {
   };
 
   const resolveNotificationDestination = (notif: NotificationItem): string | null => {
+    if (isResolvedPendingReviewNotification(notif)) {
+      return null;
+    }
     const role = currentRole;
     const explicitUrl = notif.targetUrl?.trim() || null;
 
@@ -452,8 +466,15 @@ export const NotificationsPage: React.FC = () => {
   const handleNotificationClick = async (notif: NotificationItem) => {
     try {
       setActionError(null);
+      setActionNotice(null);
       if (!notif.read) {
         await markAsRead(notif.id);
+      }
+      if (isResolvedPendingReviewNotification(notif)) {
+        const msg = 'تمت مراجعة هذا المقرر بالفعل، ولا يمكن فتح شاشة المراجعة مجدداً.';
+        setActionNotice(msg);
+        toast.info(msg);
+        return;
       }
       const targetPath = resolveNotificationDestination(notif);
       if (targetPath) {
@@ -643,6 +664,12 @@ export const NotificationsPage: React.FC = () => {
         </Alert>
       )}
 
+      {actionNotice && (
+        <Alert variant="info" title="إشعار مراجعة مكتملة" data-testid="resolved-review-notice">
+          <span>{actionNotice}</span>
+        </Alert>
+      )}
+
       {/* Role-Aware Category Tabs with Arrow Navigation */}
       <div className="space-y-3" data-testid="category-navigation-wrapper">
         <div className="relative flex items-center border-b border-border pb-1.5">
@@ -811,6 +838,7 @@ export const NotificationsPage: React.FC = () => {
           {filteredNotifications.map((notif) => {
             const iconName = getNotificationIcon(notif.type);
             const badgeVariant = getNotificationVariant(notif.type);
+            const isResolvedReview = isResolvedPendingReviewNotification(notif);
             const formattedDate = new Date(notif.createdAt).toLocaleDateString('ar-EG', {
               month: 'short',
               day: 'numeric',
@@ -868,6 +896,16 @@ export const NotificationsPage: React.FC = () => {
                             تتطلب إجراء
                           </Badge>
                         )}
+                        {isResolvedReview && (
+                          <Badge
+                            variant="success"
+                            size="sm"
+                            className="font-bold text-[10px] py-0 px-1.5"
+                            data-testid={`notification-resolved-badge-${notif.id}`}
+                          >
+                            تمت المراجعة ✓
+                          </Badge>
+                        )}
                       </div>
 
                       <span className="text-[11px] text-text-muted font-medium shrink-0 flex items-center gap-1">
@@ -913,7 +951,7 @@ export const NotificationsPage: React.FC = () => {
                           </span>
                         </span>
                       )}
-                      {!notif.groupId && notif.courseId && (
+                      {!notif.groupId && notif.courseId && !isResolvedReview && (
                         <span className="text-[11px] font-bold text-primary flex items-center gap-1 hover:underline">
                           <Icon name="courses" size="sm" />
                           <span>عرض المقرر التدريبي ({notif.courseId}) ←</span>

@@ -342,10 +342,10 @@ def save_staged_edits_record(
 ) -> tuple[StagedAdminEdit, dict[str, Any]]:
     """Save staged admin edits with optimistic revision concurrency checking."""
     sub = _find_course_submission(course, prefer_pending=True)
-    if sub is None:
+    if sub is None or sub.review_status != "Pending":
         raise CourseDomainError(
-            "NO_REVIEW_SUBMISSION",
-            "لا يوجد طلب مراجعة نشط لهذا المقرر.",
+            "ALREADY_DECIDED",
+            "لا يوجد طلب مراجعة قيد الانتظار لهذا المقرر.",
             status_code=409,
         )
 
@@ -660,7 +660,17 @@ def notify_course_review_decision(
     outcome: str,
     summary_message: str = "",
 ) -> int:
-    """Notify course primary & assistant lecturers when a review decision is issued."""
+    """Resolve pending admin review notifications and notify course lecturers of decision."""
+    from apps.communications.services.communications_service import (
+        resolve_pending_course_review_notifications,
+    )
+
+    resolve_pending_course_review_notifications(
+        course_id=course.id,
+        outcome=outcome,
+        reviewer=reviewer,
+    )
+
     lecturers: list[User] = []
     if course.primary_lecturer is not None and course.primary_lecturer.status == "Active":
         lecturers.append(course.primary_lecturer)
@@ -1078,11 +1088,15 @@ def build_course_review_data_payload(course: Course, actor: User) -> dict[str, A
     else:
         effective_content = course_data
 
+    has_pending_submission = bool(latest_sub is not None and latest_sub.review_status == "Pending")
+
     return {
         "course": course_data,
         "draft": course_data,
         "effectiveContent": effective_content,
         "submission": CourseReviewSubmissionSerializer(latest_sub).data if latest_sub is not None else None,
+        "hasPendingSubmission": has_pending_submission,
+        "reviewStatus": latest_sub.review_status if latest_sub is not None else None,
         "stagedEdits": staged_edits,
         "activeReviewFeedback": active_feedback,
         "auditLog": audit_log,

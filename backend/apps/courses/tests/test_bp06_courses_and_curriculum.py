@@ -608,5 +608,119 @@ class Bp06CoursesAndCurriculumTests(TestCase):
         self.assertEqual(listed[0]["coverType"], "color")
         self.assertEqual(listed[0]["coverColor"], "#065F46")
 
+    def test_pending_review_notifications_resolve_and_review_endpoints_lock_after_decision(self) -> None:
+        from apps.communications.models import NotificationItem
+
+        lec_client = self._login(self.lecturer.phone_e164)
+        admin_client = self._login(self.admin.phone_e164)
+        assistant_client = self._login(self.assistant.phone_e164)
+
+        create_res = lec_client.post(
+            "/api/lecturer/courses",
+            data={"title": "دورة إغلاق إشعار المراجعة", "courseType": "main", "description": "وصف"},
+            content_type="application/json",
+        )
+        self.assertEqual(create_res.status_code, 201)
+        course_id = int(create_res.json()["data"]["course"]["id"])
+
+        draft_res = lec_client.put(
+            f"/api/lecturer/courses/{course_id}/draft",
+            data={
+                "titleSnapshot": "دورة إغلاق إشعار المراجعة",
+                "chapters": [
+                    {
+                        "title": "الوحدة الأولى",
+                        "items": [
+                            {
+                                "title": "درس تمهيدي",
+                                "type": "video",
+                                "duration": "01:00",
+                                "videoSourceType": "youtube",
+                                "externalUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                            }
+                        ],
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(draft_res.status_code, 200)
+
+        sub_res = lec_client.post(
+            f"/api/admin/courses/{course_id}/review/submit",
+            data={},
+            content_type="application/json",
+        )
+        self.assertEqual(sub_res.status_code, 201)
+
+        # Before decision: review-data hasPendingSubmission=True and admin/assistant received open review notification
+        rd_before = admin_client.get(f"/api/courses/{course_id}/review-data").json()["data"]
+        self.assertTrue(rd_before["hasPendingSubmission"])
+        self.assertEqual(rd_before["reviewStatus"], "Pending")
+
+        admin_notifs_before = admin_client.get("/api/notifications").json()["data"]["notifications"]
+        pending_notif = next(
+            n for n in admin_notifs_before
+            if n["type"] == "content_pending_review" and str(n.get("courseId")) == str(course_id)
+        )
+        self.assertTrue(pending_notif["actionRequired"])
+        self.assertEqual(pending_notif["targetUrl"], f"/admin/review/{course_id}")
+
+        # Approve via Review Studio decision endpoint
+        dec_res = admin_client.post(
+            f"/api/admin/review/{course_id}/decision",
+            data={"outcome": "approved", "approvalNote": "معتمد"},
+            content_type="application/json",
+        )
+        self.assertEqual(dec_res.status_code, 200)
+
+        # Existing pending review notification is now resolved for every reviewer
+        for client_session in (admin_client, assistant_client):
+            notifs_after = client_session.get("/api/notifications").json()["data"]["notifications"]
+            resolved_notif = next(
+                n for n in notifs_after
+                if n["type"] == "content_pending_review" and str(n.get("courseId")) == str(course_id)
+            )
+            self.assertFalse(resolved_notif["actionRequired"])
+            self.assertIsNone(resolved_notif["targetUrl"])
+            self.assertTrue(resolved_notif["metadata"]["reviewResolved"])
+
+        # Direct review-data shows hasPendingSubmission=False & mutating endpoints return 409 ALREADY_DECIDED
+        rd_after = admin_client.get(f"/api/courses/{course_id}/review-data").json()["data"]
+        self.assertFalse(rd_after["hasPendingSubmission"])
+        self.assertEqual(rd_after["reviewStatus"], "Approved")
+
+        staged_after = admin_client.put(
+            f"/api/admin/review/{course_id}/staged-edits",
+            data={"patchedContent": {"title": "تعديل متأخر"}, "clientRevision": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(staged_after.status_code, 409)
+
+        repeat_dec = admin_client.post(
+            f"/api/admin/review/{course_id}/decision",
+            data={"outcome": "approved"},
+            content_type="application/json",
+        )
+        self.assertEqual(repeat_dec.status_code, 409)
+
+        # Even a stale pre-existing notification row is auto-resolved when listing /api/notifications
+        NotificationItem.objects.create(
+            user=self.admin,
+            title="إشعار قديم",
+            body="إشعار قبل التحديث",
+            notif_type="content_pending_review",
+            target_url=f"/admin/review/{course_id}",
+            action_required=True,
+            metadata_json={"courseId": str(course_id)},
+            is_read=False,
+            created_at=timezone.now(),
+        )
+        stale_list = admin_client.get("/api/notifications").json()["data"]["notifications"]
+        stale_fixed = next(n for n in stale_list if n["title"] == "إشعار قديم")
+        self.assertFalse(stale_fixed["actionRequired"])
+        self.assertIsNone(stale_fixed["targetUrl"])
+        self.assertTrue(stale_fixed["metadata"]["reviewResolved"])
+
 
 

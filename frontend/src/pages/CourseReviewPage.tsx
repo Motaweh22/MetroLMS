@@ -428,6 +428,44 @@ export const CourseReviewPage: React.FC = () => {
     );
   }
 
+  // Resolved / Already Decided Guard: prevent re-entering review studio after decision is finalized
+  const isReviewAlreadyDecided = Boolean(
+    reviewData &&
+      (reviewData.hasPendingSubmission === false ||
+        (reviewData.submission && reviewData.submission.reviewStatus !== 'Pending') ||
+        (reviewData.course.status !== 'pending_review' && !reviewData.isPublishedUpdate))
+  );
+
+  if (isReviewAlreadyDecided) {
+    const resolvedOutcomeLabel =
+      reviewData.submission?.reviewStatus === 'Approved' || reviewData.course.status === 'published'
+        ? 'تم اعتماد هذا المقرر ونشره بالفعل.'
+        : 'تم البت في طلب المراجعة هذا بالفعل وإعادته من قائمة المراجعة.';
+    return (
+      <div
+        className="container mx-auto px-4 py-16 max-w-2xl"
+        data-testid="course-review-page"
+        dir="rtl"
+      >
+        <div data-testid="review-already-decided">
+          <Alert variant="info" title="تمت مراجعة هذا المقرر مسبقاً">
+            <p className="text-sm mb-4">
+              {resolvedOutcomeLabel} لم يعد رابط المراجعة نشطاً ولا يمكن تعديل القرار بعد البت فيه.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="primary" size="sm" onClick={() => navigate('/approvals')}>
+                العودة إلى لوحة الاعتمادات
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/notifications')}>
+                العودة إلى الإشعارات
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="container mx-auto px-3 sm:px-6 py-4 max-w-[1700px] h-[calc(100vh-5rem)] flex flex-col"

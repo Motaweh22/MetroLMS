@@ -593,6 +593,14 @@ export interface CourseReviewDataResponseDTO {
   course: Course;
   draft: Course | null;
   effectiveContent: Course;
+  submission?: {
+    id: string;
+    reviewStatus: string;
+    submittedAt?: string | null;
+    decidedAt?: string | null;
+  } | null;
+  hasPendingSubmission?: boolean;
+  reviewStatus?: string | null;
   stagedEdits: StagedAdminEditsRecord | null;
   activeReviewFeedback: CourseActiveReviewFeedback | null;
   auditLog: CourseAuditLogEntry[];

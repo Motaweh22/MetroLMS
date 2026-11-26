@@ -39,10 +39,47 @@ class NotificationsListView(APIView):
                 )
 
         qs = NotificationItem.objects.filter(user=request.user).order_by("-created_at", "-id")
-        unread_count = qs.filter(is_read=False).count()
+        notifications_list = list(qs)
+        pending_review_course_ids: set[int] = set()
+        for item in notifications_list:
+            if item.notif_type == "content_pending_review" and (item.action_required or (item.target_url or "").startswith("/admin/review/")):
+                meta = item.metadata_json if isinstance(item.metadata_json, dict) else {}
+                raw_cid = str(meta.get("courseId") or "").strip()
+                if not raw_cid and (item.target_url or "").startswith("/admin/review/"):
+                    raw_cid = (item.target_url or "").rstrip("/").split("/")[-1]
+                if raw_cid.isdigit():
+                    pending_review_course_ids.add(int(raw_cid))
+
+        if pending_review_course_ids:
+            from apps.courses.models import CourseReviewSubmission
+
+            still_pending_ids = set(
+                CourseReviewSubmission.objects.filter(
+                    course_id__in=pending_review_course_ids,
+                    review_status="Pending",
+                ).values_list("course_id", flat=True)
+            )
+            for item in notifications_list:
+                if item.notif_type != "content_pending_review":
+                    continue
+                if not (item.action_required or (item.target_url or "").startswith("/admin/review/")):
+                    continue
+                meta = dict(item.metadata_json) if isinstance(item.metadata_json, dict) else {}
+                raw_cid = str(meta.get("courseId") or "").strip()
+                if not raw_cid and (item.target_url or "").startswith("/admin/review/"):
+                    raw_cid = (item.target_url or "").rstrip("/").split("/")[-1]
+                if raw_cid.isdigit() and int(raw_cid) not in still_pending_ids:
+                    meta["resolved"] = True
+                    meta["reviewResolved"] = True
+                    item.action_required = False
+                    item.target_url = None
+                    item.metadata_json = meta
+                    item.save(update_fields=["action_required", "target_url", "metadata_json"])
+
+        unread_count = sum(1 for item in notifications_list if not item.is_read)
         if request.query_params.get("unreadOnly") == "true":
-            qs = qs.filter(is_read=False)
-        items = [serialize_notification(n) for n in qs]
+            notifications_list = [item for item in notifications_list if not item.is_read]
+        items = [serialize_notification(n) for n in notifications_list]
         return success_response(
             {
                 "unreadCount": unread_count,

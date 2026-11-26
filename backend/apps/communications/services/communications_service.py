@@ -181,3 +181,48 @@ def set_user_whatsapp_visibility(*, user: User, scenario_key: str, is_visible: b
     )
     return obj
 
+
+def resolve_pending_course_review_notifications(
+    *,
+    course_id: int,
+    outcome: str,
+    reviewer: User | None = None,
+) -> int:
+    """Resolve open content_pending_review notifications once a review decision is finalized."""
+    now_iso = timezone.now().isoformat()
+    course_id_str = str(course_id)
+    expected_url = f"/admin/review/{course_id_str}"
+    reviewer_role = getattr(reviewer, "role_id", None) if reviewer is not None else None
+    reviewer_name = (
+        "النظام"
+        if reviewer_role == "developer"
+        else (getattr(reviewer, "full_name", "") or "") if reviewer is not None else ""
+    )
+
+    candidates = NotificationItem.objects.filter(notif_type="content_pending_review")
+    updated_count = 0
+    for item in candidates:
+        meta = dict(item.metadata_json) if isinstance(item.metadata_json, dict) else {}
+        item_course_id = str(meta.get("courseId") or "")
+        item_url = (item.target_url or "").strip()
+        if item_course_id != course_id_str and item_url != expected_url:
+            continue
+        if not item.action_required and not item_url and meta.get("reviewResolved") is True:
+            continue
+
+        meta["resolved"] = True
+        meta["reviewResolved"] = True
+        meta["reviewOutcome"] = outcome
+        meta["resolvedAt"] = now_iso
+        if reviewer_name:
+            meta["resolvedByName"] = reviewer_name
+
+        item.action_required = False
+        item.target_url = None
+        item.is_read = True
+        item.metadata_json = meta
+        item.save(update_fields=["action_required", "target_url", "is_read", "metadata_json"])
+        updated_count += 1
+
+    return updated_count
+
