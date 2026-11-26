@@ -9,24 +9,33 @@
   min-height: 100vh;
   background-color: #070B14;
   color: var(--color-text-light, #F8FAFC);
+  overflow-x: clip;
 }
 
 .learning-player-layout {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 1.5rem;
   padding: 1.5rem;
   max-width: 1600px;
   width: 100%;
+  box-sizing: border-box;
   margin: 0 auto;
   flex: 1;
 }
 
 @media (max-width: 1024px) {
   .learning-player-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     padding: 1rem;
     gap: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .learning-player-layout {
+    padding: 0.75rem;
+    gap: 0.75rem;
   }
 }
 
@@ -441,6 +450,46 @@
   .document-viewer-container {
     height: 520px;
   }
+
+  .document-header-bar,
+  .document-timer-box {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .custom-controls-bar {
+    padding: 1rem 0.65rem 0.5rem;
+  }
+
+  .controls-actions-row {
+    gap: 0.4rem;
+  }
+
+  .controls-group-start,
+  .controls-group-end {
+    gap: 0.25rem;
+  }
+
+  .volume-slider {
+    display: none;
+  }
+
+  .video-time-display {
+    font-size: 0.75rem;
+    padding: 0 0.25rem;
+  }
+
+  .video-big-play-btn {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .curriculum-sidebar-container {
+    max-height: none;
+  }
 }
 
 /* -------------------------------------------------------------
@@ -576,17 +625,20 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   padding: 0.85rem 1.75rem;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem 1rem;
 }
 
 .learning-breadcrumb-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem 0.5rem;
   font-size: 0.88rem;
   color: #94A3B8;
+  min-width: 0;
 }
 
 .learning-breadcrumb-bar a {
@@ -602,8 +654,34 @@
 
 .learning-progress-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1.25rem;
+  gap: 0.75rem 1.25rem;
+}
+
+@media (max-width: 768px) {
+  .learning-header-container {
+    padding: 0.75rem 1rem;
+  }
+
+  .learning-breadcrumb-bar {
+    font-size: 0.8rem;
+  }
+
+  .learning-progress-summary {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+
+  .learning-progress-track {
+    width: 96px;
+  }
+
+  .learning-exit-btn {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.78rem;
+  }
 }
 
 .learning-progress-track {
@@ -654,8 +732,10 @@
 ------------------------------------------------------------- */
 .player-bottom-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
   padding: 1rem 0;
   margin-top: 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);

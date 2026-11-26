@@ -114,6 +114,7 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
   const {
     previewUrl: resolvedActiveMediaUrl,
     error: activeMediaPreviewError,
+    fallbackToBlob: fallbackActiveMediaToBlob,
   } = useAuthenticatedMediaPreview(
     !isExternalEmbedUrl ? rawActiveItemUrl : undefined,
     activeItem?.type || 'video'
@@ -828,7 +829,11 @@ export const ReviewContentPreview: React.FC<ReviewContentPreviewProps> = ({
                           preload="metadata"
                           controlsList="nodownload"
                           src={resolvedActiveMediaUrl}
-                          onError={() => setVideoError(true)}
+                          onError={() => {
+                            if (!fallbackActiveMediaToBlob()) {
+                              setVideoError(true);
+                            }
+                          }}
                           className="w-full h-full object-contain"
                           data-testid="preview-video-player"
                         >

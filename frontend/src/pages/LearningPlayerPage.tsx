@@ -320,7 +320,7 @@ export const LearningPlayerPage: React.FC = () => {
       {/* Main Learning Workspace */}
       <div className="learning-player-layout" role="region" aria-label="مساحة مشغل التعلم">
         {/* Main Stage Column (Right in RTL) */}
-        <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 0 }}>
           {/* Sequential Locking Alert */}
           {lockedWarning && (
             <Alert variant="warning" onClose={clearLockedWarning}>
@@ -554,7 +554,7 @@ export const LearningPlayerPage: React.FC = () => {
         </section>
 
         {/* Curriculum Navigation Sidebar (Left in RTL) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', minWidth: 0 }}>
           {effectiveCourse?.courseZipPolicy && effectiveCourse.courseZipPolicy !== 'disabled' && (() => {
             const isCourseCompleted =
               (progress?.progressPercent ?? 0) >= 100 ||

@@ -239,6 +239,7 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
     previewUrl: authenticatedPreviewUrl,
     isLoading: isPreviewLoading,
     error: previewLoadError,
+    fallbackToBlob: fallbackPreviewToBlob,
   } = useAuthenticatedMediaPreview(
     type !== 'video' || videoSourceType === 'upload' ? fileUrl || undefined : undefined,
     type
@@ -1079,6 +1080,9 @@ export const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                                   src={effectivePreviewUrl}
                                   controls
                                   preload="metadata"
+                                  onError={() => {
+                                    fallbackPreviewToBlob();
+                                  }}
                                   className="w-full h-full object-contain"
                                   data-testid="video-preview-player"
                                 />

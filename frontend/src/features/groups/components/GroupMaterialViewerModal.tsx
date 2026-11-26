@@ -44,7 +44,12 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
     };
   }, [file, isOpen]);
 
-  const { previewUrl: authenticatedPreviewUrl } = useAuthenticatedMediaPreview(
+  const {
+    previewUrl: authenticatedPreviewUrl,
+    isLoading: isPreviewLoading,
+    error: previewError,
+    fallbackToBlob,
+  } = useAuthenticatedMediaPreview(
     isOpen && file && !blobPreviewUrl ? file.url : undefined,
     file?.fileType || 'other'
   );
@@ -52,7 +57,13 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
   if (!file) return null;
 
   const meta = getFileTypeMeta(file.fileType);
-  const previewUrl = blobPreviewUrl || authenticatedPreviewUrl || file.url;
+  const isProtectedMediaUrl = Boolean(
+    file.url?.startsWith('/api/media/') &&
+      (file.fileType === 'video' || file.fileType === 'audio' || file.fileType === 'pdf')
+  );
+  const previewUrl =
+    blobPreviewUrl || authenticatedPreviewUrl || (isProtectedMediaUrl ? '' : file.url);
+  const waitingForProtectedStream = isProtectedMediaUrl && !blobPreviewUrl && (isPreviewLoading || !previewUrl);
 
   return (
     <Modal
@@ -86,7 +97,11 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
         <div className="min-h-[350px] max-h-[72vh] flex items-center justify-center bg-bg-alt/40 rounded-xl border border-border p-2 overflow-auto">
           {file.fileType === 'pdf' ? (
             <div className="w-full h-[65vh] flex flex-col items-center justify-center">
-              {isSafePreviewFrameUrl(previewUrl) ? (
+              {previewError ? (
+                <div className="p-6 text-center text-xs text-danger">{previewError}</div>
+              ) : waitingForProtectedStream ? (
+                <div className="p-6 text-center text-xs text-text-muted">جاري تحميل معاينة المستند...</div>
+              ) : isSafePreviewFrameUrl(previewUrl) ? (
                 <iframe
                   src={`${sanitizeSafeUrl(previewUrl, 'about:blank')}#toolbar=0`}
                   title={file.title}
@@ -111,15 +126,24 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
             </div>
           ) : file.fileType === 'video' ? (
             <div className="w-full flex items-center justify-center p-4">
-              <video
-                controls
-                preload="metadata"
-                src={previewUrl}
-                className="max-h-[62vh] w-full rounded-lg shadow"
-                data-testid="video-preview"
-              >
-                متصفحك لا يدعم تشغيل هذا الفيديو مباشرة.
-              </video>
+              {previewError ? (
+                <div className="p-6 text-center text-xs text-danger">{previewError}</div>
+              ) : waitingForProtectedStream ? (
+                <div className="p-6 text-center text-xs text-text-muted">جاري تحميل معاينة الفيديو...</div>
+              ) : (
+                <video
+                  controls
+                  preload="metadata"
+                  src={previewUrl || undefined}
+                  onError={() => {
+                    fallbackToBlob();
+                  }}
+                  className="max-h-[62vh] w-full rounded-lg shadow"
+                  data-testid="video-preview"
+                >
+                  متصفحك لا يدعم تشغيل هذا الفيديو مباشرة.
+                </video>
+              )}
             </div>
           ) : file.fileType === 'audio' ? (
             <div className="w-full max-w-lg p-6 bg-surface rounded-xl border border-border shadow-sm text-center space-y-4">
@@ -127,9 +151,23 @@ export const GroupMaterialViewerModal: React.FC<GroupMaterialViewerModalProps> =
                 <Icon name="music" size="lg" />
               </div>
               <h4 className="font-bold text-base text-text-heading">{file.title}</h4>
-              <audio controls src={previewUrl} className="w-full" data-testid="audio-preview">
-                متصفحك لا يدعم تشغيل هذا الملف الصوتي.
-              </audio>
+              {previewError ? (
+                <div className="text-xs text-danger">{previewError}</div>
+              ) : waitingForProtectedStream ? (
+                <div className="text-xs text-text-muted">جاري تحميل الملف الصوتي...</div>
+              ) : (
+                <audio
+                  controls
+                  src={previewUrl || undefined}
+                  onError={() => {
+                    fallbackToBlob();
+                  }}
+                  className="w-full"
+                  data-testid="audio-preview"
+                >
+                  متصفحك لا يدعم تشغيل هذا الملف الصوتي.
+                </audio>
+              )}
             </div>
           ) : (
             /* Fallback for Office docs and archives: download action */

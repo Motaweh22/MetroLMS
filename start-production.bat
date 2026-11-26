@@ -124,8 +124,15 @@ if errorlevel 1 (
 popd
 
 :after_build
+set "EFFECTIVE_CSRF_ORIGINS="
+for /f "usebackq delims=" %%C in (`powershell -NoProfile -Command "$base = @(); if (Test-Path '%BACKEND_DIR%\.env') { $line = Get-Content '%BACKEND_DIR%\.env' | Where-Object { $_ -match '^\s*CSRF_TRUSTED_ORIGINS\s*=' } | Select-Object -First 1; if ($line) { $base = ($line -split '=',2)[1].Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ } } }; $ips = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.InterfaceAlias -notmatch 'Loopback' } | Select-Object -ExpandProperty IPAddress -Unique; $lan = $ips | ForEach-Object { 'http://' + $_ + ':4173' }; ($base + $lan | Select-Object -Unique) -join ','" 2^>nul`) do set "EFFECTIVE_CSRF_ORIGINS=%%C"
+
 echo [4/4] Launching Waitress WSGI Backend on http://127.0.0.1:8000 ...
-start "MetroLMS Backend - Waitress" cmd /k "cd /d "%BACKEND_DIR%" && set "DJANGO_SETTINGS_MODULE=config.settings.development" && "%WAITRESS_EXE%" --host=127.0.0.1 --port=8000 --threads=16 --max-request-body-size=2254857830 --channel-timeout=600 config.wsgi:application"
+if defined EFFECTIVE_CSRF_ORIGINS (
+    start "MetroLMS Backend - Waitress" cmd /k "cd /d "%BACKEND_DIR%" && set "DJANGO_SETTINGS_MODULE=config.settings.development" && set "CSRF_TRUSTED_ORIGINS=!EFFECTIVE_CSRF_ORIGINS!" && "%WAITRESS_EXE%" --host=127.0.0.1 --port=8000 --threads=16 --max-request-body-size=2254857830 --channel-timeout=600 config.wsgi:application"
+) else (
+    start "MetroLMS Backend - Waitress" cmd /k "cd /d "%BACKEND_DIR%" && set "DJANGO_SETTINGS_MODULE=config.settings.development" && "%WAITRESS_EXE%" --host=127.0.0.1 --port=8000 --threads=16 --max-request-body-size=2254857830 --channel-timeout=600 config.wsgi:application"
+)
 
 echo [4/4] Launching Built Frontend Preview on http://localhost:4173 ...
 start "MetroLMS Frontend - Production Build" cmd /k "cd /d "%FRONTEND_DIR%" && npm run preview -- --host 0.0.0.0 --port 4173"

@@ -25,7 +25,7 @@ COPY frontend\package.json frontend\package-lock.json .\
 RUN & "C:\nodejs\npm.cmd" ci
 
 COPY frontend\ .\
-ARG VITE_SHOW_TEST_CARDS=true
+ARG VITE_SHOW_TEST_CARDS=false
 ENV VITE_SHOW_TEST_CARDS=${VITE_SHOW_TEST_CARDS}
 RUN & "C:\nodejs\npx.cmd" vite build
 

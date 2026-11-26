@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Icon } from '@/shared/ui/Icon/Icon';
 import { clampSeekingPosition, formatDuration } from '@/core/domain/progress';
+import { isAbortError, resolveProtectedMediaStream } from '@/core/storage/protectedMediaStream';
 import { useVideoProgressSync } from '../hooks/useVideoProgressSync';
 import type { LessonProgress } from '../types';
 import '@/features/learning-player/styles/learningPlayer.css';
@@ -66,15 +67,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [resumedFromSeconds, setResumedFromSeconds] = useState<number | null>(null);
   const activeVideoBlobRef = useRef<string | null>(null);
   const usedStreamTicketRef = useRef<boolean>(false);
-  const autoRetriedTicketRef = useRef<boolean>(false);
+  const blobFallbackSrcRef = useRef<string | null>(null);
   const hasStartedPlaybackRef = useRef<boolean>(false);
   const resumeBannerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    autoRetriedTicketRef.current = false;
-  }, [src]);
-
-  // Mint user-bound progressive Range streaming ticket (plays immediately without waiting for 100% download)
+  // Mint user-bound progressive Range streaming ticket; fall back cleanly to authenticated Blob stream on error
   useEffect(() => {
     let cancelled = false;
     usedStreamTicketRef.current = false;
@@ -102,66 +99,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setProtectedBlobUrl(null);
 
     const controller = new AbortController();
-    const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-    const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
 
-    fetch('/api/media/stream-ticket', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
-      },
-      body: JSON.stringify({ url: src }),
+    resolveProtectedMediaStream(src, {
       signal: controller.signal,
+      defaultMimeType: 'video/mp4',
+      preferBlobFallback: blobFallbackSrcRef.current === src,
     })
-      .then(async (ticketRes) => {
-        if (ticketRes.ok) {
-          const ticketJson = await ticketRes.json();
-          const streamUrl = ticketJson?.data?.streamUrl;
-          if (streamUrl && !cancelled) {
-            usedStreamTicketRef.current = true;
-            setProtectedBlobUrl(streamUrl);
-            setIsBuffering(false);
-            return;
-          }
+      .then((result) => {
+        if (cancelled) {
+          if (result.isBlobUrl) URL.revokeObjectURL(result.resolvedUrl);
+          return;
         }
-        // Fallback for legacy endpoints without stream-ticket
-        const res = await fetch(src, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            'X-MetroLMS-Stream': '1',
-          },
-          signal: controller.signal,
-        });
-        if (!res.ok || res.status === 204) {
-          throw new Error(`HTTP ${res.status}`);
+        usedStreamTicketRef.current = result.usedStreamTicket;
+        if (result.isBlobUrl) {
+          activeVideoBlobRef.current = result.resolvedUrl;
         }
-        const mime = res.headers.get('X-Original-Mime-Type') || 'video/mp4';
-        let blob: Blob;
-        if (typeof res.blob === 'function') {
-          const rawBlob = await res.blob();
-          if (cancelled) return;
-          if (!rawBlob || rawBlob.size === 0) {
-            throw new Error('EMPTY_STREAM');
-          }
-          blob = rawBlob.type === mime ? rawBlob : rawBlob.slice(0, rawBlob.size, mime);
-        } else {
-          const buffer = await res.arrayBuffer();
-          if (cancelled) return;
-          if (!buffer || buffer.byteLength === 0) {
-            throw new Error('EMPTY_STREAM');
-          }
-          blob = new Blob([buffer], { type: mime });
-        }
-        const url = URL.createObjectURL(blob);
-        activeVideoBlobRef.current = url;
-        setProtectedBlobUrl(url);
+        setProtectedBlobUrl(result.resolvedUrl);
         setIsBuffering(false);
       })
       .catch((err) => {
-        if (cancelled || err?.name === 'AbortError') return;
+        if (cancelled || isAbortError(err, controller.signal)) return;
         setHasError(true);
         setIsBuffering(false);
       });
@@ -568,6 +525,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             className="speed-dropdown-btn"
             onClick={() => {
               setHasError(false);
+              blobFallbackSrcRef.current = null;
               setRetryNonce((prev) => prev + 1);
               if (videoRef.current) {
                 videoRef.current.load();
@@ -604,8 +562,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             }}
             onPause={() => setIsPlaying(false)}
             onError={() => {
-              if (usedStreamTicketRef.current && !autoRetriedTicketRef.current) {
-                autoRetriedTicketRef.current = true;
+              if (src && usedStreamTicketRef.current && blobFallbackSrcRef.current !== src) {
+                blobFallbackSrcRef.current = src;
                 setRetryNonce((prev) => prev + 1);
                 return;
               }

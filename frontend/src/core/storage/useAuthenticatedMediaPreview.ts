@@ -1,25 +1,30 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ContentItemType } from '@/core/courses/types';
+import { isAbortError, resolveProtectedMediaStream } from './protectedMediaStream';
 
 export interface AuthenticatedMediaPreviewResult {
   previewUrl: string | undefined;
   isLoading: boolean;
   error: string | null;
+  fallbackToBlob: () => boolean;
 }
 
 /**
- * Resolve `/api/media/.../stream` URLs into safe in-browser Blob URLs for `<video>`, `<audio>`,
- * and PDF `<iframe>` previews. Bypasses `403 DIRECT_DOWNLOAD_BLOCKED` (via `X-MetroLMS-Stream: 1`)
+ * Resolve `/api/media/.../stream` URLs into safe in-browser stream or Blob URLs for `<video>`, `<audio>`,
+ * and PDF `<iframe>` previews. Bypasses `403 DIRECT_DOWNLOAD_BLOCKED` (via stream tickets / `X-MetroLMS-Stream: 1`)
  * and `X-Frame-Options: DENY` / IDM interception on PDFs (via `?format=json`).
  */
 export function useAuthenticatedMediaPreview(
   rawUrl: string | undefined,
   contentType: ContentItemType | string
 ): AuthenticatedMediaPreviewResult {
+  const streamKey = `${rawUrl || ''}::${contentType}`;
   const [resolvedUrl, setResolvedUrl] = useState<string | undefined>(rawUrl);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [blobFallbackKey, setBlobFallbackKey] = useState<string | null>(null);
   const activeBlobRef = useRef<string | null>(null);
+  const usedStreamTicketRef = useRef<boolean>(false);
 
   const isJsdom =
     typeof window !== 'undefined' && window.navigator?.userAgent?.includes('jsdom');
@@ -29,9 +34,19 @@ export function useAuthenticatedMediaPreview(
     rawUrl.startsWith('/api/media/') &&
     (contentType === 'video' || contentType === 'audio' || contentType === 'pdf')
   );
+  const preferBlobFallback = blobFallbackKey === streamKey;
+
+  const fallbackToBlob = useCallback((): boolean => {
+    if (usedStreamTicketRef.current && blobFallbackKey !== streamKey) {
+      setBlobFallbackKey(streamKey);
+      return true;
+    }
+    return false;
+  }, [blobFallbackKey, streamKey]);
 
   useEffect(() => {
     let cancelled = false;
+    usedStreamTicketRef.current = false;
     if (activeBlobRef.current) {
       URL.revokeObjectURL(activeBlobRef.current);
       activeBlobRef.current = null;
@@ -74,10 +89,11 @@ export function useAuthenticatedMediaPreview(
                 blob = new Blob([bytes], { type: payload.mimeType || 'application/pdf' });
               }
             }
-          } catch {
+          } catch (err) {
+            if (isAbortError(err, controller.signal)) throw err;
             // Fallback to raw fetch below unless aborted
           }
-          if (!blob && !cancelled) {
+          if (!blob && !cancelled && !controller.signal.aborted) {
             const rawRes = await fetch(rawUrl, {
               credentials: 'include',
               signal: controller.signal,
@@ -88,51 +104,21 @@ export function useAuthenticatedMediaPreview(
             blob = await rawRes.blob();
           }
         } else if (contentType === 'video' || contentType === 'audio') {
-          const csrfMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-          const csrfToken = csrfMatch ? decodeURIComponent(csrfMatch[1]) : '';
-          const ticketRes = await fetch('/api/media/stream-ticket', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}),
-            },
-            body: JSON.stringify({ url: rawUrl }),
+          const result = await resolveProtectedMediaStream(rawUrl, {
             signal: controller.signal,
+            defaultMimeType: contentType === 'audio' ? 'audio/mpeg' : 'video/mp4',
+            preferBlobFallback,
           });
-          if (ticketRes.ok) {
-            const ticketJson = await ticketRes.json();
-            const streamUrl = ticketJson?.data?.streamUrl;
-            if (streamUrl && !cancelled) {
-              setResolvedUrl(streamUrl);
-              return;
-            }
+          if (cancelled) {
+            if (result.isBlobUrl) URL.revokeObjectURL(result.resolvedUrl);
+            return;
           }
-          const streamRes = await fetch(rawUrl, {
-            method: 'GET',
-            credentials: 'include',
-            headers: { 'X-MetroLMS-Stream': '1' },
-            signal: controller.signal,
-          });
-          if (!streamRes.ok || streamRes.status === 204) {
-            throw new Error(`HTTP ${streamRes.status}`);
+          usedStreamTicketRef.current = result.usedStreamTicket;
+          if (result.isBlobUrl) {
+            activeBlobRef.current = result.resolvedUrl;
           }
-          const mime =
-            streamRes.headers.get('X-Original-Mime-Type') ||
-            (contentType === 'audio' ? 'audio/mpeg' : 'video/mp4');
-          if (typeof streamRes.blob === 'function') {
-            const rawBlob = await streamRes.blob();
-            if (!rawBlob || rawBlob.size === 0) {
-              throw new Error('EMPTY_STREAM');
-            }
-            blob = rawBlob.type === mime ? rawBlob : rawBlob.slice(0, rawBlob.size, mime);
-          } else {
-            const buffer = await streamRes.arrayBuffer();
-            if (!buffer || buffer.byteLength === 0) {
-              throw new Error('EMPTY_STREAM');
-            }
-            blob = new Blob([buffer], { type: mime });
-          }
+          setResolvedUrl(result.resolvedUrl);
+          return;
         }
 
         if (cancelled || !blob) return;
@@ -140,7 +126,7 @@ export function useAuthenticatedMediaPreview(
         activeBlobRef.current = objectUrl;
         setResolvedUrl(objectUrl);
       } catch (err: unknown) {
-        if (cancelled || (err instanceof Error && err.name === 'AbortError')) return;
+        if (cancelled || isAbortError(err, controller.signal)) return;
         setError('تعذر تحميل معاينة الملف المرفوع.');
       } finally {
         if (!cancelled) {
@@ -159,7 +145,7 @@ export function useAuthenticatedMediaPreview(
         activeBlobRef.current = null;
       }
     };
-  }, [rawUrl, contentType, needsProtectedFetch]);
+  }, [rawUrl, contentType, needsProtectedFetch, preferBlobFallback]);
 
-  return { previewUrl: needsProtectedFetch ? resolvedUrl : rawUrl, isLoading, error };
+  return { previewUrl: needsProtectedFetch ? resolvedUrl : rawUrl, isLoading, error, fallbackToBlob };
 }
