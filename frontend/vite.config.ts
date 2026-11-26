@@ -229,8 +229,13 @@ export default defineConfig({
     },
   },
   build: {
+    sourcemap: false,
     rollupOptions: {
       output: {
+        hashCharacters: 'hex',
+        entryFileNames: 'assets/[hash].js',
+        chunkFileNames: 'assets/[hash].js',
+        assetFileNames: 'assets/[hash][extname]',
         manualChunks(id) {
           if (id.includes('node_modules')) {
             if (id.includes('react-router')) return 'vendor-router';
