@@ -722,5 +722,103 @@ class Bp06CoursesAndCurriculumTests(TestCase):
         self.assertIsNone(stale_fixed["targetUrl"])
         self.assertTrue(stale_fixed["metadata"]["reviewResolved"])
 
+    def test_comment_report_notifications_resolve_on_dismiss_delete_and_list(self) -> None:
+        from apps.communications.models import NotificationItem
+        from apps.courses.models import Course, CourseComment
+
+        lec_client = self._login(self.lecturer.phone_e164)
+        admin_client = self._login(self.admin.phone_e164)
+        assistant_client = self._login(self.assistant.phone_e164)
+        trainee_client = self._login(self.trainee1.phone_e164)
+
+        create_res = lec_client.post(
+            "/api/lecturer/courses",
+            data={"title": "دورة إشعارات التعليقات", "courseType": "main", "description": "وصف"},
+            content_type="application/json",
+        )
+        course_id = int(create_res.json()["data"]["course"]["id"])
+        course = Course.objects.get(pk=course_id)
+        course.lifecycle_status = "Published"
+        course.access_mode = "all_trainees"
+        course.save(update_fields=["lifecycle_status", "access_mode"])
+
+        c1_res = lec_client.post(
+            f"/api/courses/{course_id}/comments",
+            data={"body": "تعليق أول مبلغ عنه"},
+            content_type="application/json",
+        )
+        self.assertEqual(c1_res.status_code, 201)
+        c1_id = int(c1_res.json()["data"]["comment"]["id"])
+
+        rep1 = trainee_client.post(
+            f"/api/comments/{c1_id}/report",
+            data={"reason": "spam", "notes": "اختبار بلاغ"},
+            content_type="application/json",
+        )
+        self.assertEqual(rep1.status_code, 201)
+
+        # Before ignore-report: actionable comment_reported exists for admin & assistant_admin
+        admin_before = admin_client.get("/api/notifications").json()["data"]["notifications"]
+        n1_before = next(
+            n for n in admin_before
+            if n["type"] == "comment_reported" and str(n.get("commentId")) == str(c1_id)
+        )
+        self.assertTrue(n1_before["actionRequired"])
+        self.assertEqual(n1_before["targetUrl"], "/admin/comment-moderation")
+
+        # Ignore report resolves notifications & clears reported queue
+        ign_res = admin_client.post(f"/api/admin/comments/{c1_id}/ignore-report", data={}, content_type="application/json")
+        self.assertEqual(ign_res.status_code, 200)
+
+        for client_session in (admin_client, assistant_client):
+            after = client_session.get("/api/notifications").json()["data"]["notifications"]
+            n1_after = next(
+                n for n in after
+                if n["type"] == "comment_reported" and str(n.get("commentId")) == str(c1_id)
+            )
+            self.assertFalse(n1_after["actionRequired"])
+            self.assertIsNone(n1_after["targetUrl"])
+            self.assertTrue(n1_after["metadata"]["commentReportResolved"])
+            self.assertEqual(n1_after["metadata"]["moderationOutcome"], "dismissed")
+
+        # Create & report second comment, then delete it -> resolves notification too
+        c2 = CourseComment.objects.create(course=course, author_user=self.lecturer, body="تعليق محذوف", created_at=timezone.now())
+        rep2 = trainee_client.post(
+            f"/api/comments/{c2.id}/report",
+            data={"reason": "abuse", "notes": "إساءة"},
+            content_type="application/json",
+        )
+        self.assertEqual(rep2.status_code, 201)
+        del_res = admin_client.delete(f"/api/admin/comments/{c2.id}")
+        self.assertEqual(del_res.status_code, 200)
+
+        after_del = admin_client.get("/api/notifications").json()["data"]["notifications"]
+        n2_after = next(
+            n for n in after_del
+            if n["type"] == "comment_reported" and str(n.get("commentId")) == str(c2.id)
+        )
+        self.assertFalse(n2_after["actionRequired"])
+        self.assertIsNone(n2_after["targetUrl"])
+        self.assertTrue(n2_after["metadata"]["commentReportResolved"])
+        self.assertEqual(n2_after["metadata"]["moderationOutcome"], "deleted")
+
+        # Stale pre-existing comment_reported row auto-resolves on GET /api/notifications
+        NotificationItem.objects.create(
+            user=self.admin,
+            title="إشعار تعليق قديم",
+            body="بلاغ قديم",
+            notif_type="comment_reported",
+            target_url="/admin/comment-moderation",
+            action_required=True,
+            metadata_json={"courseId": str(course_id), "commentId": str(c1_id)},
+            is_read=False,
+            created_at=timezone.now(),
+        )
+        stale_notifs = admin_client.get("/api/notifications").json()["data"]["notifications"]
+        stale_comment_notif = next(n for n in stale_notifs if n["title"] == "إشعار تعليق قديم")
+        self.assertFalse(stale_comment_notif["actionRequired"])
+        self.assertIsNone(stale_comment_notif["targetUrl"])
+        self.assertTrue(stale_comment_notif["metadata"]["commentReportResolved"])
+
 
 

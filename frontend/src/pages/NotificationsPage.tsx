@@ -11,12 +11,22 @@ import { useToast } from '@/shared/ui/Toast';
 import type { NotificationItem, NotificationType } from '@/core/notifications/types';
 import type { UserRole } from '@/core/auth/types';
 
-function isResolvedPendingReviewNotification(notif: NotificationItem): boolean {
-  if (notif.type !== 'content_pending_review') return false;
-  if (notif.metadata?.reviewResolved === true || notif.metadata?.resolved === true) {
-    return true;
+function getResolvedActionNotificationMessage(notif: NotificationItem): string | null {
+  if (notif.type === 'content_pending_review') {
+    const isResolved =
+      notif.metadata?.reviewResolved === true ||
+      notif.metadata?.resolved === true ||
+      (notif.actionRequired === false && !notif.targetUrl);
+    return isResolved ? 'تمت مراجعة هذا المقرر بالفعل، ولا يمكن فتح شاشة المراجعة مجدداً.' : null;
   }
-  return notif.actionRequired === false && !notif.targetUrl;
+  if (notif.type === 'comment_reported') {
+    const isResolved =
+      notif.metadata?.commentReportResolved === true ||
+      notif.metadata?.resolved === true ||
+      (notif.actionRequired === false && !notif.targetUrl);
+    return isResolved ? 'تمت معالجة هذا البلاغ بالفعل، ولا يمكن إعادة فتحه من هذا الإشعار.' : null;
+  }
+  return null;
 }
 
 export type NotificationCategory =
@@ -363,7 +373,7 @@ export const NotificationsPage: React.FC = () => {
   };
 
   const resolveNotificationDestination = (notif: NotificationItem): string | null => {
-    if (isResolvedPendingReviewNotification(notif)) {
+    if (getResolvedActionNotificationMessage(notif) !== null) {
       return null;
     }
     const role = currentRole;
@@ -470,10 +480,10 @@ export const NotificationsPage: React.FC = () => {
       if (!notif.read) {
         await markAsRead(notif.id);
       }
-      if (isResolvedPendingReviewNotification(notif)) {
-        const msg = 'تمت مراجعة هذا المقرر بالفعل، ولا يمكن فتح شاشة المراجعة مجدداً.';
-        setActionNotice(msg);
-        toast.info(msg);
+      const resolvedMsg = getResolvedActionNotificationMessage(notif);
+      if (resolvedMsg !== null) {
+        setActionNotice(resolvedMsg);
+        toast.info(resolvedMsg);
         return;
       }
       const targetPath = resolveNotificationDestination(notif);
@@ -838,7 +848,7 @@ export const NotificationsPage: React.FC = () => {
           {filteredNotifications.map((notif) => {
             const iconName = getNotificationIcon(notif.type);
             const badgeVariant = getNotificationVariant(notif.type);
-            const isResolvedReview = isResolvedPendingReviewNotification(notif);
+            const isResolvedAction = getResolvedActionNotificationMessage(notif) !== null;
             const formattedDate = new Date(notif.createdAt).toLocaleDateString('ar-EG', {
               month: 'short',
               day: 'numeric',
@@ -896,14 +906,14 @@ export const NotificationsPage: React.FC = () => {
                             تتطلب إجراء
                           </Badge>
                         )}
-                        {isResolvedReview && (
+                        {isResolvedAction && (
                           <Badge
                             variant="success"
                             size="sm"
                             className="font-bold text-[10px] py-0 px-1.5"
                             data-testid={`notification-resolved-badge-${notif.id}`}
                           >
-                            تمت المراجعة ✓
+                            {notif.type === 'comment_reported' ? 'تمت المعالجة ✓' : 'تمت المراجعة ✓'}
                           </Badge>
                         )}
                       </div>
@@ -951,7 +961,7 @@ export const NotificationsPage: React.FC = () => {
                           </span>
                         </span>
                       )}
-                      {!notif.groupId && notif.courseId && !isResolvedReview && (
+                      {!notif.groupId && notif.courseId && !isResolvedAction && (
                         <span className="text-[11px] font-bold text-primary flex items-center gap-1 hover:underline">
                           <Icon name="courses" size="sm" />
                           <span>عرض المقرر التدريبي ({notif.courseId}) ←</span>
@@ -963,7 +973,7 @@ export const NotificationsPage: React.FC = () => {
                           <span>الانتقال لمركز الاعتمادات الإدارية ({notif.requestId}) ←</span>
                         </span>
                       )}
-                      {isAdminRole && notif.type === 'comment_reported' && (
+                      {isAdminRole && notif.type === 'comment_reported' && !isResolvedAction && (
                         <span className="text-[11px] font-bold text-primary flex items-center gap-1 hover:underline">
                           <Icon name="alertCircle" size="sm" />
                           <span>الانتقال لإدارة التعليقات المبلغ عنها ←</span>

@@ -328,6 +328,21 @@ class LecturerCourseDetailView(APIView):
             course_title = course.title
             Course.objects.filter(pk=course.pk).delete()
             _purge_unreferenced_course_media(asset_ids)
+            from apps.communications.services.communications_service import (
+                resolve_comment_report_notifications,
+                resolve_pending_course_review_notifications,
+            )
+
+            resolve_pending_course_review_notifications(
+                course_id=course_id,
+                outcome="course_deleted",
+                reviewer=request.user,
+            )
+            resolve_comment_report_notifications(
+                course_id=course_id,
+                outcome="course_deleted",
+                moderator=request.user,
+            )
             record_audit_log(
                 action="course.deleted",
                 actor=request.user,
@@ -815,6 +830,13 @@ class AdminCommentModerationView(APIView):
 
     def post(self, request: Request, comment_id: int):
         updated = CourseCommentReport.objects.filter(comment_id=comment_id, status="Pending").update(status="Dismissed")
+        from apps.communications.services.communications_service import resolve_comment_report_notifications
+
+        resolve_comment_report_notifications(
+            comment_id=comment_id,
+            outcome="dismissed",
+            moderator=request.user,
+        )
         comment = CourseComment.objects.select_related("author_user", "course").filter(pk=comment_id).first()
         payload = CourseCommentSerializer(comment).data if comment is not None else {}
         return success_response({**payload, "dismissedCount": updated})
@@ -935,6 +957,13 @@ class AdminCommentDeleteView(APIView):
             return error_response("PERMISSION_DENIED", "ليس لديك صلاحية حذف هذا التعليق.", status.HTTP_403_FORBIDDEN)
         CourseCommentReport.objects.filter(comment=comment).delete()
         comment.delete()
+        from apps.communications.services.communications_service import resolve_comment_report_notifications
+
+        resolve_comment_report_notifications(
+            comment_id=comment_id,
+            outcome="deleted",
+            moderator=request.user,
+        )
         return success_response({"success": True, "deleted": True})
 
 

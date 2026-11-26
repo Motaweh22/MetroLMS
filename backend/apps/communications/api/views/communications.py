@@ -41,36 +41,68 @@ class NotificationsListView(APIView):
         qs = NotificationItem.objects.filter(user=request.user).order_by("-created_at", "-id")
         notifications_list = list(qs)
         pending_review_course_ids: set[int] = set()
+        pending_report_comment_ids: set[int] = set()
         for item in notifications_list:
-            if item.notif_type == "content_pending_review" and (item.action_required or (item.target_url or "").startswith("/admin/review/")):
-                meta = item.metadata_json if isinstance(item.metadata_json, dict) else {}
+            meta = item.metadata_json if isinstance(item.metadata_json, dict) else {}
+            if item.notif_type == "content_pending_review" and (
+                item.action_required or (item.target_url or "").startswith("/admin/review/")
+            ):
                 raw_cid = str(meta.get("courseId") or "").strip()
                 if not raw_cid and (item.target_url or "").startswith("/admin/review/"):
                     raw_cid = (item.target_url or "").rstrip("/").split("/")[-1]
                 if raw_cid.isdigit():
                     pending_review_course_ids.add(int(raw_cid))
+            elif item.notif_type == "comment_reported" and (
+                item.action_required or (item.target_url or "").startswith("/admin/comment-moderation")
+            ):
+                raw_comment_id = str(meta.get("commentId") or "").strip()
+                if raw_comment_id.isdigit():
+                    pending_report_comment_ids.add(int(raw_comment_id))
 
-        if pending_review_course_ids:
-            from apps.courses.models import CourseReviewSubmission
+        if pending_review_course_ids or pending_report_comment_ids:
+            from apps.courses.models import CourseCommentReport, CourseReviewSubmission
 
-            still_pending_ids = set(
-                CourseReviewSubmission.objects.filter(
-                    course_id__in=pending_review_course_ids,
-                    review_status="Pending",
-                ).values_list("course_id", flat=True)
+            still_pending_course_ids = (
+                set(
+                    CourseReviewSubmission.objects.filter(
+                        course_id__in=pending_review_course_ids,
+                        review_status="Pending",
+                    ).values_list("course_id", flat=True)
+                )
+                if pending_review_course_ids
+                else set()
+            )
+            still_pending_comment_ids = (
+                set(
+                    CourseCommentReport.objects.filter(
+                        comment_id__in=pending_report_comment_ids,
+                        status="Pending",
+                    ).values_list("comment_id", flat=True)
+                )
+                if pending_report_comment_ids
+                else set()
             )
             for item in notifications_list:
-                if item.notif_type != "content_pending_review":
-                    continue
-                if not (item.action_required or (item.target_url or "").startswith("/admin/review/")):
-                    continue
                 meta = dict(item.metadata_json) if isinstance(item.metadata_json, dict) else {}
-                raw_cid = str(meta.get("courseId") or "").strip()
-                if not raw_cid and (item.target_url or "").startswith("/admin/review/"):
-                    raw_cid = (item.target_url or "").rstrip("/").split("/")[-1]
-                if raw_cid.isdigit() and int(raw_cid) not in still_pending_ids:
+                should_resolve_flag: str | None = None
+                if item.notif_type == "content_pending_review" and (
+                    item.action_required or (item.target_url or "").startswith("/admin/review/")
+                ):
+                    raw_cid = str(meta.get("courseId") or "").strip()
+                    if not raw_cid and (item.target_url or "").startswith("/admin/review/"):
+                        raw_cid = (item.target_url or "").rstrip("/").split("/")[-1]
+                    if raw_cid.isdigit() and int(raw_cid) not in still_pending_course_ids:
+                        should_resolve_flag = "reviewResolved"
+                elif item.notif_type == "comment_reported" and (
+                    item.action_required or (item.target_url or "").startswith("/admin/comment-moderation")
+                ):
+                    raw_comment_id = str(meta.get("commentId") or "").strip()
+                    if raw_comment_id.isdigit() and int(raw_comment_id) not in still_pending_comment_ids:
+                        should_resolve_flag = "commentReportResolved"
+
+                if should_resolve_flag:
                     meta["resolved"] = True
-                    meta["reviewResolved"] = True
+                    meta[should_resolve_flag] = True
                     item.action_required = False
                     item.target_url = None
                     item.metadata_json = meta

@@ -182,40 +182,39 @@ def set_user_whatsapp_visibility(*, user: User, scenario_key: str, is_visible: b
     return obj
 
 
-def resolve_pending_course_review_notifications(
+def _resolve_actionable_notifications(
     *,
-    course_id: int,
+    notif_type: str,
+    matcher,
+    outcome_key: str,
     outcome: str,
-    reviewer: User | None = None,
+    resolved_flag_key: str,
+    actor: User | None = None,
 ) -> int:
-    """Resolve open content_pending_review notifications once a review decision is finalized."""
+    """Resolve matching actionable notifications once their underlying workflow is completed."""
     now_iso = timezone.now().isoformat()
-    course_id_str = str(course_id)
-    expected_url = f"/admin/review/{course_id_str}"
-    reviewer_role = getattr(reviewer, "role_id", None) if reviewer is not None else None
-    reviewer_name = (
+    actor_role = getattr(actor, "role_id", None) if actor is not None else None
+    actor_name = (
         "النظام"
-        if reviewer_role == "developer"
-        else (getattr(reviewer, "full_name", "") or "") if reviewer is not None else ""
+        if actor_role == "developer"
+        else (getattr(actor, "full_name", "") or "") if actor is not None else ""
     )
 
-    candidates = NotificationItem.objects.filter(notif_type="content_pending_review")
+    candidates = NotificationItem.objects.filter(notif_type=notif_type)
     updated_count = 0
     for item in candidates:
         meta = dict(item.metadata_json) if isinstance(item.metadata_json, dict) else {}
-        item_course_id = str(meta.get("courseId") or "")
-        item_url = (item.target_url or "").strip()
-        if item_course_id != course_id_str and item_url != expected_url:
+        if not matcher(item, meta):
             continue
-        if not item.action_required and not item_url and meta.get("reviewResolved") is True:
+        if not item.action_required and not (item.target_url or "").strip() and meta.get(resolved_flag_key) is True:
             continue
 
         meta["resolved"] = True
-        meta["reviewResolved"] = True
-        meta["reviewOutcome"] = outcome
+        meta[resolved_flag_key] = True
+        meta[outcome_key] = outcome
         meta["resolvedAt"] = now_iso
-        if reviewer_name:
-            meta["resolvedByName"] = reviewer_name
+        if actor_name:
+            meta["resolvedByName"] = actor_name
 
         item.action_required = False
         item.target_url = None
@@ -225,4 +224,56 @@ def resolve_pending_course_review_notifications(
         updated_count += 1
 
     return updated_count
+
+
+def resolve_pending_course_review_notifications(
+    *,
+    course_id: int,
+    outcome: str,
+    reviewer: User | None = None,
+) -> int:
+    """Resolve open content_pending_review notifications once a review decision is finalized."""
+    course_id_str = str(course_id)
+    expected_url = f"/admin/review/{course_id_str}"
+    return _resolve_actionable_notifications(
+        notif_type="content_pending_review",
+        matcher=lambda item, meta: (
+            str(meta.get("courseId") or "") == course_id_str
+            or (item.target_url or "").strip() == expected_url
+        ),
+        outcome_key="reviewOutcome",
+        outcome=outcome,
+        resolved_flag_key="reviewResolved",
+        actor=reviewer,
+    )
+
+
+def resolve_comment_report_notifications(
+    *,
+    outcome: str,
+    moderator: User | None = None,
+    comment_id: int | None = None,
+    course_id: int | None = None,
+) -> int:
+    """Resolve open comment_reported notifications once dismissed or comment/course is deleted."""
+    if comment_id is None and course_id is None:
+        return 0
+    comment_id_str = str(comment_id) if comment_id is not None else None
+    course_id_str = str(course_id) if course_id is not None else None
+
+    def _matches(item: NotificationItem, meta: dict[str, Any]) -> bool:
+        if comment_id_str is not None and str(meta.get("commentId") or "") == comment_id_str:
+            return True
+        if course_id_str is not None and str(meta.get("courseId") or "") == course_id_str:
+            return True
+        return False
+
+    return _resolve_actionable_notifications(
+        notif_type="comment_reported",
+        matcher=_matches,
+        outcome_key="moderationOutcome",
+        outcome=outcome,
+        resolved_flag_key="commentReportResolved",
+        actor=moderator,
+    )
 

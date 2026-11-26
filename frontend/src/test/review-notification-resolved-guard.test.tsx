@@ -148,4 +148,55 @@ describe('Resolved course review notification & direct review route guard', () =
     expect(screen.queryByTestId('toggle-edit-mode-btn')).toBeNull();
     expect(screen.getByText(/تمت مراجعة هذا المقرر مسبقاً/)).toBeTruthy();
   });
+
+  it('shows notice without navigating when clicking a resolved comment_reported notification', async () => {
+    mockNotificationsList = [
+      {
+        id: '902',
+        userId: '2',
+        type: 'comment_reported',
+        title: 'إبلاغ عن تعليق',
+        message: 'تم الإبلاغ عن تعليق في المقرر.',
+        courseId: '77',
+        commentId: '301',
+        targetUrl: null,
+        actionRequired: false,
+        read: false,
+        createdAt: '2026-11-26T06:30:00Z',
+        metadata: {
+          courseId: '77',
+          commentId: '301',
+          resolved: true,
+          commentReportResolved: true,
+          moderationOutcome: 'dismissed',
+        },
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/notifications']}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route
+              path="/admin/comment-moderation"
+              element={<div data-testid="comment-moderation-route-reached">Moderation</div>}
+            />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('notification-resolved-badge-902')).toHaveTextContent('تمت المعالجة ✓');
+
+    fireEvent.click(screen.getByTestId('notification-item-902'));
+
+    await waitFor(() => {
+      expect(mockMarkAsRead).toHaveBeenCalledWith('902');
+    });
+    expect(screen.queryByTestId('comment-moderation-route-reached')).toBeNull();
+    expect(await screen.findByTestId('resolved-review-notice')).toHaveTextContent(
+      'تمت معالجة هذا البلاغ بالفعل'
+    );
+  });
 });
