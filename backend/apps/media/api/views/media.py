@@ -31,7 +31,130 @@ from apps.media.services.media_service import (
 from infrastructure.storage import LocalMediaStorage, MediaStorageError
 from shared.api import error_response, success_response
 
-_RANGE_HEADER_RE = re.compile(r"\Abytes=(\d*)-(\d*)\Z", re.ASCII)
+_BYTE_RANGE_SPEC_RE = re.compile(r"\A(\d*)-(\d*)\Z", re.ASCII)
+# Cap open-ended A/V Range chunks (e.g. `Range: bytes=0-`) to 4 MB so Waitress workers
+# complete each buffer burst cleanly instead of keeping long-lived streams that abort on seek/throttle.
+_OPEN_RANGE_CHUNK_BYTES = 4 * 1024 * 1024
+
+
+def _unsatisfiable_range_response(file_size: int) -> HttpResponse:
+    """Build an RFC 9110 416 Range Not Satisfiable response for the given representation size."""
+    resp = HttpResponse(status=416)
+    resp["Content-Range"] = f"bytes */{file_size}"
+    return resp
+
+
+def _apply_stream_headers(
+    resp: HttpResponse | StreamingHttpResponse,
+    *,
+    asset: MediaAsset,
+    content_length: int,
+    content_range: str | None = None,
+) -> HttpResponse | StreamingHttpResponse:
+    """Attach standard byte-range, MIME, and cache/security headers onto media stream responses."""
+    if content_range is not None:
+        resp["Content-Range"] = content_range
+    resp["Content-Length"] = str(content_length)
+    resp["Accept-Ranges"] = "bytes"
+    resp["X-Original-Mime-Type"] = asset.mime_type
+    resp["X-Content-Type-Options"] = "nosniff"
+    resp["Cache-Control"] = "no-store"
+    return resp
+
+
+def _normalize_decimal(raw: str) -> str:
+    """Normalize an ASCII digit string by stripping leading zeros while preserving `'0'`."""
+    return raw.lstrip("0") or "0"
+
+
+def _decimal_lt(lhs: str, rhs: str) -> bool:
+    """Compare two ASCII decimal digit strings numerically without hitting int() digit limits."""
+    a = _normalize_decimal(lhs)
+    b = _normalize_decimal(rhs)
+    return (len(a), a) < (len(b), b)
+
+
+def _resolve_single_byte_range(
+    spec: str,
+    *,
+    file_size: int,
+    is_av_media: bool,
+) -> tuple[int, int] | None:
+    """Parse and clamp a single HTTP byte-range-spec (`start-end`, `start-`, or `-suffix`)."""
+    match = _BYTE_RANGE_SPEC_RE.match(spec)
+    if not match:
+        return None
+    start_str, end_str = match.group(1), match.group(2)
+    if (not start_str and not end_str) or file_size <= 0:
+        return None
+
+    file_size_str = str(file_size)
+
+    if start_str:
+        if not _decimal_lt(start_str, file_size_str):
+            return None
+        start = int(_normalize_decimal(start_str))
+        if end_str:
+            if _decimal_lt(end_str, start_str):
+                return None
+            # RFC 9110 §14.1.2: clamp explicit end >= file_size to last byte (file_size - 1)
+            end = (
+                int(_normalize_decimal(end_str))
+                if _decimal_lt(end_str, file_size_str)
+                else file_size - 1
+            )
+        elif is_av_media:
+            end = min(file_size - 1, start + _OPEN_RANGE_CHUNK_BYTES - 1)
+        else:
+            end = file_size - 1
+        return (start, end)
+
+    if not _decimal_lt("0", end_str):
+        return None
+    if not _decimal_lt(end_str, file_size_str):
+        return (0, file_size - 1)
+    suffix = int(_normalize_decimal(end_str))
+    return (file_size - suffix, file_size - 1)
+
+
+def _parse_range_header(
+    range_header: str,
+    *,
+    file_size: int,
+    is_av_media: bool,
+) -> tuple[str, tuple[int, int] | None]:
+    """Interpret HTTP Range header: returns ('full', None), ('partial', (start, end)), or ('unsatisfiable', None).
+
+    Per RFC 9110 §14.2, valid multi-range requests (e.g. `bytes=0-100,200-300`) are safely
+    ignored and served as a full 200 OK response instead of failing with 416 or multipart payloads.
+    """
+    if not range_header:
+        return ("full", None)
+    if not range_header[:6].lower() == "bytes=":
+        return ("unsatisfiable", None)
+
+    specs = [part.strip() for part in range_header[6:].split(",")]
+    if len(specs) == 1:
+        resolved = _resolve_single_byte_range(specs[0], file_size=file_size, is_av_media=is_av_media)
+        return ("partial", resolved) if resolved is not None else ("unsatisfiable", None)
+
+    if file_size <= 0:
+        return ("unsatisfiable", None)
+
+    has_satisfiable = False
+    for spec in specs:
+        match = _BYTE_RANGE_SPEC_RE.match(spec)
+        if not match:
+            return ("unsatisfiable", None)
+        start_str, end_str = match.group(1), match.group(2)
+        if not start_str and not end_str:
+            return ("unsatisfiable", None)
+        if start_str and end_str and _decimal_lt(end_str, start_str):
+            return ("unsatisfiable", None)
+        if _resolve_single_byte_range(spec, file_size=file_size, is_av_media=is_av_media) is not None:
+            has_satisfiable = True
+
+    return ("full", None) if has_satisfiable else ("unsatisfiable", None)
 
 
 def _parse_pos_int(val: object) -> int | None:
@@ -261,23 +384,47 @@ def _serve_authenticated_media_stream(
     asset: MediaAsset,
     ticket_kind: str,
     ticket_target_id: int,
+    is_head: bool = False,
 ):
-    """Shared HTTP 200 / 206 Partial Content Range streaming handler for references & assets."""
+    """Shared HTTP 200 / 206 / 416 Range & HEAD streaming handler for references & assets."""
     file_size = asset.size_bytes
     storage = LocalMediaStorage()
 
-    # Support ?format=json base64 payload for DocumentViewer
+    # Support ?format=json base64 payload for DocumentViewer (HEAD matches metadata without reading/encoding)
     if request.query_params.get("format") == "json" and file_size <= 25 * 1024 * 1024:
-        import base64
-
         try:
-            raw_bytes = b"".join(storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1)))
+            target = storage.resolve_safe_path(asset.storage_key)
         except MediaStorageError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
-        return HttpResponse(
-            content=f'{{"base64":"{base64.b64encode(raw_bytes).decode("ascii")}","mimeType":"{asset.mime_type}"}}',
-            content_type="application/json",
-        )
+        if not target.is_file():
+            return error_response(
+                "ASSET_BINARY_MISSING",
+                "ملف الوسائط غير موجود على الخادم.",
+                status.HTTP_404_NOT_FOUND,
+            )
+
+        empty_json_len = len(f'{{"base64":"","mimeType":"{asset.mime_type}"}}'.encode("utf-8"))
+        b64_len = ((file_size + 2) // 3) * 4
+        if is_head:
+            resp = HttpResponse(b"", status=200, content_type="application/json")
+            resp["Content-Length"] = str(empty_json_len + b64_len)
+            return resp
+
+        import base64
+
+        if file_size == 0:
+            raw_bytes = b""
+        else:
+            try:
+                raw_bytes = b"".join(storage.open_range_stream(asset.storage_key, 0, file_size - 1))
+            except MediaStorageError as exc:
+                return error_response(exc.code, exc.message, exc.status_code)
+        payload_bytes = (
+            f'{{"base64":"{base64.b64encode(raw_bytes).decode("ascii")}","mimeType":"{asset.mime_type}"}}'
+        ).encode("utf-8")
+        resp = HttpResponse(payload_bytes, status=200, content_type="application/json")
+        resp["Content-Length"] = str(len(payload_bytes))
+        return resp
 
     is_av_media = asset.mime_type.startswith("video/") or asset.mime_type.startswith("audio/")
     st_token = (request.query_params.get("st") or "").strip()
@@ -300,66 +447,64 @@ def _serve_authenticated_media_stream(
         else asset.mime_type
     )
 
+    try:
+        target = storage.resolve_safe_path(asset.storage_key)
+    except MediaStorageError as exc:
+        return error_response(exc.code, exc.message, exc.status_code)
+    if not target.is_file():
+        return error_response(
+            "ASSET_BINARY_MISSING",
+            "ملف الوسائط غير موجود على الخادم.",
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    # HEAD returns full-representation headers only, ignores Range, and never opens/reads storage streams.
+    if is_head:
+        resp = HttpResponse(b"", status=200, content_type=effective_content_type)
+        return _apply_stream_headers(resp, asset=asset, content_length=file_size)
+
     range_header = request.META.get("HTTP_RANGE", "").strip()
-    if not range_header:
+    mode, byte_range = _parse_range_header(
+        range_header,
+        file_size=file_size,
+        is_av_media=is_av_media,
+    )
+    if mode == "unsatisfiable":
+        return _unsatisfiable_range_response(file_size)
+
+    if mode == "full":
+        if file_size == 0:
+            resp = HttpResponse(b"", status=200, content_type=effective_content_type)
+            return _apply_stream_headers(resp, asset=asset, content_length=0)
         try:
-            stream = storage.open_range_stream(asset.storage_key, 0, max(0, file_size - 1))
+            stream = storage.open_range_stream(asset.storage_key, 0, file_size - 1)
         except MediaStorageError as exc:
             return error_response(exc.code, exc.message, exc.status_code)
         resp = StreamingHttpResponse(stream, status=200, content_type=effective_content_type)
-        resp["Content-Length"] = str(file_size)
-        resp["Accept-Ranges"] = "bytes"
-        resp["X-Original-Mime-Type"] = asset.mime_type
-        resp["X-Content-Type-Options"] = "nosniff"
-        resp["Cache-Control"] = "no-store"
-        return resp
+        return _apply_stream_headers(resp, asset=asset, content_length=file_size)
 
-    match = _RANGE_HEADER_RE.match(range_header)
-    if not match or file_size == 0:
-        resp = HttpResponse(status=416)
-        resp["Content-Range"] = f"bytes */{file_size}"
-        return resp
-
-    start_str, end_str = match.group(1), match.group(2)
-    if not start_str and not end_str:
-        resp = HttpResponse(status=416)
-        resp["Content-Range"] = f"bytes */{file_size}"
-        return resp
-
-    if start_str:
-        start = int(start_str)
-        end = int(end_str) if end_str else file_size - 1
-    else:
-        suffix = int(end_str)
-        start = max(0, file_size - suffix)
-        end = file_size - 1
-
-    if start >= file_size or end < start or end >= file_size:
-        resp = HttpResponse(status=416)
-        resp["Content-Range"] = f"bytes */{file_size}"
-        return resp
-
+    assert byte_range is not None
+    start, end = byte_range
     try:
         stream = storage.open_range_stream(asset.storage_key, start, end)
     except MediaStorageError as exc:
         return error_response(exc.code, exc.message, exc.status_code)
 
     resp = StreamingHttpResponse(stream, status=206, content_type=effective_content_type)
-    resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-    resp["Content-Length"] = str((end - start) + 1)
-    resp["Accept-Ranges"] = "bytes"
-    resp["X-Original-Mime-Type"] = asset.mime_type
-    resp["X-Content-Type-Options"] = "nosniff"
-    resp["Cache-Control"] = "no-store"
-    return resp
+    return _apply_stream_headers(
+        resp,
+        asset=asset,
+        content_length=(end - start) + 1,
+        content_range=f"bytes {start}-{end}/{file_size}",
+    )
 
 
 class MediaReferenceStreamView(APIView):
-    """GET /api/media/references/<ref_id>/stream — Session-authenticated HTTP Range streaming."""
+    """GET/HEAD /api/media/references/<ref_id>/stream — Session-authenticated HTTP Range & HEAD streaming."""
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, ref_id: int):
+    def _handle(self, request: Request, ref_id: int, *, is_head: bool):
         ref = MediaContentReference.objects.select_related("media_asset").filter(pk=ref_id).first()
         if ref is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
@@ -373,7 +518,14 @@ class MediaReferenceStreamView(APIView):
             asset=ref.media_asset,
             ticket_kind="ref",
             ticket_target_id=ref.id,
+            is_head=is_head,
         )
+
+    def get(self, request: Request, ref_id: int):
+        return self._handle(request, ref_id, is_head=False)
+
+    def head(self, request: Request, ref_id: int):
+        return self._handle(request, ref_id, is_head=True)
 
 
 class MediaStreamTicketView(APIView):
@@ -420,11 +572,11 @@ class MediaStreamTicketView(APIView):
 
 
 class MediaAssetStreamView(APIView):
-    """GET /api/media/assets/<asset_id>/stream — Authenticated direct stream for cover images & assets."""
+    """GET/HEAD /api/media/assets/<asset_id>/stream — Authenticated direct stream for cover images & assets."""
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request: Request, asset_id: int):
+    def _handle(self, request: Request, asset_id: int, *, is_head: bool):
         asset = MediaAsset.objects.filter(pk=asset_id).first()
         if asset is None:
             return error_response("RESOURCE_NOT_FOUND", "المورد المطلوب غير موجود أو تم نقله.", status.HTTP_404_NOT_FOUND)
@@ -440,5 +592,12 @@ class MediaAssetStreamView(APIView):
             asset=asset,
             ticket_kind="asset",
             ticket_target_id=asset.id,
+            is_head=is_head,
         )
+
+    def get(self, request: Request, asset_id: int):
+        return self._handle(request, asset_id, is_head=False)
+
+    def head(self, request: Request, asset_id: int):
+        return self._handle(request, asset_id, is_head=True)
 

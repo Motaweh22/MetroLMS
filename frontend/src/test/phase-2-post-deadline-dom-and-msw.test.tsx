@@ -328,8 +328,8 @@ describe('Phase 2 — WP-2.4 / T-2.4.3: Mounted React DOM & MSW HTTP Integration
       expect(badgeAfterScrub).toBeVisible();
       expect(video.currentTime).toBe(30);
 
-      // Keyboard navigation ArrowLeft (supported RTL forward step beyond furthestWatched)
-      fireEvent.keyDown(window, { code: 'ArrowLeft' });
+      // Keyboard navigation ArrowRight (forward step beyond furthestWatched)
+      fireEvent.keyDown(window, { code: 'ArrowRight' });
       const badgeAfterKey = screen.getByTestId('seeking-clamped-badge');
       expect(badgeAfterKey).toBeInTheDocument();
       expect(badgeAfterKey).toBeVisible();

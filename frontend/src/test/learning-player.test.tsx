@@ -379,6 +379,77 @@ describe('Increment 6: Learning Player & Progress Tracking Verification', () => 
       expect(video.currentTime).toBe(20);
       expect(screen.queryByTestId('seeking-clamped-badge')).not.toBeInTheDocument();
     });
+
+    it('gracefully completes playback and cleanly replays via load() when MEDIA_ERR_DECODE happens near EOF', async () => {
+      const onComplete = vi.fn();
+      let mockError: { code: number } | null = null;
+      const playMock = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+      const loadMock = vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {
+        mockError = null;
+      });
+
+      render(
+        <VideoPlayer
+          itemId="item_eof_decode"
+          title="محاضرة بملف ذي نهاية تالفة"
+          src="/mock-video.mp4"
+          onComplete={onComplete}
+        />
+      );
+
+      const video = document.querySelector('video')!;
+      Object.defineProperty(video, 'duration', { value: 8, configurable: true });
+      Object.defineProperty(video, 'error', { get: () => mockError, configurable: true });
+
+      fireEvent.loadedMetadata(video);
+      fireEvent.playing(video);
+
+      video.currentTime = 7.7;
+      fireEvent.timeUpdate(video);
+
+      mockError = { code: 3 };
+      fireEvent.error(video);
+
+      expect(screen.queryByText(/تعذر تحميل ملف الفيديو/i)).not.toBeInTheDocument();
+      expect(onComplete).toHaveBeenCalledWith('item_eof_decode');
+
+      // Clicking replay/play after EOF decode recovery must reload media cleanly and never spin forever
+      const replayBtn = screen.getByLabelText('تشغيل الفيديو');
+      fireEvent.click(replayBtn);
+      expect(loadMock).toHaveBeenCalledTimes(1);
+
+      fireEvent.loadedMetadata(video);
+      await waitFor(() => {
+        expect(playMock).toHaveBeenCalled();
+      });
+      fireEvent.playing(video);
+      expect(screen.queryByLabelText('جاري التحميل...')).not.toBeInTheDocument();
+    });
+
+    it('seeks forward (+5s) with ArrowRight and backward (-5s) with ArrowLeft', () => {
+      const onComplete = vi.fn();
+      render(
+        <VideoPlayer
+          title="محاضرة اختصارات لوحة المفاتيح"
+          src="/mock-video.mp4"
+          initialPosition={10}
+          furthestWatched={30}
+          isCompleted={false}
+          onComplete={onComplete}
+        />
+      );
+
+      const video = document.querySelector('video')!;
+      Object.defineProperty(video, 'duration', { value: 100, configurable: true });
+      fireEvent.loadedMetadata(video);
+      expect(video.currentTime).toBe(10);
+
+      fireEvent.keyDown(window, { code: 'ArrowRight', key: 'ArrowRight' });
+      expect(video.currentTime).toBe(15);
+
+      fireEvent.keyDown(window, { code: 'ArrowLeft', key: 'ArrowLeft' });
+      expect(video.currentTime).toBe(10);
+    });
   });
 
   describe('DocumentViewer (PDF) Component', () => {
@@ -960,11 +1031,10 @@ describe('Increment 6: Learning Player & Progress Tracking Verification', () => 
 
         await waitFor(() => {
           expect(screen.getByTestId('learning-player-page')).toBeInTheDocument();
+          // On the final lesson: Previous is enabled, Next is DISABLED because no subsequent lesson exists
+          expect(screen.getByRole('button', { name: /الدرس السابق/i })).not.toBeDisabled();
+          expect(screen.getByRole('button', { name: /الدرس التالي/i })).toBeDisabled();
         });
-
-        // On the final lesson: Previous is enabled, Next is DISABLED because no subsequent lesson exists
-        expect(screen.getByRole('button', { name: /الدرس السابق/i })).not.toBeDisabled();
-        expect(screen.getByRole('button', { name: /الدرس التالي/i })).toBeDisabled();
       });
 
       it('completes an entire course from lesson 1 to final lesson via UI and triggers celebration modal at 100%', async () => {
