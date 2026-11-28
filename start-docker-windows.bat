@@ -6,12 +6,14 @@ REM MetroLMS - Interactive Windows Server 2022 Docker Launcher
 REM Collects all required settings into backend\.env.docker (leaving backend\.env
 REM untouched for non-Docker runs) and starts the unified container on port 8000.
 REM Usage:
-REM   start-docker-windows.bat           Configure (if needed) + build + start
-REM   start-docker-windows.bat /NOBUILD  Start without rebuilding image
-REM   start-docker-windows.bat /DOWN     Stop and remove Docker container
-REM   start-docker-windows.bat /LOGS     Follow container logs
-REM   start-docker-windows.bat /NOPAUSE  Do not pause before exiting
-REM   start-docker-windows.bat /HELP     Show this help
+REM   start-docker-windows.bat              Configure (if needed) + build + start
+REM   start-docker-windows.bat /TESTCARDS   Enable quick-login test cards in build
+REM   start-docker-windows.bat /NOTESTCARDS Disable quick-login test cards in build
+REM   start-docker-windows.bat /NOBUILD     Start without rebuilding image
+REM   start-docker-windows.bat /DOWN        Stop and remove Docker container
+REM   start-docker-windows.bat /LOGS        Follow container logs
+REM   start-docker-windows.bat /NOPAUSE     Do not pause before exiting
+REM   start-docker-windows.bat /HELP        Show this help
 REM ============================================================================
 
 set "ROOT_DIR=%~dp0"
@@ -23,6 +25,7 @@ set "COMPOSE_FILE=%ROOT_DIR%\docker-compose.windows.yml"
 set "ACTION=UP"
 set "NO_BUILD=0"
 set "NO_PAUSE=0"
+set "CLI_TEST_CARDS=%VITE_SHOW_TEST_CARDS%"
 set "EXIT_CODE=0"
 
 :parse_args
@@ -33,6 +36,8 @@ if /I "%~1"=="/DOWN" set "ACTION=DOWN"
 if /I "%~1"=="/LOGS" set "ACTION=LOGS"
 if /I "%~1"=="/NOBUILD" set "NO_BUILD=1"
 if /I "%~1"=="/NOPAUSE" set "NO_PAUSE=1"
+if /I "%~1"=="/TESTCARDS" set "CLI_TEST_CARDS=true"
+if /I "%~1"=="/NOTESTCARDS" set "CLI_TEST_CARDS=false"
 shift
 goto parse_args
 
@@ -41,11 +46,13 @@ echo ===========================================================================
 echo  MetroLMS - Windows Server 2022 Docker Launcher
 echo ============================================================================
 echo  Usage:
-echo    start-docker-windows.bat           Configure ^(if needed^) + build + start
-echo    start-docker-windows.bat /NOBUILD  Start without rebuilding image
-echo    start-docker-windows.bat /DOWN     Stop and remove Docker container
-echo    start-docker-windows.bat /LOGS     Follow container logs
-echo    start-docker-windows.bat /NOPAUSE  Do not pause at exit
+echo    start-docker-windows.bat              Configure ^(if needed^) + build + start
+echo    start-docker-windows.bat /TESTCARDS   Force Test Cards enabled in build
+echo    start-docker-windows.bat /NOTESTCARDS Force Test Cards disabled in build
+echo    start-docker-windows.bat /NOBUILD     Start without rebuilding image
+echo    start-docker-windows.bat /DOWN        Stop and remove Docker container
+echo    start-docker-windows.bat /LOGS        Follow container logs
+echo    start-docker-windows.bat /NOPAUSE     Do not pause at exit
 echo ============================================================================
 exit /b 0
 
@@ -128,6 +135,7 @@ if "!DO_CONFIG!"=="1" (
     set "ENV_DEBUG=False"
     set "ENV_COOKIE_SECURE=False"
     set "ENV_BIND=8000"
+    set "ENV_TEST_CARDS=true"
     set "DEFAULT_HOST=!DETECTED_IP!"
     set "DEFAULT_SCHEME=http"
     set "DEFAULT_PORT_SUFFIX=:8000"
@@ -136,9 +144,20 @@ if "!DO_CONFIG!"=="1" (
         set "ENV_SETTINGS=config.settings.production"
         set "ENV_COOKIE_SECURE=True"
         set "ENV_BIND=127.0.0.1:8000"
+        set "ENV_TEST_CARDS=false"
         set "DEFAULT_HOST=lms.company.com"
         set "DEFAULT_SCHEME=https"
         set "DEFAULT_PORT_SUFFIX="
+    )
+
+    if "!MODE_CHOICE!"=="1" (
+        set /p "IN_CARDS=Show Quick-Login Test Cards on Login page? ^(Y/n^) [default: Y]: "
+        if /I "!IN_CARDS!"=="N" set "ENV_TEST_CARDS=false"
+        if /I "!IN_CARDS!"=="NO" set "ENV_TEST_CARDS=false"
+    ) else (
+        set /p "IN_CARDS=Show Quick-Login Test Cards on Login page? ^(y/N^) [default: N]: "
+        if /I "!IN_CARDS!"=="Y" set "ENV_TEST_CARDS=true"
+        if /I "!IN_CARDS!"=="YES" set "ENV_TEST_CARDS=true"
     )
 
     set /p "IN_DOMAIN=Public Domain or Server IP [default: !DEFAULT_HOST!]: "
@@ -207,6 +226,7 @@ if "!DO_CONFIG!"=="1" (
         echo METROLMS_SERVE_FRONTEND=True
         echo METROLMS_MEDIA_HOST_DIR=!IN_MEDIA!
         echo METROLMS_DOCKER_BIND=!ENV_BIND!
+        echo VITE_SHOW_TEST_CARDS=!ENV_TEST_CARDS!
         echo DJANGO_LOG_LEVEL=INFO
     )
     set "IN_DB_PWD="
@@ -214,13 +234,28 @@ if "!DO_CONFIG!"=="1" (
     echo [OK] Saved Docker settings to "%DOCKER_ENV_FILE%".
 )
 
-REM Load host bind & media dir from .env.docker for docker compose variable substitution
+REM Load host bind, media dir, settings, and test-cards preference from .env.docker
+set "DOCKER_DJANGO_SETTINGS="
+set "SAVED_TEST_CARDS="
 for /f "usebackq tokens=1,* delims==" %%A in ("%DOCKER_ENV_FILE%") do (
     if /I "%%A"=="METROLMS_MEDIA_HOST_DIR" set "METROLMS_MEDIA_HOST_DIR=%%B"
     if /I "%%A"=="METROLMS_DOCKER_BIND" set "METROLMS_DOCKER_BIND=%%B"
+    if /I "%%A"=="DJANGO_SETTINGS_MODULE" set "DOCKER_DJANGO_SETTINGS=%%B"
+    if /I "%%A"=="VITE_SHOW_TEST_CARDS" set "SAVED_TEST_CARDS=%%B"
 )
 if "!METROLMS_MEDIA_HOST_DIR!"=="" set "METROLMS_MEDIA_HOST_DIR=D:\MetroLMSMedia"
 if not exist "!METROLMS_MEDIA_HOST_DIR!" mkdir "!METROLMS_MEDIA_HOST_DIR!" >nul 2>&1
+
+if not "!CLI_TEST_CARDS!"=="" (
+    set "VITE_SHOW_TEST_CARDS=!CLI_TEST_CARDS!"
+) else if not "!SAVED_TEST_CARDS!"=="" (
+    set "VITE_SHOW_TEST_CARDS=!SAVED_TEST_CARDS!"
+) else if /I "!DOCKER_DJANGO_SETTINGS!"=="config.settings.development" (
+    set "VITE_SHOW_TEST_CARDS=true"
+) else (
+    set "VITE_SHOW_TEST_CARDS=false"
+)
+echo [INFO] Frontend Test Cards ^(VITE_SHOW_TEST_CARDS^): !VITE_SHOW_TEST_CARDS!
 
 echo.
 echo [Step 2/3] Ensuring port 8000 is free from non-Docker processes and SQL port 1433 is open...
